@@ -33,10 +33,22 @@
       <div id="mapwrap">
         <svg id="mapsvg"></svg>
         <div id="pickbanner"><span>지도를 눌러 위치를 지정하세요</span><button class="btn sm" id="pickCancel">취소</button></div>
+        <div id="linebanner"><span id="lbKind">노선 그리기</span><span class="mono" id="lbCount">0점</span>
+          <button class="btn sm" id="lbUndo">점 취소</button>
+          <button class="btn sm" id="lbDone">완료</button>
+          <button class="btn sm" id="lbCancel">그만두기</button></div>
         <div id="maptools">
           <div class="panel">
             <div class="phd">레이어</div>
             <div class="layerlist" id="layerlist"></div>
+          </div>
+          <div class="panel" id="linepanel">
+            <div class="phd">철도 노선</div>
+            <div class="layerlist">
+              <button class="btn sm" id="drawRail" style="width:100%;justify-content:center">＋ 현재 노선 그리기</button>
+              <button class="btn sm" id="drawOldRail" style="width:100%;justify-content:center;margin-top:5px">＋ 과거 노선 그리기</button>
+              <button class="btn sm" id="addFac" style="width:100%;justify-content:center;margin-top:5px">＋ 역 · 터미널 · 시장</button>
+            </div>
           </div>
           <div class="panel" id="radiuspanel">
             <div class="phd">반경 분석</div>
@@ -68,7 +80,7 @@
         <button class="btn sm" id="btnCompare" disabled>비교</button>
         <button class="btn sm" id="btnOnMap" disabled>지도에서 보기</button>
         <button class="btn sm" id="btnReport" disabled>보고서</button>
-        <button class="btn sm" id="btnSlides" disabled>발표자료</button>
+        <button class="btn sm" id="btnSlides" disabled>PPT</button>
         <button class="btn pri sm" id="btnNewPrj2">＋ 새 프로젝트</button>
       </div>
       <div class="filters" id="filters"></div>
@@ -120,17 +132,29 @@
             <label class="lyr"><input type="checkbox" id="elevEdge"><span>선 추출 (트레이싱용)</span></label>
             <div class="rng" id="edgeRow" hidden><span class="hint" style="width:52px">임계값</span><input type="range" id="elevEdgeT" min="8" max="90" value="34"><span class="v" id="vEdgeT">34</span></div>
             <label class="lyr"><input type="checkbox" id="elevGrid"><span>격자 가이드</span></label>
+            <label class="lyr"><input type="checkbox" id="elevOverlay" checked><span>추출한 선 겹쳐 보기</span></label>
+            <button class="btn pri" id="elevApply" style="width:100%;justify-content:center;margin-top:8px">보정 실행</button>
+            <button class="btn" id="elevReset" style="width:100%;justify-content:center;margin-top:6px">모서리 다시 조정</button>
+          </div>
+          <div>
+            <div class="sech"><h3>입면도 보조</h3><div class="ln"></div></div>
+            <div id="lineops"></div>
           </div>
           <div>
             <div class="sech"><h3>내보내기</h3><div class="ln"></div></div>
-            <div style="display:flex;flex-direction:column;gap:6px">
-              <button class="btn pri" id="elevApply">보정 실행</button>
-              <button class="btn" id="elevReset">모서리 다시 조정</button>
+            <div id="elevExport" style="display:flex;flex-direction:column;gap:6px">
               <button class="btn" id="elevSave" disabled>프로젝트에 입면 이미지로 저장</button>
-              <button class="btn" id="elevPng" disabled>PNG 내려받기</button>
-              <button class="btn" id="elevDxf" disabled>선 데이터 DXF 내려받기</button>
+              <div style="display:flex;gap:6px">
+                <button class="btn" id="elevPng" disabled style="flex:1;justify-content:center">PNG</button>
+                <button class="btn" id="elevJpg" disabled style="flex:1;justify-content:center">JPG</button>
+                <button class="btn" id="elevPdf" disabled style="flex:1;justify-content:center">PDF</button>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn" id="elevSvg" disabled style="flex:1;justify-content:center">선 SVG</button>
+                <button class="btn" id="elevDxf" disabled style="flex:1;justify-content:center">선 DXF</button>
+              </div>
             </div>
-            <p class="hint" style="margin-top:8px">DXF는 사진을 그대로 변환하지 않고, 추출된 <b>외곽선·수직/수평선</b>을 CAD용 폴리라인으로 내보냅니다. 트레이싱 베이스로 사용하세요.</p>
+            <p class="hint" style="margin-top:8px">PDF에는 보정 이미지 위에 추출한 선이 <b>벡터</b>로 함께 들어갑니다. DXF·SVG는 선 데이터만 내보내며, 사진을 도면으로 자동 변환하는 것이 아니라 <b>트레이싱 베이스</b>를 만드는 기능입니다.</p>
           </div>
         </div>
       </div>

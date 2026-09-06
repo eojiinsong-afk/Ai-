@@ -103,7 +103,6 @@ label.fld>span{font-weight:500;letter-spacing:.01em}
 .sgg-path.show{opacity:.55}
 .geolabel{font-size:11px;fill:var(--faint);text-anchor:middle;pointer-events:none;font-family:var(--f-body)}
 .mk{cursor:pointer}
-.mk-hit{fill:transparent}
 #maptools{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:8px;max-width:min(260px,60vw);z-index:3}
 .panel{background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
 .panel .phd{padding:8px 10px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-family:var(--f-mono);display:flex;align-items:center;gap:6px}
@@ -126,6 +125,10 @@ label.fld>span{font-weight:500;letter-spacing:.01em}
 .kv dd{margin:0;color:var(--ink2)}
 #pickbanner{position:absolute;left:50%;transform:translateX(-50%);top:10px;z-index:5;background:var(--signal);color:#fff;padding:7px 14px;border-radius:999px;box-shadow:var(--shadow);font-size:13px;display:none;align-items:center;gap:10px}
 #pickbanner.on{display:flex}
+#linebanner{position:absolute;left:50%;transform:translateX(-50%);top:10px;z-index:5;background:var(--surface);border:1px solid var(--line);color:var(--ink2);padding:6px 8px 6px 14px;border-radius:999px;box-shadow:var(--shadow);font-size:13px;display:none;align-items:center;gap:8px}
+#linebanner.on{display:flex}
+#linebanner .mono{color:var(--faint);font-size:11px}
+.mk-hit{fill:transparent;stroke:transparent}
 
 /* ---------- table ---------- */
 .tblwrap{overflow:auto;flex:1;min-height:0}
@@ -144,6 +147,8 @@ thead .stickycol{z-index:3}
 .filters{display:flex;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--surface2);flex-wrap:wrap;align-items:center;flex:none}
 .filters .f{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
 .filters select,.filters input{width:auto;min-width:96px;padding:4px 7px;font-size:12px}
+.filters .fmore{display:contents}
+.filters .fmore[hidden]{display:none}
 
 /* ---------- detail ---------- */
 .detailgrid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;padding:16px;align-items:start}
@@ -280,10 +285,22 @@ thead .stickycol{z-index:3}
       <div id="mapwrap">
         <svg id="mapsvg"></svg>
         <div id="pickbanner"><span>지도를 눌러 위치를 지정하세요</span><button class="btn sm" id="pickCancel">취소</button></div>
+        <div id="linebanner"><span id="lbKind">노선 그리기</span><span class="mono" id="lbCount">0점</span>
+          <button class="btn sm" id="lbUndo">점 취소</button>
+          <button class="btn sm" id="lbDone">완료</button>
+          <button class="btn sm" id="lbCancel">그만두기</button></div>
         <div id="maptools">
           <div class="panel">
             <div class="phd">레이어</div>
             <div class="layerlist" id="layerlist"></div>
+          </div>
+          <div class="panel" id="linepanel">
+            <div class="phd">철도 노선</div>
+            <div class="layerlist">
+              <button class="btn sm" id="drawRail" style="width:100%;justify-content:center">＋ 현재 노선 그리기</button>
+              <button class="btn sm" id="drawOldRail" style="width:100%;justify-content:center;margin-top:5px">＋ 과거 노선 그리기</button>
+              <button class="btn sm" id="addFac" style="width:100%;justify-content:center;margin-top:5px">＋ 역 · 터미널 · 시장</button>
+            </div>
           </div>
           <div class="panel" id="radiuspanel">
             <div class="phd">반경 분석</div>
@@ -315,7 +332,7 @@ thead .stickycol{z-index:3}
         <button class="btn sm" id="btnCompare" disabled>비교</button>
         <button class="btn sm" id="btnOnMap" disabled>지도에서 보기</button>
         <button class="btn sm" id="btnReport" disabled>보고서</button>
-        <button class="btn sm" id="btnSlides" disabled>발표자료</button>
+        <button class="btn sm" id="btnSlides" disabled>PPT</button>
         <button class="btn pri sm" id="btnNewPrj2">＋ 새 프로젝트</button>
       </div>
       <div class="filters" id="filters"></div>
@@ -367,17 +384,29 @@ thead .stickycol{z-index:3}
             <label class="lyr"><input type="checkbox" id="elevEdge"><span>선 추출 (트레이싱용)</span></label>
             <div class="rng" id="edgeRow" hidden><span class="hint" style="width:52px">임계값</span><input type="range" id="elevEdgeT" min="8" max="90" value="34"><span class="v" id="vEdgeT">34</span></div>
             <label class="lyr"><input type="checkbox" id="elevGrid"><span>격자 가이드</span></label>
+            <label class="lyr"><input type="checkbox" id="elevOverlay" checked><span>추출한 선 겹쳐 보기</span></label>
+            <button class="btn pri" id="elevApply" style="width:100%;justify-content:center;margin-top:8px">보정 실행</button>
+            <button class="btn" id="elevReset" style="width:100%;justify-content:center;margin-top:6px">모서리 다시 조정</button>
+          </div>
+          <div>
+            <div class="sech"><h3>입면도 보조</h3><div class="ln"></div></div>
+            <div id="lineops"></div>
           </div>
           <div>
             <div class="sech"><h3>내보내기</h3><div class="ln"></div></div>
-            <div style="display:flex;flex-direction:column;gap:6px">
-              <button class="btn pri" id="elevApply">보정 실행</button>
-              <button class="btn" id="elevReset">모서리 다시 조정</button>
+            <div id="elevExport" style="display:flex;flex-direction:column;gap:6px">
               <button class="btn" id="elevSave" disabled>프로젝트에 입면 이미지로 저장</button>
-              <button class="btn" id="elevPng" disabled>PNG 내려받기</button>
-              <button class="btn" id="elevDxf" disabled>선 데이터 DXF 내려받기</button>
+              <div style="display:flex;gap:6px">
+                <button class="btn" id="elevPng" disabled style="flex:1;justify-content:center">PNG</button>
+                <button class="btn" id="elevJpg" disabled style="flex:1;justify-content:center">JPG</button>
+                <button class="btn" id="elevPdf" disabled style="flex:1;justify-content:center">PDF</button>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn" id="elevSvg" disabled style="flex:1;justify-content:center">선 SVG</button>
+                <button class="btn" id="elevDxf" disabled style="flex:1;justify-content:center">선 DXF</button>
+              </div>
             </div>
-            <p class="hint" style="margin-top:8px">DXF는 사진을 그대로 변환하지 않고, 추출된 <b>외곽선·수직/수평선</b>을 CAD용 폴리라인으로 내보냅니다. 트레이싱 베이스로 사용하세요.</p>
+            <p class="hint" style="margin-top:8px">PDF에는 보정 이미지 위에 추출한 선이 <b>벡터</b>로 함께 들어갑니다. DXF·SVG는 선 데이터만 내보내며, 사진을 도면으로 자동 변환하는 것이 아니라 <b>트레이싱 베이스</b>를 만드는 기능입니다.</p>
           </div>
         </div>
       </div>
@@ -432,7 +461,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const SCHEMA_VERSION = 2;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -470,7 +499,7 @@ function openModal(html, opts) {
 function closeModal() { $('#modal').classList.remove('on'); $('#modalbox').innerHTML = ''; }
 $('#modal').addEventListener('mousedown', e => { if (e.target.id === 'modal') closeModal(); });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); $('#lightbox').classList.remove('on'); if (MAP.picking) MAP.setPick(false); }
+  if (e.key === 'Escape') { closeModal(); $('#lightbox').classList.remove('on'); if (MAP.picking) MAP.setPick(false); if (MAP.drawing) MAP.cancelLine(); }
 });
 function confirmBox(title, body, okLabel) {
   return new Promise(res => {
@@ -543,7 +572,7 @@ function makeDbBackend(db) {
 const S = {
   store: null, projects: [], facilities: [], fields: [], trash: [],
   sel: new Set(), view: 'map', cur: null, photos: [], notes: [],
-  sort: { k: 'surveyDate', dir: 'desc' }, filter: {}, q: '',
+  sort: { k: 'surveyDate', dir: 'desc' }, filter: {}, filterMore: false, q: '',
   sample: null, downloads: null, meta: null, schemaAhead: false
 };
 
@@ -730,6 +759,7 @@ async function saveProject(p) {
   await S.store.put('projects', p.id, p);
   const i = S.projects.findIndex(x => x.id === p.id);
   if (i < 0) S.projects.push(p); else S.projects[i] = p;
+  const hint = $('#firsthint'); if (hint) hint.remove();
   updateCounts(); MAP.draw();
 }
 /** 프로젝트를 휴지통으로 옮긴다. 사진·기록은 지우지 않고 같은 프로젝트 ID 아래 그대로 둔다.
@@ -788,7 +818,7 @@ async function boot() {
 }
 function firstRunHint() {
   const el = document.createElement('div');
-  el.className = 'panel';
+  el.className = 'panel'; el.id = 'firsthint';
   el.style.cssText = 'position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);z-index:4;max-width:340px;padding:16px 18px;text-align:center';
   el.innerHTML = `<h3 style="font-family:var(--f-disp);font-size:17px;margin-bottom:6px">첫 답사를 기록해 보세요</h3>
     <p class="hint" style="margin:0 0 12px">지도에서 위치를 지정하면 시·도와 시·군·구가 자동으로 채워집니다. 사진과 답사 기록은 프로젝트 안에 쌓입니다.</p>
@@ -845,6 +875,7 @@ function pointInRings(lng, lat, rings) {
 const MAP = {
   svg: null, s: 1, tx: 0, ty: 0, W: 0, H: 0,
   sido: [], sgg: [], picking: false, pickCb: null, radius: 0,
+  drawing: null, draft: [],
   layers: { apt: 1, station: 1, oldstation: 1, terminal: 1, market: 1, rail: 1, oldrail: 1 },
   init() {
     const G = window.KRGEO;
@@ -942,8 +973,22 @@ const MAP = {
       const lines = S.facilities.filter(f => f.kind === kind && Array.isArray(f.path) && f.path.length > 1);
       for (const f of lines) {
         const d = f.path.map(p => { const s = this.toScreen(p[0], p[1]); return s[0].toFixed(1) + ' ' + s[1].toFixed(1); }).join('L');
-        out.push(`<path d="M${d}" fill="none" stroke="${FAC_KINDS[kind].color}" stroke-width="${kind === 'rail' ? 2 : 1.6}" ${kind === 'oldrail' ? 'stroke-dasharray="6 4"' : ''} opacity=".8"/>`);
+        out.push(`<g class="mk" data-fac="${f.id}"><path d="M${d}" fill="none" stroke="${FAC_KINDS[kind].color}" stroke-width="${kind === 'rail' ? 2 : 1.6}" ${kind === 'oldrail' ? 'stroke-dasharray="6 4"' : ''} opacity=".8"/>
+          <path class="mk-hit" d="M${d}" fill="none" stroke-width="12"/></g>`);
+        // 노선 이름은 충분히 확대했을 때만
+        if (this.s > 12000 && f.name) {
+          const mid = f.path[Math.floor(f.path.length / 2)];
+          const [mx, my] = this.toScreen(mid[0], mid[1]);
+          out.push(`<text x="${mx.toFixed(1)}" y="${(my - 6).toFixed(1)}" class="geolabel" style="fill:${FAC_KINDS[kind].color};font-size:10px">${esc(f.name)}</text>`);
+        }
       }
+    }
+    // 그리는 중인 노선
+    if (this.drawing && this.draft.length) {
+      const c = FAC_KINDS[this.drawing.kind].color;
+      const pts = this.draft.map(p => this.toScreen(p[0], p[1]));
+      if (pts.length > 1) out.push(`<path d="M${pts.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L')}" fill="none" stroke="${c}" stroke-width="2" stroke-dasharray="5 4"/>`);
+      for (const q of pts) out.push(`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="3.5" fill="var(--surface)" stroke="${c}" stroke-width="1.8"/>`);
     }
     // 반경
     if (this.radius && this.layers.apt) {
@@ -1008,14 +1053,18 @@ const MAP = {
         </div></div>`;
       $('#miOpen').onclick = () => openDetail(o.id);
     } else {
+      const isLine = Array.isArray(o.path) && o.path.length > 1;
       box.innerHTML = `<div class="body"><h3>${esc(o.name || FAC_KINDS[o.kind].label)}</h3>
-        <div class="hint">${FAC_KINDS[o.kind].label}${o.year ? ' · ' + esc(o.year) : ''}</div>
+        <div class="hint">${FAC_KINDS[o.kind].label}${o.year ? ' · ' + esc(o.year) : ''}${isLine ? ` · ${o.path.length}점 · ${fmtKm(this.pathLength(o.path))}` : ''}</div>
         ${o.note ? `<p style="font-size:12px;color:var(--ink2);margin:8px 0 0">${esc(o.note)}</p>` : ''}
-        <div style="display:flex;gap:6px;margin-top:10px">
-          <button class="btn sm" id="miEdit">편집</button>
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn sm" id="miEdit">${isLine ? '정보 편집' : '편집'}</button>
+          ${isLine ? '<button class="btn sm" id="miRedraw">경로 다시 그리기</button>' : ''}
           <button class="btn sm dgr" id="miDel">삭제</button>
           <button class="btn sm" id="miClose">닫기</button></div></div>`;
-      $('#miEdit').onclick = () => facilityForm(o);
+      $('#miEdit').onclick = () => isLine ? lineForm(o) : facilityForm(o);
+      const rd = $('#miRedraw');
+      if (rd) rd.onclick = () => { box.hidden = true; this.startLine(o.kind, o); };
       $('#miDel').onclick = async () => {
         if (!await confirmBox('참조 지점 삭제', `<p>${esc(o.name)} 을(를) 삭제할까요?</p>`)) return;
         await S.store.del('facilities', o.id);
@@ -1078,7 +1127,8 @@ const MAP = {
       if (moved < 6 && ptrs.size === 0) {
         const r = el.getBoundingClientRect();
         const [lat, lng] = this.toLatLng(e.clientX - r.left, e.clientY - r.top);
-        if (this.picking) { const cb = this.pickCb; this.setPick(false); if (cb) cb(lat, lng); }
+        if (this.drawing) { this.draft.push([+lat.toFixed(6), +lng.toFixed(6)]); this.updateDraft(); }
+        else if (this.picking) { const cb = this.pickCb; this.setPick(false); if (cb) cb(lat, lng); }
         else if (e.target === el) $('#mapinfo').hidden = true;
       }
     };
@@ -1093,6 +1143,37 @@ const MAP = {
     $('#zfit').onclick = () => this.fit();
     $('#pickCancel').onclick = () => this.setPick(false);
     addEventListener('resize', () => { this.resize(); });
+  },
+  /* ---------- 철도 노선 그리기 ----------
+     역(점)과 달리 노선은 여러 점을 잇는 폴리라인이다. 지도를 눌러 점을 찍고
+     「완료」를 누르면 facilities 문서에 path[[lat,lng],…] 로 저장된다. */
+  startLine(kind, existing) {
+    this.drawing = { kind, edit: existing || null };
+    this.draft = existing && Array.isArray(existing.path) ? existing.path.slice() : [];
+    this.picking = false;
+    $('#pickbanner').classList.remove('on');
+    $('#linebanner').classList.add('on');
+    $('#lbKind').textContent = FAC_KINDS[kind].label + (existing ? ' 편집' : ' 그리기');
+    this.svg.style.cursor = 'crosshair';
+    this.updateDraft();
+  },
+  updateDraft() {
+    $('#lbCount').textContent = this.draft.length + '점';
+    $('#lbUndo').disabled = !this.draft.length;
+    $('#lbDone').disabled = this.draft.length < 2;
+    this.apply();
+  },
+  cancelLine() {
+    this.drawing = null; this.draft = [];
+    $('#linebanner').classList.remove('on');
+    this.svg.style.cursor = '';
+    this.apply();
+  },
+  /** 노선 길이(m) */
+  pathLength(path) {
+    let t = 0;
+    for (let i = 1; i < path.length; i++) t += haversine(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]) || 0;
+    return t;
   },
   /** 위경도로 시·도 / 시·군·구 판별 */
   reverse(lat, lng) {
@@ -1139,12 +1220,147 @@ function nearestFacilities(p) {
   const out = {};
   if (p.lat == null || p.lng == null) return out;
   for (const f of S.facilities) {
-    if (f.lat == null || f.lng == null) continue;
-    const d = haversine(p.lat, p.lng, f.lat, f.lng);
+    let d = null;
+    if (Array.isArray(f.path) && f.path.length > 1) d = pointToPathDist(p.lat, p.lng, f.path);
+    else if (f.lat != null && f.lng != null) d = haversine(p.lat, p.lng, f.lat, f.lng);
     if (d == null) continue;
     if (!out[f.kind] || d < out[f.kind].d) out[f.kind] = { d, f };
   }
   return out;
+}
+/** 점에서 폴리라인까지의 최단거리(m). 국지 범위라 평면 근사로 충분하다. */
+function pointToPathDist(lat, lng, path) {
+  const mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
+  const px = lng * mLng, py = lat * mLat;
+  let best = null;
+  for (let i = 1; i < path.length; i++) {
+    const ax = path[i - 1][1] * mLng, ay = path[i - 1][0] * mLat;
+    const bx = path[i][1] * mLng, by = path[i][0] * mLat;
+    const dx = bx - ax, dy = by - ay;
+    const L2 = dx * dx + dy * dy;
+    const t = L2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)) : 0;
+    const d = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    if (best == null || d < best) best = d;
+  }
+  return best;
+}
+
+/* ============================================================
+   정적 지도 이미지 — 보고서 · 발표자료 · PPTX 용
+   화면 지도는 CSS 변수로 색을 쓰지만, 내보내는 SVG는 홀로 서야 하므로
+   색을 리터럴로 박아 넣는다(테마와 무관하게 인쇄용 밝은 배경).
+   ============================================================ */
+const MAPPAL = {
+  sea: '#F4F6F8', land: '#DCE1E6', line: '#B4BDC6', sggline: '#C9D0D8',
+  ink: '#14171A', muted: '#6A737D',
+  apt: '#C2472C', station: '#14477D', oldstation: '#14477D', terminal: '#2E7157', market: '#6D4C86'
+};
+/**
+ * 독립 실행 가능한 SVG 문자열을 만든다.
+ * @param {object} o  items(강조할 프로젝트) · all(회색 배경 점) · W · H · labels · facilities · pad
+ */
+function staticMapSvg(o) {
+  const W = o.W || 1200, H = o.H || 760, pad = o.pad == null ? 26 : o.pad;
+  const items = (o.items || []).filter(p => p.lat != null && p.lng != null);
+  const all = (o.all || []).filter(p => p.lat != null && p.lng != null);
+  let x0, x1, y0, y1;
+  if (o.whole || !items.length) {
+    x0 = w2x(125.0); x1 = w2x(130.0); y0 = w2y(38.7); y1 = w2y(33.1);
+  } else {
+    x0 = 1e9; x1 = -1e9; y0 = 1e9; y1 = -1e9;
+    for (const p of items) { const x = w2x(p.lng), y = w2y(p.lat); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const mx = Math.max(0.06, (x1 - x0) * 0.35), my = Math.max(0.06, (y1 - y0) * 0.35);
+    x0 -= mx; x1 += mx; y0 -= my; y1 += my;
+  }
+  const s = Math.min((W - pad * 2) / (x1 - x0), (H - pad * 2) / (y1 - y0));
+  const tx = W / 2 - ((x0 + x1) / 2) * s, ty = H / 2 - ((y0 + y1) / 2) * s;
+  const P = (lat, lng) => [w2x(lng) * s + tx, w2y(lat) * s + ty];
+  const scalePath = rings => {
+    let d = '';
+    for (const r of rings) d += 'M' + r.map(q => { const t = P(q[1], q[0]); return t[0].toFixed(1) + ' ' + t[1].toFixed(1); }).join('L') + 'Z';
+    return d;
+  };
+  const parts = [`<rect width="${W}" height="${H}" fill="${MAPPAL.sea}"/>`];
+  // 시도 경계
+  parts.push(`<g fill="${MAPPAL.land}" stroke="${MAPPAL.line}" stroke-width="0.9" stroke-linejoin="round">` +
+    MAP.sido.map(f => `<path d="${scalePath(f.rawRings || decodeRingsCache(f))}"/>`).join('') + `</g>`);
+  // 시군구 경계는 충분히 확대했을 때만
+  if (s > 3600) {
+    parts.push(`<g fill="none" stroke="${MAPPAL.sggline}" stroke-width="0.6">` +
+      MAP.sgg.filter(f => f.ct && f.ct[0] > (x0 / KX) - 0.5 && f.ct[0] < (x1 / KX) + 0.5 && -f.ct[1] > y0 - 0.5 && -f.ct[1] < y1 + 0.5)
+        .map(f => `<path d="${scalePath(f.rings)}"/>`).join('') + `</g>`);
+  }
+  // 지역 이름
+  if (o.geoLabels !== false) {
+    const src = s > 3600 ? MAP.sgg : MAP.sido;
+    parts.push(src.map(f => {
+      if (!f.ct) return '';
+      const [x, y] = P(f.ct[1], f.ct[0]);
+      if (x < 4 || y < 10 || x > W - 4 || y > H - 4) return '';
+      return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-family="sans-serif" font-size="${s > 3600 ? 10 : 12}" fill="${MAPPAL.muted}" text-anchor="middle">${esc(f.n)}</text>`;
+    }).join(''));
+  }
+  // 철도 노선
+  for (const kind of ['rail', 'oldrail']) {
+    for (const f of (o.facilities || []).filter(f => f.kind === kind && Array.isArray(f.path) && f.path.length > 1)) {
+      const d = f.path.map(q => { const t = P(q[0], q[1]); return t[0].toFixed(1) + ' ' + t[1].toFixed(1); }).join('L');
+      parts.push(`<path d="M${d}" fill="none" stroke="${MAPPAL.station}" stroke-width="${kind === 'rail' ? 2 : 1.6}" ${kind === 'oldrail' ? 'stroke-dasharray="7 5"' : ''} opacity="0.75"/>`);
+    }
+  }
+  // 참조 지점
+  for (const f of (o.facilities || [])) {
+    if (f.lat == null || f.kind === 'rail' || f.kind === 'oldrail') continue;
+    const [x, y] = P(f.lat, f.lng);
+    if (x < 0 || y < 0 || x > W || y > H) continue;
+    const c = MAPPAL[f.kind] || MAPPAL.muted;
+    if (f.kind === 'terminal') parts.push(`<path d="M${x} ${y - 5} L${x + 5} ${y + 4} L${x - 5} ${y + 4}Z" fill="${c}"/>`);
+    else if (f.kind === 'market') parts.push(`<path d="M${x} ${y - 5} L${x + 5} ${y} L${x} ${y + 5} L${x - 5} ${y}Z" fill="${c}"/>`);
+    else if (f.kind === 'oldstation') parts.push(`<circle cx="${x}" cy="${y}" r="4" fill="#fff" stroke="${c}" stroke-width="1.6" stroke-dasharray="2.4 1.8"/>`);
+    else parts.push(`<circle cx="${x}" cy="${y}" r="4" fill="${c}"/>`);
+  }
+  // 선택되지 않은 프로젝트는 연한 점으로 배경에
+  const hi = new Set(items.map(p => p.id));
+  for (const p of all) {
+    if (hi.has(p.id)) continue;
+    const [x, y] = P(p.lat, p.lng);
+    parts.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.4" fill="${MAPPAL.apt}" opacity="0.3"/>`);
+  }
+  // 강조 프로젝트
+  for (const p of items) {
+    const [x, y] = P(p.lat, p.lng);
+    parts.push(`<rect x="${(x - 5).toFixed(1)}" y="${(y - 5).toFixed(1)}" width="10" height="10" rx="1.5" fill="${MAPPAL.apt}" stroke="#fff" stroke-width="1.6"/>`);
+    if (o.labels) parts.push(`<text x="${(x + 9).toFixed(1)}" y="${(y + 4).toFixed(1)}" font-family="sans-serif" font-size="12" fill="${MAPPAL.ink}">${esc(projName(p))}</text>`);
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${parts.join('')}</svg>`;
+}
+/* MAP.sido 는 경로 문자열만 갖고 있어 좌표를 다시 쓸 수 없다 → 최초 1회만 링을 복원해 캐시한다. */
+function decodeRingsCache(f) {
+  if (f.rawRings) return f.rawRings;
+  const src = window.KRGEO.sido.find(g => g.c === f.c);
+  f.rawRings = src ? decodeRings(src) : [];
+  return f.rawRings;
+}
+/** SVG → JPEG dataURL. 외부 참조가 없는 SVG라 캔버스가 오염되지 않는다. */
+function svgToJpeg(svg, W, H, scale) {
+  const k = scale || 2;
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = W * k; c.height = H * k;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      res(c.toDataURL('image/jpeg', 0.86));
+    };
+    img.onerror = () => rej(new Error('지도 이미지를 만들지 못했습니다'));
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+}
+/** 보고서·발표자료에서 바로 쓰는 지도 이미지 */
+async function mapImage(o) {
+  const W = o.W || 1200, H = o.H || 760;
+  return await svgToJpeg(staticMapSvg(Object.assign({ facilities: S.facilities }, o, { W, H })), W, H, o.scale || 1.6);
 }
 
 </script>
@@ -1161,29 +1377,61 @@ function fieldValue(p, f) {
 const TABLE_COLS = ['surveyDate', 'sido', 'sgg', 'marketName', 'aptName', 'address', 'builtYear', 'marketFloors', 'aptFloors', 'totalFloors', 'parking', 'relation', 'status', 'nearStation', 'nearTerminal'];
 
 /* ---------- filters + table ---------- */
+/* 근접 필터: 값은 미터 문자열(‘1000’ = 1km 이내) 또는 'none'(등록된 지점이 없거나 멀리 떨어짐) */
+const NEAR_OPTS = [['500', '500m 이내'], ['1000', '1km 이내'], ['2000', '2km 이내'], ['none', '2km 밖 · 없음']];
+function nearPass(v, d) {
+  if (!v) return true;
+  if (v === 'none') return d == null || d > 2000;
+  return d != null && d <= +v;
+}
 function renderFilters() {
   const sidos = Array.from(new Set(S.projects.map(p => p.sido).filter(Boolean))).sort();
+  const sggs = Array.from(new Set(S.projects.filter(p => !S.filter.sido || p.sido === S.filter.sido).map(p => p.sgg).filter(Boolean))).sort();
   const tags = Array.from(new Set(S.projects.flatMap(p => p.tags || []))).sort();
   const rel = BASE_FIELDS.find(f => f.k === 'relation').options;
   const st = BASE_FIELDS.find(f => f.k === 'status').options;
   const opt = (arr, cur) => ['<option value="">전체</option>'].concat(arr.map(o => `<option ${cur === o ? 'selected' : ''}>${esc(o)}</option>`)).join('');
+  const pairs = (arr, cur) => ['<option value="">전체</option>'].concat(arr.map(o => `<option value="${esc(o[0])}" ${cur === o[0] ? 'selected' : ''}>${esc(o[1])}</option>`)).join('');
+  // 사용자가 만든 선택형 항목도 그대로 필터가 된다
+  const cf = S.fields.filter(f => f.type === 'select' && (f.options || []).length);
+  const ADV = ['y0', 'y1', 'd0', 'd1', 'mf', 'af', 'nstation', 'noldstation', 'nterminal', 'hasphoto'];
+  const advN = Object.keys(S.filter).filter(k => S.filter[k] && (ADV.includes(k) || k.slice(0, 3) === 'cf_')).length;
   $('#filters').innerHTML = `
     <span class="f">시·도 <select data-fk="sido">${opt(sidos, S.filter.sido)}</select></span>
+    <span class="f">시·군·구 <select data-fk="sgg">${opt(sggs, S.filter.sgg)}</select></span>
     <span class="f">결합유형 <select data-fk="relation">${opt(rel, S.filter.relation)}</select></span>
     <span class="f">상태 <select data-fk="status">${opt(st, S.filter.status)}</select></span>
     <span class="f">주차장 <select data-fk="parking"><option value="">전체</option><option ${S.filter.parking === 'y' ? 'selected' : ''} value="y">있음</option><option ${S.filter.parking === 'n' ? 'selected' : ''} value="n">없음</option></select></span>
     <span class="f">태그 <select data-fk="tag">${opt(tags, S.filter.tag)}</select></span>
-    <span class="f">건축연도 <input type="number" data-fk="y0" placeholder="부터" value="${S.filter.y0 || ''}" style="width:76px"> – <input type="number" data-fk="y1" placeholder="까지" value="${S.filter.y1 || ''}" style="width:76px"></span>
+    <button class="btn sm" id="fmoreb" aria-expanded="${S.filterMore ? 'true' : 'false'}">상세 필터${advN ? ' · ' + advN : ''}</button>
+    <span class="fmore" ${S.filterMore ? '' : 'hidden'}>
+    <span class="f">건축연도 <input type="number" data-fk="y0" placeholder="부터" value="${esc(S.filter.y0 || '')}" style="width:76px"> – <input type="number" data-fk="y1" placeholder="까지" value="${esc(S.filter.y1 || '')}" style="width:76px"></span>
+    <span class="f">답사일 <input type="date" data-fk="d0" value="${esc(S.filter.d0 || '')}" style="width:134px"> – <input type="date" data-fk="d1" value="${esc(S.filter.d1 || '')}" style="width:134px"></span>
+    <span class="f">시장층수 ≤ <input type="number" data-fk="mf" value="${esc(S.filter.mf || '')}" style="width:62px"></span>
+    <span class="f">아파트층수 ≥ <input type="number" data-fk="af" value="${esc(S.filter.af || '')}" style="width:62px"></span>
+    <span class="f">현재역 <select data-fk="nstation">${pairs(NEAR_OPTS, S.filter.nstation)}</select></span>
+    <span class="f">과거역 <select data-fk="noldstation">${pairs(NEAR_OPTS, S.filter.noldstation)}</select></span>
+    <span class="f">터미널 <select data-fk="nterminal">${pairs(NEAR_OPTS, S.filter.nterminal)}</select></span>
+    <span class="f">사진 <select data-fk="hasphoto"><option value="">전체</option><option value="y" ${S.filter.hasphoto === 'y' ? 'selected' : ''}>있음</option><option value="n" ${S.filter.hasphoto === 'n' ? 'selected' : ''}>없음</option></select></span>
+    ${cf.map(f => `<span class="f">${esc(f.label)} <select data-fk="cf_${f.id}">${opt(f.options, S.filter['cf_' + f.id])}</select></span>`).join('')}
+    </span>
     <button class="btn sm" id="fclear">필터 해제</button>
     <span class="spacer"></span><span class="hint" id="fcount"></span>`;
-  $$('#filters [data-fk]').forEach(el => el.onchange = () => { S.filter[el.dataset.fk] = el.value; renderTable(); });
+  $$('#filters [data-fk]').forEach(el => el.onchange = () => {
+    S.filter[el.dataset.fk] = el.value;
+    if (el.dataset.fk === 'sido') S.filter.sgg = '';
+    renderTable();
+  });
+  $('#fmoreb').onclick = () => { S.filterMore = !S.filterMore; renderTable(); };
   $('#fclear').onclick = () => { S.filter = {}; S.q = ''; $('#q').value = ''; renderTable(); };
 }
 function filtered() {
   const q = S.q.trim().toLowerCase();
+  const f = S.filter;
+  const needNear = f.nstation || f.noldstation || f.nterminal;
   return S.projects.filter(p => {
-    const f = S.filter;
     if (f.sido && p.sido !== f.sido) return false;
+    if (f.sgg && p.sgg !== f.sgg) return false;
     if (f.relation && p.relation !== f.relation) return false;
     if (f.status && p.status !== f.status) return false;
     if (f.parking === 'y' && !p.parking) return false;
@@ -1191,6 +1439,22 @@ function filtered() {
     if (f.tag && !(p.tags || []).includes(f.tag)) return false;
     if (f.y0 && !(p.builtYear >= +f.y0)) return false;
     if (f.y1 && !(p.builtYear <= +f.y1)) return false;
+    if (f.d0 && !(p.surveyDate && p.surveyDate >= f.d0)) return false;
+    if (f.d1 && !(p.surveyDate && p.surveyDate <= f.d1)) return false;
+    if (f.mf && !(p.marketFloors != null && p.marketFloors <= +f.mf)) return false;
+    if (f.af && !(p.aptFloors != null && p.aptFloors >= +f.af)) return false;
+    if (f.hasphoto === 'y' && !(p.photoCount > 0)) return false;
+    if (f.hasphoto === 'n' && p.photoCount > 0) return false;
+    for (const k of Object.keys(f)) {
+      if (!f[k] || k.slice(0, 3) !== 'cf_') continue;
+      if ((p.custom || {})[k.slice(3)] !== f[k]) return false;
+    }
+    if (needNear) {
+      const n = nearestFacilities(p);
+      if (!nearPass(f.nstation, n.station && n.station.d)) return false;
+      if (!nearPass(f.noldstation, n.oldstation && n.oldstation.d)) return false;
+      if (!nearPass(f.nterminal, n.terminal && n.terminal.d)) return false;
+    }
     if (q) {
       const hay = [projName(p), p.marketName, p.aptName, p.address, p.sido, p.sgg, (p.tags || []).join(' '), p.note].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
@@ -1198,7 +1462,8 @@ function filtered() {
     return true;
   }).sort((a, b) => {
     const k = S.sort.k, dir = S.sort.dir === 'asc' ? 1 : -1;
-    let va = k === 'name' ? projName(a) : a[k], vb = k === 'name' ? projName(b) : b[k];
+    let va = k === 'name' ? projName(a) : (k.slice(0, 2) === 'c_' ? (a.custom || {})[k.slice(2)] : a[k]);
+    let vb = k === 'name' ? projName(b) : (k.slice(0, 2) === 'c_' ? (b.custom || {})[k.slice(2)] : b[k]);
     if (va == null || va === '') return 1; if (vb == null || vb === '') return -1;
     return (typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'ko')) * dir;
   });
@@ -1332,6 +1597,56 @@ function facilityForm(f, lat, lng) {
   };
 }
 
+/* ---------- 철도 노선 (폴리라인 참조 지점) ----------
+   역·터미널과 저장 구조는 같고 path[[lat,lng],…] 를 추가로 갖는다.
+   과거 노선은 kind='oldrail' 로 저장되어 지도 레이어에서 따로 켜고 끌 수 있다. */
+function lineForm(f, path) {
+  const isNew = !S.facilities.some(x => x.id === (f && f.id));
+  f = f || { id: uid(), kind: 'rail', name: '', year: '', note: '', path: [] };
+  if (path) f = Object.assign({}, f, { path });
+  const len = MAP.pathLength(f.path || []);
+  openModal(`<div class="mh"><h3>${isNew ? '철도 노선 저장' : '노선 정보 편집'}</h3><button class="x">×</button></div>
+    <div class="mb"><div class="formgrid">
+      <label class="fld"><span>구분</span><select id="ln_kind">
+        <option value="rail" ${f.kind === 'rail' ? 'selected' : ''}>현재 철도 노선</option>
+        <option value="oldrail" ${f.kind === 'oldrail' ? 'selected' : ''}>과거 철도 노선 (1970–80s)</option></select></label>
+      <label class="fld"><span>노선명</span><input type="text" id="ln_name" value="${esc(f.name)}" placeholder="예) 장항선 (구선형)"></label>
+      <label class="fld"><span>연도·시기</span><input type="text" id="ln_year" value="${esc(f.year)}" placeholder="예) 1978년 기준"></label>
+      <label class="fld"><span>길이</span><input type="text" value="${fmtKm(len)} · ${(f.path || []).length}점" disabled></label>
+    </div>
+    <label class="fld" style="margin-top:10px"><span>메모 (출처·근거)</span><textarea id="ln_note" rows="3" placeholder="예) 1980년 철도청 노선도에서 옮겨 그림">${esc(f.note)}</textarea></label>
+    <p class="hint" style="margin-top:8px">과거 노선은 <b>어느 자료에서 옮겨 그렸는지</b>를 메모에 남겨두면 논문 각주로 그대로 쓸 수 있습니다.</p></div>
+    <div class="mf">${isNew ? '' : '<button class="btn dgr" id="ln_del">삭제</button>'}<span class="spacer"></span>
+      <button class="btn pri" id="ln_ok">저장</button></div>`);
+  $('#ln_ok').onclick = async () => {
+    f.kind = $('#ln_kind').value; f.name = $('#ln_name').value.trim();
+    f.year = $('#ln_year').value.trim(); f.note = $('#ln_note').value.trim();
+    if (!Array.isArray(f.path) || f.path.length < 2) return toast('노선에는 점이 2개 이상 필요합니다');
+    await S.store.put('facilities', f.id, f);
+    const i = S.facilities.findIndex(x => x.id === f.id);
+    if (i < 0) S.facilities.push(f); else S.facilities[i] = f;
+    closeModal(); MAP.draw(); updateCounts(); toast('노선을 저장했습니다');
+  };
+  const del = $('#ln_del');
+  if (del) del.onclick = async () => {
+    if (!await confirmBox('노선 삭제', `<p>${esc(f.name || '이 노선')} 을(를) 삭제할까요?</p>`)) return;
+    await S.store.del('facilities', f.id);
+    S.facilities = S.facilities.filter(x => x.id !== f.id);
+    closeModal(); $('#mapinfo').hidden = true; MAP.draw(); updateCounts();
+  };
+}
+$('#drawRail').onclick = () => { go('map'); MAP.startLine('rail'); toast('지도를 눌러 노선을 따라 점을 찍으세요', 3400); };
+$('#drawOldRail').onclick = () => { go('map'); MAP.startLine('oldrail'); toast('과거 노선을 따라 점을 찍으세요 — 출처를 메모에 남겨두면 좋습니다', 3800); };
+$('#addFac').onclick = () => { go('map'); facilityForm(); };
+$('#lbUndo').onclick = () => { MAP.draft.pop(); MAP.updateDraft(); };
+$('#lbCancel').onclick = () => MAP.cancelLine();
+$('#lbDone').onclick = () => {
+  const d = MAP.drawing; if (!d) return;
+  const path = MAP.draft.slice(), edit = d.edit;
+  MAP.cancelLine();
+  lineForm(edit || { id: uid(), kind: d.kind, name: '', year: '', note: '', path: [] }, path);
+};
+
 /* ---------- 이미지 처리 ---------- */
 async function fileToImage(file) {
   if (window.createImageBitmap) { try { return await createImageBitmap(file); } catch (e) { } }
@@ -1444,6 +1759,7 @@ function renderDetail() {
     <div class="sec">
       <div class="sech"><h3>교통시설과의 거리</h3><div class="ln"></div><button class="btn sm" id="dtFac">＋ 참조 지점</button></div>
       ${distRow('station', '현재 기차역')}${distRow('oldstation', '과거 기차역')}${distRow('terminal', '버스터미널')}${distRow('market', '시장')}
+      ${distRow('rail', '현재 철도 노선')}${distRow('oldrail', '과거 철도 노선')}
       <p class="hint" style="margin-top:8px">역·터미널·시장을 참조 지점으로 등록하면 모든 프로젝트에서 자동으로 거리를 계산합니다.</p>
     </div>
     <div class="sec">
@@ -1573,7 +1889,7 @@ $('#detElev').onclick = () => { go('elev'); $('#elevPrj').value = S.cur; renderE
 /* ============================================================
    입면 보정 — 4점 원근 보정 · 선 추출 · 내보내기
    ============================================================ */
-const EL = { img: null, phId: null, pts: null, out: null, lines: null, dispW: 0, dispH: 0 };
+const EL = { img: null, phId: null, pts: null, out: null, lines: null, raw: null, bin: null, ops: [], dispW: 0, dispH: 0 };
 
 async function download(filename, data, mime) {
   if (S.downloads) {
@@ -1641,7 +1957,9 @@ async function loadElevPhoto(id) {
     EL.pts = [[.12, .10], [.88, .10], [.88, .92], [.12, .92]];
     drawElevSource();
     placeHandles();
-    $('#elevSave').disabled = true; $('#elevPng').disabled = true; $('#elevDxf').disabled = true;
+    EL.out = null; EL.lines = null; EL.raw = null; EL.ops = [];
+    $$('#elevExport button').forEach(b => b.disabled = true);
+    renderLineOps();
     $('#elevHint').textContent = '네 점을 건물 입면의 모서리로 옮긴 뒤 「보정 실행」';
   };
   img.src = full.data;
@@ -1754,8 +2072,9 @@ function applyElev() {
   postProcess(out);
   EL.out = out;
   showResult();
-  $('#elevSave').disabled = false; $('#elevPng').disabled = false; $('#elevDxf').disabled = false;
-  $('#elevHint').textContent = `보정 완료 · ${OW}×${OH}px`;
+  $$('#elevExport button').forEach(b => b.disabled = false);
+  $('#elevHint').textContent = `보정 완료 · ${OW}×${OH}px` + (EL.lines ? ` · 선 ${EL.lines.length}개` : '');
+  renderLineOps();
 }
 function postProcess(cv) {
   const ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
@@ -1788,8 +2107,11 @@ function postProcess(cv) {
       o.data[i * 4] = o.data[i * 4 + 1] = o.data[i * 4 + 2] = v; o.data[i * 4 + 3] = 255;
     }
     ctx.putImageData(o, 0, 0);
-    EL.lines = extractLines(bin, W, H);
-  } else EL.lines = null;
+    EL.bin = { bin, W, H };
+    EL.raw = extractLines(bin, W, H);
+    EL.lines = EL.raw.slice();
+    EL.ops = [];
+  } else { EL.lines = null; EL.raw = null; EL.bin = null; EL.ops = []; }
 }
 /** 이진 엣지에서 수평·수직 직선 성분 추출 */
 function extractLines(bin, W, H) {
@@ -1829,6 +2151,12 @@ function showResult() {
   cv.width = Math.round(EL.out.width * r); cv.height = Math.round(EL.out.height * r);
   ctx.clearRect(0, 0, cv.width, cv.height);
   ctx.drawImage(EL.out, 0, 0, cv.width, cv.height);
+  if (EL.lines && EL.lines.length && $('#elevOverlay') && $('#elevOverlay').checked) {
+    const k = cv.width / EL.out.width;
+    ctx.save(); ctx.strokeStyle = '#C2472C'; ctx.lineWidth = 1.2;
+    for (const l of EL.lines) { ctx.beginPath(); ctx.moveTo(l[0] * k, l[1] * k); ctx.lineTo(l[2] * k, l[3] * k); ctx.stroke(); }
+    ctx.restore();
+  }
   if ($('#elevGrid').checked) {
     ctx.save(); ctx.strokeStyle = 'rgba(20,71,125,.45)'; ctx.lineWidth = 1;
     for (let i = 1; i < 8; i++) {
@@ -1839,8 +2167,204 @@ function showResult() {
   }
   $('#handles').innerHTML = '';
 }
-function linesToDxf(lines, H) {
+
+/* ============================================================
+   입면도 제작 보조 — 추출한 선을 연구자의 지시대로 다듬는다.
+
+   여기서 하는 일은 "사진의 자동 도면화"가 아니다. 원근을 편 이미지에서 뽑아낸
+   수평·수직 선분을 대상으로, 트레이싱에 방해가 되는 것을 걷어내고
+   층 경계·창호·외곽선 같은 건축적으로 의미 있는 선만 남기는 편집이다.
+   모든 연산은 EL.raw(최초 추출 결과)에서 다시 계산하므로 언제든 되돌릴 수 있다.
+   ============================================================ */
+const isH = l => l[1] === l[3];
+const lineLen = l => isH(l) ? Math.abs(l[2] - l[0]) : Math.abs(l[3] - l[1]);
+function inkBox(lines, W, H) {
+  if (!lines.length) return [0, 0, W, H];
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const l of lines) { x0 = Math.min(x0, l[0], l[2]); x1 = Math.max(x1, l[0], l[2]); y0 = Math.min(y0, l[1], l[3]); y1 = Math.max(y1, l[1], l[3]); }
+  return [x0, y0, x1, y1];
+}
+/** 같은 축 위의 조각난 선분을 하나로 잇는다 */
+function mergeLines(lines, tol, gap) {
+  const out = [];
+  for (const horiz of [true, false]) {
+    const set = lines.filter(l => isH(l) === horiz);
+    const key = l => horiz ? l[1] : l[0];
+    const lo = l => horiz ? Math.min(l[0], l[2]) : Math.min(l[1], l[3]);
+    const hi = l => horiz ? Math.max(l[0], l[2]) : Math.max(l[1], l[3]);
+    set.sort((a, b) => key(a) - key(b) || lo(a) - lo(b));
+    const bands = [];
+    for (const l of set) {
+      const b = bands.find(b => Math.abs(b.k - key(l)) <= tol);
+      if (b) { b.items.push(l); b.k = (b.k * (b.items.length - 1) + key(l)) / b.items.length; }
+      else bands.push({ k: key(l), items: [l] });
+    }
+    for (const b of bands) {
+      const segs = b.items.map(l => [lo(l), hi(l)]).sort((a, b2) => a[0] - b2[0]);
+      let cur = segs[0].slice();
+      for (let i = 1; i < segs.length; i++) {
+        if (segs[i][0] - cur[1] <= gap) cur[1] = Math.max(cur[1], segs[i][1]);
+        else { out.push(mk(horiz, Math.round(b.k), cur)); cur = segs[i].slice(); }
+      }
+      out.push(mk(horiz, Math.round(b.k), cur));
+    }
+  }
+  return out;
+  function mk(horiz, k, seg) { return horiz ? [Math.round(seg[0]), k, Math.round(seg[1]), k] : [k, Math.round(seg[0]), k, Math.round(seg[1])]; }
+}
+const LINE_OPS = {
+  simplify: {
+    label: '선 단순화', hint: '끊긴 선을 잇고 짧은 조각을 지웁니다',
+    run(lines, W, H) { return mergeLines(lines, 4, 14).filter(l => lineLen(l) >= (isH(l) ? W : H) * 0.045); }
+  },
+  denoise: {
+    label: '짧은 선 제거', hint: '길이가 짧은 잡선을 걷어냅니다',
+    run(lines, W, H) { return lines.filter(l => lineLen(l) >= (isH(l) ? W : H) * 0.12); }
+  },
+  outline: {
+    label: '건물 외곽선', hint: '외곽 사각형과 전체를 가로지르는 선만 남깁니다',
+    run(lines, W, H) {
+      const [x0, y0, x1, y1] = inkBox(lines, W, H);
+      const box = [[x0, y0, x1, y0], [x0, y1, x1, y1], [x0, y0, x0, y1], [x1, y0, x1, y1]].map(l => l.map(Math.round));
+      const span = lines.filter(l => lineLen(l) >= (isH(l) ? (x1 - x0) : (y1 - y0)) * 0.86);
+      return box.concat(span);
+    }
+  },
+  floors: {
+    label: '층 경계선', hint: '폭의 절반 이상을 가로지르는 수평선을 층 경계로 봅니다',
+    run(lines, W, H) {
+      const [x0, y0, x1, y1] = inkBox(lines, W, H);
+      const wide = mergeLines(lines.filter(isH), 5, 30).filter(l => lineLen(l) >= (x1 - x0) * 0.5);
+      const bands = [];
+      for (const l of wide.sort((a, b) => a[1] - b[1])) {
+        const b = bands.find(b => Math.abs(b - l[1]) < Math.max(8, (y1 - y0) * 0.02));
+        if (b == null) bands.push(l[1]);
+      }
+      return bands.map(y => [Math.round(x0), Math.round(y), Math.round(x1), Math.round(y)]);
+    }
+  },
+  windows: {
+    label: '창호 구분', hint: '반복되는 수직선 쌍을 창호 사각형으로 표시합니다',
+    run(lines, W, H) {
+      const v = lines.filter(l => !isH(l) && lineLen(l) >= H * 0.03 && lineLen(l) <= H * 0.34)
+        .map(l => ({ x: l[0], a: Math.min(l[1], l[3]), b: Math.max(l[1], l[3]) }))
+        .sort((p, q) => p.a - q.a || p.x - q.x);
+      const out = [];
+      for (let i = 0; i < v.length && out.length < 1600; i++) {
+        for (let j = i + 1; j < v.length; j++) {
+          if (v[j].a > v[i].b) break;
+          const gapX = v[j].x - v[i].x;
+          if (gapX < W * 0.012 || gapX > W * 0.18) continue;
+          const a = Math.max(v[i].a, v[j].a), b = Math.min(v[i].b, v[j].b);
+          const ov = b - a;
+          if (ov < Math.min(v[i].b - v[i].a, v[j].b - v[j].a) * 0.6) continue;
+          const ratio = ov / gapX;
+          if (ratio < 0.5 || ratio > 4.5) continue;      // 창으로 보기 어려운 비율은 버린다
+          out.push([v[i].x, a, v[j].x, a], [v[i].x, b, v[j].x, b], [v[i].x, a, v[i].x, b], [v[j].x, a, v[j].x, b]);
+          break;
+        }
+      }
+      return out;
+    }
+  },
+  nosign: {
+    label: '간판 영역 정리', hint: '아래쪽 간판대의 잡선을 지우고 층 경계선은 남깁니다',
+    run(lines, W, H) {
+      const [x0, y0, x1, y1] = inkBox(lines, W, H);
+      const cut = y1 - (y1 - y0) * 0.24;
+      return lines.filter(l => {
+        const my = (l[1] + l[3]) / 2;
+        if (my < cut) return true;
+        return isH(l) ? lineLen(l) >= (x1 - x0) * 0.55 : lineLen(l) >= (y1 - y0) * 0.5;
+      });
+    }
+  },
+  vertical: { label: '수직선만', hint: '수직 부재만 남깁니다', run(lines) { return lines.filter(l => !isH(l)); } },
+  horizontal: { label: '수평선만', hint: '수평 부재만 남깁니다', run(lines) { return lines.filter(isH); } }
+};
+/** 지시 목록을 EL.raw 부터 차례로 적용한다 (되돌리기가 항상 가능하도록) */
+function applyLineOps(ops) {
+  if (!EL.raw || !EL.out) return;
+  let ls = EL.raw.slice();
+  for (const k of ops) { const op = LINE_OPS[k]; if (op) ls = op.run(ls, EL.out.width, EL.out.height); }
+  EL.lines = ls; EL.ops = ops.slice();
+  showResult(); renderLineOps();
+  $('#elevHint').textContent = `보정 완료 · ${EL.out.width}×${EL.out.height}px · 선 ${EL.lines.length}개`;
+}
+function renderLineOps() {
+  const box = $('#lineops'); if (!box) return;
+  if (!EL.raw) { box.innerHTML = '<p class="hint">「선 추출」을 켜고 보정을 실행하면 이곳에서 선을 다듬을 수 있습니다.</p>'; return; }
+  box.innerHTML = `
+    <p class="hint" style="margin:0 0 8px">추출된 선 <b class="mono">${EL.raw.length}</b>개 → 현재 <b class="mono">${(EL.lines || []).length}</b>개.
+    아래 지시는 순서대로 적용되며, 원본 추출 결과는 그대로 보관됩니다.</p>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      ${Object.entries(LINE_OPS).map(([k, o]) => `<button class="chip" data-op="${k}" title="${esc(o.hint)}" aria-pressed="${EL.ops.includes(k)}">${esc(o.label)}</button>`).join('')}
+    </div>
+    ${EL.ops.length ? `<p class="hint mono" style="margin:8px 0 0">적용: ${EL.ops.map(k => LINE_OPS[k].label).join(' → ')}</p>` : ''}
+    <input type="text" id="elevCmd" style="margin-top:8px" placeholder="예) 간판은 지우고 층 경계선만 남겨줘">
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button class="btn sm pri" id="elevCmdGo" style="flex:1;justify-content:center">지시 실행</button>
+      <button class="btn sm" id="elevOpsReset" style="flex:1;justify-content:center">원래대로</button></div>
+    <p class="hint" style="margin:6px 0 0">${S.sample ? 'AI가 문장을 해석해 위 연산으로 옮깁니다.' : '낱말(간판·층·창·외곽·단순화)로 해석합니다.'}</p>`;
+  $$('#lineops [data-op]').forEach(b => b.onclick = () => {
+    const k = b.dataset.op;
+    const ops = EL.ops.includes(k) ? EL.ops.filter(x => x !== k) : EL.ops.concat([k]);
+    applyLineOps(ops);
+  });
+  $('#elevOpsReset').onclick = () => applyLineOps([]);
+  $('#elevCmdGo').onclick = () => runElevCommand($('#elevCmd').value);
+  $('#elevCmd').onkeydown = e => { if (e.key === 'Enter') runElevCommand(e.target.value); };
+}
+/** 한국어 지시 → 연산 목록. AI를 쓸 수 있으면 해석을 맡기고, 없으면 낱말로 고른다. */
+const CMD_WORDS = [
+  [/간판|사인|광고/, 'nosign'], [/층|경계|바닥|슬래브/, 'floors'], [/창|창호|창문|개구부/, 'windows'],
+  [/외곽|윤곽|테두리|형태만|매스/, 'outline'], [/단순|정리|깔끔|트레이싱/, 'simplify'],
+  [/잡선|노이즈|짧은|지저분/, 'denoise'], [/수직|기둥/, 'vertical'], [/수평|보|가로선/, 'horizontal']
+];
+async function runElevCommand(q) {
+  q = (q || '').trim();
+  if (!q) return;
+  if (!EL.raw) return toast('먼저 「선 추출」을 켜고 보정을 실행하세요');
+  const local = () => {
+    const ops = [];
+    for (const [re, k] of CMD_WORDS) if (re.test(q) && !ops.includes(k)) ops.push(k);
+    return ops;
+  };
+  let ops = null;
+  if (S.sample) {
+    $('#elevCmdGo').disabled = true; $('#elevCmdGo').textContent = '해석 중';
+    try {
+      const names = Object.entries(LINE_OPS).map(([k, o]) => `${k} = ${o.label} (${o.hint})`).join('\n');
+      const r = await S.sample(`건축 입면 트레이싱 보조 도구의 명령 해석기입니다.
+사용 가능한 연산:
+${names}
+
+연구자의 지시: "${q}"
+
+지시를 수행할 연산 키를 적용 순서대로 골라 JSON 배열로만 답하세요. 예: ["nosign","floors"]
+해당하는 연산이 없으면 [] 을 반환하세요. 설명이나 다른 문장은 쓰지 마세요.`);
+      const m = String(r.text || '').match(/\[[\s\S]*?\]/);
+      if (m) ops = JSON.parse(m[0]).filter(k => LINE_OPS[k]);
+    } catch (e) { console.warn(e); }
+    $('#elevCmdGo').disabled = false; $('#elevCmdGo').textContent = '지시';
+  }
+  if (!ops || !ops.length) ops = local();
+  if (!ops.length) return toast('해석하지 못했습니다 — 위의 버튼으로 직접 골라주세요', 3600);
+  applyLineOps(ops);
+  toast('적용: ' + ops.map(k => LINE_OPS[k].label).join(' → '), 3200);
+}
+
+/* ============================================================
+   내보내기 — PNG · JPG · PDF · SVG · DXF
+   ============================================================ */
+function linesToDxf(lines, W, H) {
   const e = [];
+  // R12(AC1009) 최소 구성. 1픽셀 = 1도면단위, 원점은 좌하단.
+  e.push('999', '시장아파트 답사 아카이브 — 입면 트레이싱 베이스');
+  e.push('0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1009',
+    '9', '$EXTMIN', '10', '0.0', '20', '0.0', '9', '$EXTMAX', '10', W.toFixed(1), '20', H.toFixed(1), '0', 'ENDSEC');
+  e.push('0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', '1',
+    '0', 'LAYER', '2', 'ELEVATION', '70', '0', '62', '7', '6', 'CONTINUOUS', '0', 'ENDTAB', '0', 'ENDSEC');
   e.push('0', 'SECTION', '2', 'ENTITIES');
   for (const [x0, y0, x1, y1] of lines) {
     e.push('0', 'LINE', '8', 'ELEVATION', '10', x0.toFixed(2), '20', (H - y0).toFixed(2), '30', '0.0',
@@ -1855,6 +2379,57 @@ function linesToSvg(lines, W, H) {
 ${lines.map(l => `<line x1="${l[0]}" y1="${l[1]}" x2="${l[2]}" y2="${l[3]}" stroke="#111111" stroke-width="1"/>`).join('\n')}
 </svg>`;
 }
+/** 이미지(+선)를 한 장짜리 PDF로. 선은 벡터로 들어가 일러스트레이터에서 그대로 열린다. */
+function buildPdf(jpegDataUrl, W, H, lines) {
+  const enc = s => { const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 0xff; return a; };
+  const jpg = jpegDataUrl ? new Uint8Array(atob(jpegDataUrl.split(',')[1]).split('').map(c => c.charCodeAt(0))) : null;
+  let content = '';
+  if (jpg) content += `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q\n`;
+  if (lines && lines.length) {
+    content += `0.15 w 0.10 0.10 0.10 RG\n`;
+    for (const l of lines) content += `${l[0]} ${(H - l[1]).toFixed(1)} m ${l[2]} ${(H - l[3]).toFixed(1)} l S\n`;
+  }
+  const objs = [];
+  objs[1] = enc('<</Type/Catalog/Pages 2 0 R>>');
+  objs[2] = enc('<</Type/Pages/Kids[3 0 R]/Count 1>>');
+  objs[3] = enc(`<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${W} ${H}]/Resources<<${jpg ? '/XObject<</Im0 4 0 R>>' : ''}>>/Contents 5 0 R>>`);
+  if (jpg) {
+    const head = enc(`<</Type/XObject/Subtype/Image/Width ${W}/Height ${H}/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length ${jpg.length}>>\nstream\n`);
+    const tail = enc('\nendstream');
+    const b = new Uint8Array(head.length + jpg.length + tail.length);
+    b.set(head, 0); b.set(jpg, head.length); b.set(tail, head.length + jpg.length);
+    objs[4] = b;
+  } else objs[4] = enc('<</Type/XObject>>');
+  const cs = enc(content);
+  const ch = enc(`<</Length ${cs.length}>>\nstream\n`), ct = enc('\nendstream');
+  const cb = new Uint8Array(ch.length + cs.length + ct.length);
+  cb.set(ch, 0); cb.set(cs, ch.length); cb.set(ct, ch.length + cs.length);
+  objs[5] = cb;
+
+  const chunks = [enc('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n')];
+  let pos = chunks[0].length;
+  const offs = [];
+  for (let i = 1; i <= 5; i++) {
+    offs[i] = pos;
+    const head = enc(`${i} 0 obj\n`), tail = enc('\nendobj\n');
+    chunks.push(head, objs[i], tail);
+    pos += head.length + objs[i].length + tail.length;
+  }
+  let xref = `xref\n0 6\n0000000000 65535 f \n`;
+  for (let i = 1; i <= 5; i++) xref += String(offs[i]).padStart(10, '0') + ' 00000 n \n';
+  xref += `trailer\n<</Size 6/Root 1 0 R>>\nstartxref\n${pos}\n%%EOF\n`;
+  chunks.push(enc(xref));
+  return new Blob(chunks, { type: 'application/pdf' });
+}
+function elevBaseName() {
+  const p = S.projects.find(x => x.id === $('#elevPrj').value);
+  return (p ? projName(p) : '입면').replace(/[\\/:*?"<>|]/g, '_') + '_입면_' + today();
+}
+function needOut() { if (!EL.out) { toast('먼저 보정을 실행하세요'); return false; } return true; }
+function needLines() {
+  if (!EL.lines || !EL.lines.length) { toast('먼저 「선 추출」을 켜고 보정을 실행하세요'); return false; }
+  return true;
+}
 $('#elevApply').onclick = () => { try { applyElev(); } catch (e) { console.error(e); toast('보정에 실패했습니다'); } };
 $('#elevReset').onclick = () => {
   if (!EL.img) return toast('먼저 사진을 선택하세요');
@@ -1865,28 +2440,32 @@ $('#elevReset').onclick = () => {
   drawElevSource(); placeHandles();
 };
 $('#elevGrid').onchange = () => { if (EL.out) showResult(); };
+$('#elevOverlay').onchange = () => { if (EL.out) showResult(); };
 $('#elevEdge').onchange = () => { $('#edgeRow').hidden = !$('#elevEdge').checked; };
 ['elevSkewX', 'elevContrast', 'elevEdgeT'].forEach(id => {
   const el = $('#' + id), v = $('#v' + id.slice(4));
   el.oninput = () => { if (v) v.textContent = el.value; };
 });
-$('#elevPng').onclick = () => {
-  if (!EL.out) return;
-  download('elevation_' + (S.cur || 'image') + '.png', dataUrlToBlob(EL.out.toDataURL('image/png')));
+$('#elevPng').onclick = () => { if (needOut()) download(elevBaseName() + '.png', dataUrlToBlob(EL.out.toDataURL('image/png'))); };
+$('#elevJpg').onclick = () => { if (needOut()) download(elevBaseName() + '.jpg', dataUrlToBlob(EL.out.toDataURL('image/jpeg', 0.92))); };
+$('#elevPdf').onclick = () => {
+  if (!needOut()) return;
+  const withLines = EL.lines && EL.lines.length;
+  download(elevBaseName() + '.pdf', buildPdf(EL.out.toDataURL('image/jpeg', 0.9), EL.out.width, EL.out.height, withLines ? EL.lines : null));
+  toast(withLines ? '보정 이미지 위에 추출한 선을 벡터로 얹어 저장했습니다' : '보정 이미지를 PDF로 저장했습니다', 3800);
 };
+$('#elevSvg').onclick = () => { if (needLines()) download(elevBaseName() + '_선.svg', linesToSvg(EL.lines, EL.out.width, EL.out.height), 'image/svg+xml'); };
 $('#elevDxf').onclick = () => {
-  if (!EL.out) return;
-  if (!EL.lines || !EL.lines.length) return toast('먼저 「선 추출」을 켜고 보정을 실행하세요');
-  const m = openModal(`<div class="mh"><h3>선 데이터 내보내기</h3><button class="x">×</button></div>
-    <div class="mb"><p>추출된 직선 성분 <b class="mono">${EL.lines.length}</b>개를 CAD에서 쓸 수 있는 형식으로 내보냅니다.</p>
-    <p class="hint">사진을 도면으로 자동 변환하는 것이 아니라, 트레이싱의 출발점이 되는 <b>주요 수평·수직선</b>을 선 데이터로 옮기는 기능입니다. 1픽셀 = 1도면단위로 기록됩니다.</p></div>
-    <div class="mf"><button class="btn" id="ex_svg">SVG (일러스트·CAD 가져오기)</button><button class="btn pri" id="ex_dxf">DXF</button></div>`);
-  $('#ex_svg').onclick = () => { closeModal(); download('elevation_lines.svg', linesToSvg(EL.lines, EL.out.width, EL.out.height), 'image/svg+xml'); };
+  if (!needLines()) return;
+  openModal(`<div class="mh"><h3>선 데이터 DXF 내보내기</h3><button class="x">×</button></div>
+    <div class="mb"><p>다듬어진 직선 성분 <b class="mono">${EL.lines.length}</b>개를 CAD에서 쓸 수 있는 DXF(R12)로 내보냅니다.</p>
+    <p class="hint">사진을 도면으로 자동 변환하는 것이 아니라, 트레이싱의 출발점이 되는 <b>외곽선·층 경계·수직/수평 부재</b>를 선 데이터로 옮기는 기능입니다.
+    1픽셀 = 1도면단위, 원점은 이미지 좌하단, 레이어명은 <span class="mono">ELEVATION</span> 입니다.</p></div>
+    <div class="mf"><button class="btn" id="ex_svg">SVG로</button><button class="btn pri" id="ex_dxf">DXF 내려받기</button></div>`);
+  $('#ex_svg').onclick = () => { closeModal(); $('#elevSvg').click(); };
   $('#ex_dxf').onclick = () => {
     closeModal();
-    const txt = linesToDxf(EL.lines, EL.out.height);
-    download('elevation_lines_dxf.txt', txt, 'text/plain');
-    toast('DXF 텍스트로 저장했습니다 — 확장자를 .dxf로 바꿔 CAD에서 여세요', 5200);
+    download(elevBaseName() + '.dxf', linesToDxf(EL.lines, EL.out.width, EL.out.height), 'application/dxf');
   };
 };
 $('#elevSave').onclick = async () => {
@@ -1896,7 +2475,8 @@ $('#elevSave').onclick = async () => {
   const id = uid();
   const thumb = toJpeg(drawScaled(EL.out, 300), 40000);
   const meta = {
-    pid, cat: '입면', kind: 'elevation', caption: '원근 보정 입면', date: today(), place: '', memo: '4점 원근 보정' + ($('#elevEdge').checked ? ' + 선 추출' : ''),
+    pid, cat: '입면', kind: 'elevation', caption: '원근 보정 입면', date: today(), place: '',
+    memo: '4점 원근 보정' + ($('#elevEdge').checked ? ' + 선 추출' : '') + (EL.ops.length ? ' · ' + EL.ops.map(k => LINE_OPS[k].label).join(' → ') : ''),
     tags: ['보정'], w: EL.out.width, h: EL.out.height, sharp: 0, size: data.length, createdAt: new Date().toISOString(), thumb
   };
   await S.store.put('photofull', id, { data });
@@ -1905,6 +2485,584 @@ $('#elevSave').onclick = async () => {
   if (p) { p.photoCount = (p.photoCount || 0) + 1; await saveProject(p); }
   toast('프로젝트에 입면 이미지로 저장했습니다');
 };
+
+</script>
+<script>
+/* ---- src/pptx.js ---- */
+/* ============================================================
+   PPTX 내보내기 — 진짜 .pptx 파일 만들기
+
+   pptx 는 OOXML 문서 몇 개를 담은 ZIP 이다. 외부 라이브러리를 쓸 수 없으므로
+   (Artifact 는 외부 스크립트를 불러오지 못한다) 압축 없는 ZIP(store) 을 직접 쓴다.
+   압축을 하지 않아도 규격상 완전히 유효하고, 내용의 대부분이 이미 압축된
+   JPEG 이라 파일 크기 손해도 거의 없다.
+
+   좌표는 1280×720 픽셀 화면을 설계 단위로 쓰고 EMU 로 환산한다(1px = 9525EMU).
+   글자 크기도 같은 기준이라 24px 제목 = 18pt 가 된다.
+   ============================================================ */
+/* XML 은 제어문자를 담을 수 없다. 붙여넣기로 섞여 들어온 문자 하나가
+   파일 전체를 못 열게 만드는 일을 막는다. */
+const xt = v => esc(String(v == null ? '' : v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ''));
+
+const PX = 9525;                 // 1 design px → EMU
+const SW = 1280, SH = 720;       // 16:9 설계 캔버스
+const emu = v => Math.round(v * PX);
+const pt = px => Math.round(px * 75);   // design px → 1/100 pt
+
+/* ---------- ZIP (store, 무압축) ---------- */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(buf) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function zipStore(files) {
+  const enc = new TextEncoder();
+  const now = new Date();
+  const dosTime = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)) & 0xFFFF;
+  const dosDate = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xFFFF;
+  const local = [], central = [];
+  let off = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name);
+    const data = typeof f.data === 'string' ? enc.encode(f.data) : f.data;
+    const crc = crc32(data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint16(8, 0, true); lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+    lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    local.push(new Uint8Array(lh.buffer), name, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+    ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+    ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true);
+    ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+    ch.setUint16(28, name.length, true); ch.setUint16(30, 0, true); ch.setUint16(32, 0, true);
+    ch.setUint16(34, 0, true); ch.setUint16(36, 0, true); ch.setUint32(38, 0, true);
+    ch.setUint32(42, off, true);
+    central.push(new Uint8Array(ch.buffer), name);
+    off += 30 + name.length + data.length;
+  }
+  const cdSize = central.reduce((a, b) => a + b.length, 0);
+  const eo = new DataView(new ArrayBuffer(22));
+  eo.setUint32(0, 0x06054b50, true); eo.setUint16(4, 0, true); eo.setUint16(6, 0, true);
+  eo.setUint16(8, files.length, true); eo.setUint16(10, files.length, true);
+  eo.setUint32(12, cdSize, true); eo.setUint32(16, off, true); eo.setUint16(20, 0, true);
+  return new Blob(local.concat(central, [new Uint8Array(eo.buffer)]), {
+    type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  });
+}
+
+/* ---------- 슬라이드 도형 ---------- */
+const XMLNS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+const FONT = '맑은 고딕';
+function runProps(o) {
+  const c = (o.color || '14171A').replace('#', '');
+  return `<a:rPr lang="ko-KR" altLang="en-US" sz="${pt(o.size || 16)}" b="${o.bold ? 1 : 0}" spc="${o.spc || 0}" dirty="0">` +
+    `<a:solidFill><a:srgbClr val="${c}"/></a:solidFill>` +
+    `<a:latin typeface="${FONT}"/><a:ea typeface="${FONT}"/><a:cs typeface="${FONT}"/></a:rPr>`;
+}
+/** 여러 줄 텍스트 상자 */
+function tx(id, x, y, w, h, lines, o) {
+  o = o || {};
+  const ps = (Array.isArray(lines) ? lines : [lines]).map(t => {
+    if (t === '') return `<a:p><a:endParaRPr lang="ko-KR" sz="${pt(o.size || 16)}"/></a:p>`;
+    return `<a:p><a:pPr algn="${o.align || 'l'}"><a:lnSpc><a:spcPct val="${o.lnSpc || 130000}"/></a:lnSpc></a:pPr>` +
+      `<a:r>${runProps(o)}<a:t>${xt(t)}</a:t></a:r></a:p>`;
+  }).join('');
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="t${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="${emu(x)}" y="${emu(y)}"/><a:ext cx="${emu(w)}" cy="${emu(h)}"/></a:xfrm>
+<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>
+<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${o.anchor || 't'}"><a:normAutofit/></a:bodyPr><a:lstStyle/>${ps}</p:txBody></p:sp>`;
+}
+function rect(id, x, y, w, h, color, opts) {
+  const o = opts || {};
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="r${id}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="${emu(x)}" y="${emu(y)}"/><a:ext cx="${emu(w)}" cy="${emu(h)}"/></a:xfrm>
+<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+<a:solidFill><a:srgbClr val="${color.replace('#', '')}"${o.alpha ? `><a:alpha val="${o.alpha}"/></a:srgbClr` : ''}/></a:solidFill>
+<a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody></p:sp>`;
+}
+function pic(id, rid, x, y, w, h) {
+  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="p${id}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>
+<p:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+<p:spPr><a:xfrm><a:off x="${emu(x)}" y="${emu(y)}"/><a:ext cx="${emu(w)}" cy="${emu(h)}"/></a:xfrm>
+<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
+}
+/** 표. 첫 행을 머리행으로 칠한다. */
+function table(id, x, y, w, colW, rows, o) {
+  o = o || {};
+  const rowH = o.rowH || 26;
+  const cell = (t, r, c) => {
+    const head = o.head && r === 0;
+    const fill = head ? 'E3E9F0' : (r % 2 ? 'FFFFFF' : 'F6F8FA');
+    return `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr algn="${c > 0 && o.numAlign ? 'r' : 'l'}"/>` +
+      `<a:r>${runProps({ size: o.size || 12, bold: head || (o.labelBold && c === 0), color: head ? '14477D' : '333B44' })}<a:t>${xt(t)}</a:t></a:r></a:p></a:txBody>` +
+      `<a:tcPr marL="60000" marR="60000" marT="30000" marB="30000" anchor="ctr">` +
+      `<a:lnL w="6350"><a:solidFill><a:srgbClr val="D2D7DD"/></a:solidFill></a:lnL>` +
+      `<a:lnR w="6350"><a:solidFill><a:srgbClr val="D2D7DD"/></a:solidFill></a:lnR>` +
+      `<a:lnT w="6350"><a:solidFill><a:srgbClr val="D2D7DD"/></a:solidFill></a:lnT>` +
+      `<a:lnB w="6350"><a:solidFill><a:srgbClr val="D2D7DD"/></a:solidFill></a:lnB>` +
+      `<a:solidFill><a:srgbClr val="${fill}"/></a:solidFill></a:tcPr></a:tc>`;
+  };
+  const trs = rows.map((r, ri) => `<a:tr h="${emu(rowH)}">${r.map((c, ci) => cell(c, ri, ci)).join('')}</a:tr>`).join('');
+  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="tbl${id}"/>
+<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>
+<p:xfrm><a:off x="${emu(x)}" y="${emu(y)}"/><a:ext cx="${emu(w)}" cy="${emu(rowH * rows.length)}"/></p:xfrm>
+<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+<a:tbl><a:tblPr firstRow="${o.head ? 1 : 0}" bandRow="0"/><a:tblGrid>${colW.map(c => `<a:gridCol w="${emu(c)}"/>`).join('')}</a:tblGrid>
+${trs}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
+}
+
+/* ---------- 문서 뼈대 ---------- */
+const RT = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const rels = list => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${list.map(r => `<Relationship Id="${r.id}" Type="${r.type}" Target="${r.target}"/>`).join('')}</Relationships>`;
+const THEME = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Archive">
+<a:themeElements><a:clrScheme name="Archive"><a:dk1><a:srgbClr val="14171A"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
+<a:dk2><a:srgbClr val="333B44"/></a:dk2><a:lt2><a:srgbClr val="F1F3F5"/></a:lt2>
+<a:accent1><a:srgbClr val="14477D"/></a:accent1><a:accent2><a:srgbClr val="C2472C"/></a:accent2>
+<a:accent3><a:srgbClr val="2E7157"/></a:accent3><a:accent4><a:srgbClr val="6D4C86"/></a:accent4>
+<a:accent5><a:srgbClr val="1F6E78"/></a:accent5><a:accent6><a:srgbClr val="9C6510"/></a:accent6>
+<a:hlink><a:srgbClr val="14477D"/></a:hlink><a:folHlink><a:srgbClr val="6D4C86"/></a:folHlink></a:clrScheme>
+<a:fontScheme name="Archive"><a:majorFont><a:latin typeface="${FONT}"/><a:ea typeface="${FONT}"/><a:cs typeface=""/></a:majorFont>
+<a:minorFont><a:latin typeface="${FONT}"/><a:ea typeface="${FONT}"/><a:cs typeface=""/></a:minorFont></a:fontScheme>
+<a:fmtScheme name="Archive">
+<a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst>
+<a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst>
+<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>
+<a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst>
+</a:fmtScheme></a:themeElements></a:theme>`;
+const EMPTY_TREE = `<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree>`;
+const CLRMAP = 'bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"';
+const SLIDE_MASTER = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldMaster ${XMLNS}><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>${EMPTY_TREE}</p:cSld>
+<p:clrMap ${CLRMAP}/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst></p:sldMaster>`;
+const SLIDE_LAYOUT = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldLayout ${XMLNS} type="blank" preserve="1"><p:cSld name="빈 화면">${EMPTY_TREE}</p:cSld><p:clrMapOvr><a:overrideClrMapping ${CLRMAP}/></p:clrMapOvr></p:sldLayout>`;
+
+/**
+ * 슬라이드 목록을 실제 pptx Blob 으로 굽는다.
+ * @param {Array} slides  [{shapes:'<p:sp>…', images:[{rid,name,data:Uint8Array}]}]
+ */
+function buildPptx(slides, meta) {
+  const files = [];
+  const n = slides.length;
+  files.push({
+    name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="jpeg" ContentType="image/jpeg"/>
+<Default Extension="png" ContentType="image/png"/>
+<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
+<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
+<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
+${slides.map((s, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('')}
+<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>`
+  });
+  files.push({
+    name: '_rels/.rels', data: rels([
+      { id: 'rId1', type: RT + '/officeDocument', target: 'ppt/presentation.xml' },
+      { id: 'rId2', type: 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties', target: 'docProps/core.xml' },
+      { id: 'rId3', type: RT + '/extended-properties', target: 'docProps/app.xml' }
+    ])
+  });
+  const title = (meta && meta.title) || '시장아파트 답사 보고';
+  files.push({
+    name: 'docProps/core.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<dc:title>${xt(title)}</dc:title><dc:creator>시장아파트 답사 아카이브</dc:creator>
+<cp:lastModifiedBy>시장아파트 답사 아카이브</cp:lastModifiedBy>
+<dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created>
+<dcterms:modified xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:modified></cp:coreProperties>`
+  });
+  files.push({
+    name: 'docProps/app.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+<Application>시장아파트 답사 아카이브</Application><Slides>${n}</Slides><PresentationFormat>와이드스크린</PresentationFormat></Properties>`
+  });
+  files.push({
+    name: 'ppt/presentation.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:presentation ${XMLNS} saveSubsetFonts="1">
+<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>
+<p:sldIdLst>${slides.map((s, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join('')}</p:sldIdLst>
+<p:sldSz cx="${emu(SW)}" cy="${emu(SH)}"/><p:notesSz cx="${emu(SH)}" cy="${emu(SW)}"/></p:presentation>`
+  });
+  files.push({
+    name: 'ppt/_rels/presentation.xml.rels', data: rels(
+      [{ id: 'rId1', type: RT + '/slideMaster', target: 'slideMasters/slideMaster1.xml' }]
+        .concat(slides.map((s, i) => ({ id: 'rId' + (i + 2), type: RT + '/slide', target: `slides/slide${i + 1}.xml` })))
+        .concat([{ id: 'rId' + (n + 2), type: RT + '/theme', target: 'theme/theme1.xml' }])
+    )
+  });
+  files.push({ name: 'ppt/theme/theme1.xml', data: THEME });
+  files.push({ name: 'ppt/slideMasters/slideMaster1.xml', data: SLIDE_MASTER });
+  files.push({
+    name: 'ppt/slideMasters/_rels/slideMaster1.xml.rels', data: rels([
+      { id: 'rId1', type: RT + '/slideLayout', target: '../slideLayouts/slideLayout1.xml' },
+      { id: 'rId2', type: RT + '/theme', target: '../theme/theme1.xml' }
+    ])
+  });
+  files.push({ name: 'ppt/slideLayouts/slideLayout1.xml', data: SLIDE_LAYOUT });
+  files.push({
+    name: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
+    data: rels([{ id: 'rId1', type: RT + '/slideMaster', target: '../slideMasters/slideMaster1.xml' }])
+  });
+  slides.forEach((s, i) => {
+    files.push({
+      name: `ppt/slides/slide${i + 1}.xml`, data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld ${XMLNS}><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
+<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+${s.shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`
+    });
+    files.push({
+      name: `ppt/slides/_rels/slide${i + 1}.xml.rels`, data: rels(
+        [{ id: 'rIdL', type: RT + '/slideLayout', target: '../slideLayouts/slideLayout1.xml' }]
+          .concat((s.images || []).map(im => ({ id: im.rid, type: RT + '/image', target: '../media/' + im.name })))
+      )
+    });
+    for (const im of (s.images || [])) files.push({ name: 'ppt/media/' + im.name, data: im.data });
+  });
+  return zipStore(files);
+}
+function jpegBytes(dataUrl) {
+  const b = atob(dataUrl.split(',')[1]);
+  const a = new Uint8Array(b.length);
+  for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
+  return a;
+}
+
+/* ============================================================
+   발표자료 구성 — 어떤 슬라이드를 넣을지는 연구자가 고른다
+   ============================================================ */
+const DECK_SECTIONS = [
+  { k: 'cover', label: '표지', scope: 'once', on: 1 },
+  { k: 'intro', label: '연구 개요', scope: 'once', on: 1 },
+  { k: 'distmap', label: '전국 분포 지도', scope: 'once', on: 1 },
+  { k: 'selmap', label: '선택한 프로젝트의 위치', scope: 'once', on: 1 },
+  { k: 'info', label: '프로젝트 기본 정보', scope: 'each', on: 1 },
+  { k: 'photos', label: '시장아파트 사진', scope: 'each', on: 1 },
+  { k: 'elev', label: '입면 사진 · 보정 이미지', scope: 'each', on: 1 },
+  { k: 'notes', label: '답사 기록', scope: 'each', on: 1 },
+  { k: 'arch', label: '건축적 특징', scope: 'each', on: 1 },
+  { k: 'urban', label: '도시적 특징', scope: 'each', on: 0 },
+  { k: 'transit', label: '주변 교통시설', scope: 'each', on: 1 },
+  { k: 'compare', label: '프로젝트 간 비교', scope: 'once', on: 1 },
+  { k: 'memo', label: '연구자 분석 메모', scope: 'once', on: 0 },
+  { k: 'conclusion', label: '결론 · 연구 가설', scope: 'once', on: 1 }
+];
+const C = { ink: '14171A', ink2: '333B44', muted: '6A737D', accent: '14477D', signal: 'C2472C', line: 'D2D7DD', soft: 'F1F3F5' };
+const M = 64;
+
+/** 슬라이드 한 장을 조립하는 작은 도우미 */
+function slideBuilder() {
+  const sh = []; const images = []; let id = 10, img = 0;
+  return {
+    shapes: sh, images,
+    head(title, sub) {
+      sh.push(rect(id++, M, 56, 40, 4, C.signal));
+      sh.push(tx(id++, M, 70, SW - M * 2, 40, title, { size: 27, bold: true, color: C.ink }));
+      if (sub) sh.push(tx(id++, M, 108, SW - M * 2, 22, sub, { size: 14, color: C.muted }));
+      return this;
+    },
+    text(x, y, w, h, lines, o) { sh.push(tx(id++, x, y, w, h, lines, o)); return this; },
+    rect(x, y, w, h, c, o) { sh.push(rect(id++, x, y, w, h, c, o)); return this; },
+    table(x, y, w, colW, rows, o) { sh.push(table(id++, x, y, w, colW, rows, o)); return this; },
+    /** dataURL 이미지를 넣고, 지정한 상자 안에 비율을 유지해 맞춘다 */
+    image(dataUrl, x, y, w, h, natural) {
+      if (!dataUrl) return this;
+      const rid = 'rIm' + (++img);
+      images.push({ rid, name: `s${images.length}_${Date.now().toString(36)}${img}.jpeg`, data: jpegBytes(dataUrl) });
+      let dw = w, dh = h;
+      if (natural && natural[0] && natural[1]) {
+        const r = Math.min(w / natural[0], h / natural[1]);
+        dw = natural[0] * r; dh = natural[1] * r;
+      }
+      sh.push(pic(id++, rid, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh));
+      return this;
+    },
+    foot(t) { sh.push(tx(id++, M, SH - 42, SW - M * 2, 18, t, { size: 11, color: C.muted })); return this; },
+    done() { return { shapes: sh.join('\n'), images }; }
+  };
+}
+function facRows(near) {
+  return [
+    ['현재 기차역', near.station ? (near.station.f.name || '—') : '등록된 지점 없음', fmtKm(near.station && near.station.d)],
+    ['과거 기차역', near.oldstation ? (near.oldstation.f.name || '—') : '등록된 지점 없음', fmtKm(near.oldstation && near.oldstation.d)],
+    ['버스터미널', near.terminal ? (near.terminal.f.name || '—') : '등록된 지점 없음', fmtKm(near.terminal && near.terminal.d)],
+    ['시장', near.market ? (near.market.f.name || '—') : '등록된 지점 없음', fmtKm(near.market && near.market.d)],
+    ['현재 철도 노선', near.rail ? (near.rail.f.name || '—') : '등록된 노선 없음', fmtKm(near.rail && near.rail.d)],
+    ['과거 철도 노선', near.oldrail ? (near.oldrail.f.name || '—') : '등록된 노선 없음', fmtKm(near.oldrail && near.oldrail.d)]
+  ];
+}
+function wrapKo(t, per, max) {
+  const s = String(t || '').replace(/\s+/g, ' ').trim();
+  const out = [];
+  for (let i = 0; i < s.length && out.length < max; i += per) out.push(s.slice(i, i + per));
+  if (s.length > per * max) out[out.length - 1] = out[out.length - 1].slice(0, per - 1) + '…';
+  return out;
+}
+/** 사진의 원본 dataURL (없으면 썸네일) */
+async function photoData(ph) {
+  try { const f = await S.store.get('photofull', ph.id); if (f && f.data) return f.data; } catch (e) { }
+  return ph.thumb;
+}
+
+async function composeDeck(ps, picked) {
+  const on = k => picked.includes(k);
+  const data = await collect(ps);
+  const slides = [];
+  const bySido = {}; ps.forEach(p => { const k = p.sido || '미상'; bySido[k] = (bySido[k] || 0) + 1; });
+  const big = ['서울특별시', '부산광역시', '대구광역시', '인천광역시', '광주광역시', '대전광역시', '울산광역시'];
+  const metro = ps.filter(p => big.includes(p.sido)).length;
+
+  if (on('cover')) {
+    const b = slideBuilder();
+    b.rect(0, 0, SW, 6, C.signal);
+    b.text(M, 250, SW - M * 2, 26, 'MARKET–HOUSING COMPLEX / FIELD SURVEY', { size: 13, color: C.muted, spc: 240 });
+    b.text(M, 286, SW - M * 2, 70, '시장아파트 답사 보고', { size: 52, bold: true, color: C.ink });
+    b.text(M, 372, SW - M * 2, 26, `${ps.length}개 사례 · ${Object.keys(bySido).length}개 시·도 · ${today()}`, { size: 17, color: C.ink2 });
+    b.rect(M, 424, 120, 2, C.line);
+    b.text(M, 444, SW - M * 2, 24, '건축학과 논문 연구 — 시장과 주거가 결합된 복합건축물의 입지와 형태', { size: 13, color: C.muted });
+    slides.push(b.done());
+  }
+  if (on('intro')) {
+    const b = slideBuilder();
+    b.head('연구 개요', '무엇을 왜 기록하는가');
+    b.text(M, 168, 620, 220, [
+      '시장과 주거가 하나의 건축물로 결합된 시장아파트를 전국 단위로 답사·기록하고,',
+      '입지(철도역·버스터미널·시장과의 거리), 도시적 배치, 시장–주거의 결합 방식,',
+      '규모, 현재 상태를 같은 기준으로 비교한다.',
+      '',
+      '특히 서울·부산·대구 같은 대도시 사례에 편중되지 않도록',
+      '중소도시와 지방의 사례를 함께 수집하는 것을 연구 방향으로 삼는다.'
+    ], { size: 16, color: C.ink2, lnSpc: 165000 });
+    b.table(730, 168, 486, [300, 186], [['지역', '사례 수']].concat(
+      Object.entries(bySido).sort((a, b2) => b2[1] - a[1]).slice(0, 12).map(r => [r[0], String(r[1])])
+    ), { head: true, size: 13, numAlign: true });
+    b.foot(`대도시 ${metro}건 · 그 외 지역 ${ps.length - metro}건`);
+    slides.push(b.done());
+  }
+  if (on('distmap')) {
+    const b = slideBuilder();
+    b.head('전국 분포', '기록된 시장아파트의 위치');
+    const url = await mapImage({ all: S.projects, items: [], whole: true, W: 640, H: 470 });
+    b.image(url, M, 156, 470, 470, [640, 470]);
+    b.text(M + 500, 168, SW - M - (M + 500) + M, 60, `전국 ${S.projects.length}건`, { size: 30, bold: true, color: C.ink });
+    b.table(M + 500, 226, 652, [400, 252], [['지역', '사례 수']].concat(
+      Object.entries(S.projects.reduce((a, p) => { const k = p.sido || '미상'; a[k] = (a[k] || 0) + 1; return a; }, {}))
+        .sort((a, b2) => b2[1] - a[1]).slice(0, 13).map(r => [r[0], String(r[1])])
+    ), { head: true, size: 13, numAlign: true, rowH: 24 });
+    b.foot('붉은 점 = 기록된 시장아파트. 답사가 진행될수록 분포가 채워진다.');
+    slides.push(b.done());
+  }
+  if (on('selmap')) {
+    const b = slideBuilder();
+    b.head('선택한 프로젝트의 위치', `${ps.length}개 사례`);
+    const url = await mapImage({ all: S.projects, items: ps, labels: true, W: 1100, H: 480 });
+    b.image(url, M, 156, SW - M * 2, 480, [1100, 480]);
+    b.foot('네모 = 이번 발표에서 다루는 사례 · 옅은 점 = 그 밖에 기록된 사례');
+    slides.push(b.done());
+  }
+
+  for (const d of data) {
+    const p = d.p, near = d.near;
+    if (on('info')) {
+      const b = slideBuilder();
+      b.head(projName(p), [p.sido, p.sgg, p.address].filter(Boolean).join(' '));
+      b.table(M, 156, 620, [200, 420], [
+        ['항목', '내용'],
+        ['시장 / 시장아파트', [p.marketName, p.aptName].filter(Boolean).join(' / ') || '—'],
+        ['답사일', p.surveyDate || '—'],
+        ['건축연도', p.builtYear == null ? '—' : String(p.builtYear)],
+        ['리모델링·증축', p.remodel || '—'],
+        ['층수 (시장/아파트/전체)', [p.marketFloors, p.aptFloors, p.totalFloors].map(v => v == null ? '?' : v).join(' / ')],
+        ['주차장', (p.parking ? '있음' : '없음') + (p.parkingType ? ' · ' + p.parkingType : '')],
+        ['시장–주거 관계', p.relation || '—'],
+        ['현재 상태', p.status || '—'],
+        ['좌표', p.lat != null ? p.lat.toFixed(5) + ', ' + p.lng.toFixed(5) : '—']
+      ], { head: true, size: 13, labelBold: true, rowH: 30 });
+      if (p.lat != null) {
+        const url = await mapImage({ items: [p], all: S.projects, W: 520, H: 380 });
+        b.image(url, 720, 156, 496, 330, [520, 380]);
+        b.text(720, 500, 496, 20, '반경 약 2km 범위 · 사각형이 대상 건물', { size: 11, color: C.muted });
+      }
+      const custom = S.fields.map(f => [f.label, (p.custom || {})[f.id]]).filter(r => r[1] != null && r[1] !== '');
+      if (custom.length) b.text(M, 560, SW - M * 2, 40, custom.map(r => `${r[0]}: ${Array.isArray(r[1]) ? r[1].join(', ') : r[1]}`).join('   ·   '), { size: 12, color: C.ink2 });
+      slides.push(b.done());
+    }
+    if (on('photos')) {
+      const ph = d.photos.filter(x => x.kind !== 'elevation').slice(0, 4);
+      if (ph.length) {
+        const b = slideBuilder();
+        b.head(projName(p) + ' — 현장 사진', ph.map(x => x.cat).join(' · '));
+        const cols = ph.length <= 2 ? ph.length : 2, rows = Math.ceil(ph.length / cols);
+        const cw = (SW - M * 2 - 16 * (cols - 1)) / cols, chh = (SH - 190 - 16 * (rows - 1)) / rows;
+        for (let i = 0; i < ph.length; i++) {
+          const x = M + (i % cols) * (cw + 16), y = 156 + Math.floor(i / cols) * (chh + 16);
+          b.rect(x, y, cw, chh, C.soft);
+          b.image(await photoData(ph[i]), x, y, cw, chh - 18, [ph[i].w, ph[i].h]);
+          b.text(x, y + chh - 16, cw, 16, `${ph[i].cat}${ph[i].caption ? ' — ' + ph[i].caption : ''}`, { size: 11, color: C.muted });
+        }
+        slides.push(b.done());
+      }
+    }
+    if (on('elev')) {
+      const ev = d.photos.filter(x => x.kind === 'elevation' || x.cat === '입면').slice(0, 2);
+      if (ev.length) {
+        const b = slideBuilder();
+        b.head(projName(p) + ' — 입면', '원근 보정 이미지 · 트레이싱 베이스');
+        const cw = (SW - M * 2 - 20 * (ev.length - 1)) / ev.length;
+        for (let i = 0; i < ev.length; i++) {
+          const x = M + i * (cw + 20);
+          b.image(await photoData(ev[i]), x, 156, cw, 440, [ev[i].w, ev[i].h]);
+          b.text(x, 606, cw, 18, ev[i].memo || ev[i].caption || (ev[i].kind === 'elevation' ? '4점 원근 보정' : '입면 사진'), { size: 11, color: C.muted, align: 'ctr' });
+        }
+        slides.push(b.done());
+      }
+    }
+    const noteSlide = (title, kinds, key) => {
+      if (!on(key)) return;
+      const ns = d.notes.filter(n => !kinds || kinds.some(k => (n.kind || '').includes(k)));
+      if (!ns.length) return;
+      const b = slideBuilder();
+      b.head(projName(p) + ' — ' + title, `${ns.length}건의 기록`);
+      let y = 160;
+      for (const n of ns.slice(0, 5)) {
+        if (y > SH - 110) break;
+        b.text(M, y, SW - M * 2, 20, `${n.title || '무제'}   ${n.date || ''} ${n.kind || ''}`, { size: 15, bold: true, color: C.accent });
+        const lines = wrapKo(n.body, 60, 5);
+        b.text(M, y + 24, SW - M * 2, lines.length * 21, lines, { size: 13, color: C.ink2, lnSpc: 150000 });
+        y += 34 + lines.length * 21;
+      }
+      slides.push(b.done());
+    };
+    noteSlide('답사 기록', null, 'notes');
+    noteSlide('건축적 특징', ['건축'], 'arch');
+    noteSlide('도시적 특징', ['도시'], 'urban');
+    if (on('transit')) {
+      const b = slideBuilder();
+      b.head(projName(p) + ' — 주변 교통시설', '기록된 참조 지점 기준 최단거리');
+      b.table(M, 156, 600, [180, 250, 170], [['시설', '이름', '거리']].concat(facRows(near)),
+        { head: true, size: 13, labelBold: true, rowH: 34 });
+      if (p.lat != null) {
+        const url = await mapImage({ items: [p], all: [], W: 520, H: 400 });
+        b.image(url, 700, 156, 516, 400, [520, 400]);
+      }
+      b.foot('거리는 등록된 참조 지점(역·터미널·시장·노선)에서 자동 계산된 값이다. 지점을 더 등록할수록 정확해진다.');
+      slides.push(b.done());
+    }
+  }
+
+  if (on('compare') && ps.length > 1) {
+    const b = slideBuilder();
+    b.head('사례 비교', `${ps.length}개 사례를 같은 기준으로`);
+    const rows = [['사례', '지역', '건축', '시장/아파트층', '결합유형', '현재역', '과거역', '터미널']].concat(
+      data.map(d => [projName(d.p), [d.p.sido, d.p.sgg].filter(Boolean).join(' '), d.p.builtYear == null ? '—' : String(d.p.builtYear),
+      `${d.p.marketFloors == null ? '?' : d.p.marketFloors}+${d.p.aptFloors == null ? '?' : d.p.aptFloors}`,
+      d.p.relation || '—', fmtKm(d.near.station && d.near.station.d), fmtKm(d.near.oldstation && d.near.oldstation.d), fmtKm(d.near.terminal && d.near.terminal.d)])
+    );
+    b.table(M, 156, SW - M * 2, [240, 190, 100, 140, 190, 116, 116, 60], rows.slice(0, 15), { head: true, size: 12, rowH: Math.min(34, 420 / Math.max(1, rows.length)) });
+    if (rows.length > 15) b.foot(`표에는 앞의 14건만 담았습니다. 전체 비교는 CSV 내보내기를 쓰세요.`);
+    slides.push(b.done());
+  }
+  if (on('memo')) {
+    const memos = data.flatMap(d => (d.p.note ? [[projName(d.p), d.p.note]] : []));
+    const b = slideBuilder();
+    b.head('연구자 분석 메모', '각 프로젝트의 비고란에 적어둔 내용');
+    let y = 160;
+    for (const [nm, t] of memos.slice(0, 6)) {
+      if (y > SH - 110) break;
+      b.text(M, y, SW - M * 2, 20, nm, { size: 14, bold: true, color: C.accent });
+      const lines = wrapKo(t, 62, 3);
+      b.text(M, y + 22, SW - M * 2, lines.length * 20, lines, { size: 13, color: C.ink2 });
+      y += 32 + lines.length * 20;
+    }
+    if (!memos.length) b.text(M, 200, SW - M * 2, 40, '아직 비고란에 적어둔 메모가 없습니다.', { size: 15, color: C.muted });
+    slides.push(b.done());
+  }
+  if (on('conclusion')) {
+    const hyp = Object.entries(typeHypotheses()).sort((a, b2) => b2[1] - a[1]);
+    const b = slideBuilder();
+    b.head('결론 · 연구 가설', '데이터에서 기계적으로 도출한 유형 후보');
+    b.table(M, 156, 600, [400, 200], [['유형 후보', '사례 수']].concat(hyp.slice(0, 9).map(r => [r[0], String(r[1])])),
+      { head: true, size: 13, numAlign: true, rowH: 32 });
+    b.text(700, 156, SW - M - 700 + M, 300, [
+      '다음 질문을 데이터로 검토한다.',
+      '',
+      '· 지방 중소도시의 시장아파트는 어디에 놓이는가',
+      '· 과거 교통망과 현재 교통망 중 어느 쪽에 더 가까운가',
+      '· 시장과 주거의 결합 방식에 지역차가 있는가',
+      '· 규모와 도시 규모 사이에 관계가 있는가',
+      '· 현재의 활성화 정도는 입지와 관계가 있는가'
+    ], { size: 14, color: C.ink2, lnSpc: 155000 });
+    b.foot('이 분류는 거리·층수·상태 값에서 규칙으로 붙인 후보이며, 확정된 유형이 아니라 연구자가 검토할 가설이다.');
+    slides.push(b.done());
+  }
+  return slides;
+}
+
+/** 발표자료 구성 선택 → pptx 생성 */
+function pptxDialog(list) {
+  const ps = list && list.length ? list : target();
+  if (!ps.length) return toast('먼저 프로젝트를 만들어 주세요');
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('mkt-deck') || 'null'); } catch (e) { return null; } })();
+  const on = k => saved ? saved.includes(k) : DECK_SECTIONS.find(s => s.k === k).on;
+  openModal(`<div class="mh"><h3>발표자료 만들기 · ${ps.length}건</h3><button class="x">×</button></div>
+    <div class="mb"><p class="hint" style="margin:0 0 10px">넣을 슬라이드를 고르세요. <b>사례별</b> 항목은 선택한 프로젝트마다 한 장씩 만들어집니다.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 18px">
+        ${DECK_SECTIONS.map(s => `<label class="lyr"><input type="checkbox" data-sec="${s.k}" ${on(s.k) ? 'checked' : ''}>
+          <span>${esc(s.label)}</span><span class="n">${s.scope === 'each' ? '사례별' : '1장'}</span></label>`).join('')}
+      </div>
+      <p class="hint" style="margin-top:10px">지도는 이 앱이 직접 그려 이미지로 넣습니다. 사진은 원본 해상도로 들어가므로 사례가 많으면 파일이 커집니다.</p>
+      <p class="hint" id="pxEst"></p></div>
+    <div class="mf"><button class="btn" id="pxPdf">PDF 슬라이드로</button><span class="spacer"></span>
+      <button class="btn pri" id="pxGo">.pptx 내려받기</button></div>`);
+  const picked = () => $$('#modalbox [data-sec]').filter(c => c.checked).map(c => c.dataset.sec);
+  const est = () => {
+    const p = picked();
+    const each = DECK_SECTIONS.filter(s => s.scope === 'each' && p.includes(s.k)).length;
+    const once = DECK_SECTIONS.filter(s => s.scope === 'once' && p.includes(s.k)).length;
+    $('#pxEst').textContent = `최대 ${once + each * ps.length}장 — 내용이 없는 사례별 슬라이드는 자동으로 빠집니다.`;
+  };
+  $$('#modalbox [data-sec]').forEach(c => c.onchange = est); est();
+  $('#pxPdf').onclick = () => { closeModal(); buildSlides(ps); };
+  $('#pxGo').onclick = async () => {
+    const sel = picked();
+    if (!sel.length) return toast('슬라이드를 하나 이상 고르세요');
+    try { localStorage.setItem('mkt-deck', JSON.stringify(sel)); } catch (e) { }
+    const btn = $('#pxGo'); btn.disabled = true; btn.textContent = '만드는 중…';
+    try {
+      const slides = await composeDeck(ps, sel);
+      if (!slides.length) { toast('만들 슬라이드가 없습니다'); btn.disabled = false; btn.textContent = '.pptx 내려받기'; return; }
+      const blob = buildPptx(slides, { title: `시장아파트 답사 보고 ${today()}` });
+      closeModal();
+      await download(`시장아파트_발표자료_${today()}.pptx`, blob);
+      toast(`슬라이드 ${slides.length}장 · ${bytes(blob.size)}`, 4200);
+    } catch (e) {
+      console.error(e);
+      btn.disabled = false; btn.textContent = '.pptx 내려받기';
+      toast('발표자료를 만들지 못했습니다: ' + (e && e.message || e), 4200);
+    }
+  };
+}
 
 </script>
 <script>
@@ -2084,9 +3242,10 @@ $('#btnCompare').onclick = async () => {
       <tr><td class="stickycol">과거역 거리</td>${ps.map(p => { const n = nearestFacilities(p); return `<td class="n">${fmtKm(n.oldstation && n.oldstation.d)}</td>`; }).join('')}</tr>
       <tr><td class="stickycol">터미널 거리</td>${ps.map(p => { const n = nearestFacilities(p); return `<td class="n">${fmtKm(n.terminal && n.terminal.d)}</td>`; }).join('')}</tr>
     </tbody></table></div></div>
-    <div class="mf"><button class="btn" id="cmpCsv">CSV로 내보내기</button><button class="btn pri" id="cmpRep">보고서 만들기</button></div>`, { wide: true });
+    <div class="mf"><button class="btn" id="cmpCsv">CSV로 내보내기</button><button class="btn" id="cmpPpt">PPT 만들기</button><button class="btn pri" id="cmpRep">보고서 만들기</button></div>`, { wide: true });
   $('#cmpCsv').onclick = () => exportCsv(ps);
   $('#cmpRep').onclick = () => { closeModal(); buildReport(ps); };
+  $('#cmpPpt').onclick = () => { closeModal(); pptxDialog(ps); };
 };
 
 /* ---------- CSV ---------- */
@@ -2117,6 +3276,15 @@ async function collect(ps) {
   }
   return out;
 }
+/** 사례별 위치 지도 이미지를 붙인다 (지도 생성이 실패해도 보고서는 그대로 나온다) */
+async function attachMaps(data, W, H) {
+  for (const d of data) {
+    if (d.p.lat == null) continue;
+    try { d.mapImg = await mapImage({ items: [d.p], all: S.projects, W: W || 560, H: H || 380 }); }
+    catch (e) { console.warn(e); }
+  }
+  return data;
+}
 function infoTable(p, near) {
   const rows = [
     ['시장 / 시장아파트', [p.marketName, p.aptName].filter(Boolean).join(' / ')],
@@ -2136,12 +3304,21 @@ function infoTable(p, near) {
 async function buildReport(list) {
   const ps = list || target();
   toast('보고서를 만드는 중…');
-  const data = await collect(ps);
+  const data = await attachMaps(await collect(ps));
   const root = $('#printroot');
+  let distImg = '', locImg = '';
+  try {
+    distImg = await mapImage({ all: S.projects, items: ps, whole: true, W: 620, H: 470 });
+    if (ps.some(p => p.lat != null)) locImg = await mapImage({ all: S.projects, items: ps, labels: true, W: 620, H: 400 });
+  } catch (e) { console.warn('지도 이미지 생략', e); }
   root.innerHTML = `<div style="padding-bottom:20px">
       <p class="mono" style="font-size:11px;letter-spacing:.1em">MARKET–HOUSING COMPLEX / FIELD SURVEY</p>
       <h1>시장아파트 답사 보고서</h1>
       <p style="font-size:12px;color:#444">${ps.length}개 사례 · 작성일 ${today()}</p>
+      ${distImg ? `<h2>분포</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <figure style="margin:0"><img src="${distImg}" style="width:100%;border:1px solid #ccc"><figcaption style="font-size:9px;color:#555">전국 분포 — 네모가 이 보고서의 사례</figcaption></figure>
+        ${locImg ? `<figure style="margin:0"><img src="${locImg}" style="width:100%;border:1px solid #ccc"><figcaption style="font-size:9px;color:#555">사례 위치</figcaption></figure>` : ''}
+      </div>` : ''}
       <table style="margin-top:12px"><tr><th>사례</th><th>소재지</th><th>답사일</th><th>층수</th><th>현재역</th><th>과거역</th></tr>
       ${data.map(d => `<tr><td>${esc(projName(d.p))}</td><td>${esc([d.p.sido, d.p.sgg].filter(Boolean).join(' '))}</td><td>${esc(d.p.surveyDate || '')}</td>
         <td>${d.p.marketFloors || '?'}+${d.p.aptFloors || '?'}</td><td>${fmtKm(d.near.station && d.near.station.d)}</td><td>${fmtKm(d.near.oldstation && d.near.oldstation.d)}</td></tr>`).join('')}</table>
@@ -2150,6 +3327,8 @@ async function buildReport(list) {
       <h1>${esc(projName(d.p))}</h1>
       <p style="font-size:12px;color:#444">${esc([d.p.sido, d.p.sgg, d.p.marketName].filter(Boolean).join(' · '))}</p>
       <h2>기본 정보</h2>${infoTable(d.p, d.near)}
+      ${d.mapImg ? `<h2>위치</h2><img src="${d.mapImg}" style="width:58%;border:1px solid #ccc">
+        <p style="font-size:9px;color:#555;margin:2px 0 0">반경 약 2km · 사각형이 대상 건물, 원·삼각형·마름모가 역·터미널·시장</p>` : ''}
       ${d.photos.length ? `<h2>현장 사진</h2><div class="pgal">${d.photos.slice(0, 9).map(ph => `<figure><img src="${ph.thumb}" alt=""><figcaption>${esc(ph.cat)}${ph.caption ? ' — ' + esc(ph.caption) : ''}</figcaption></figure>`).join('')}</div>` : ''}
       ${d.notes.length ? `<h2>답사 기록</h2>${d.notes.map(n => `<div style="margin-bottom:8px"><b>${esc(n.title || '무제')}</b> <span style="font-size:10px;color:#666">${esc(n.date || '')} ${esc(n.kind || '')}</span>
         <div style="font-size:11px;white-space:pre-wrap">${esc(n.body || '')}</div></div>`).join('')}` : ''}
@@ -2160,7 +3339,7 @@ async function buildReport(list) {
 async function buildSlides(list) {
   const ps = list || target();
   toast('발표자료를 만드는 중…');
-  const data = await collect(ps);
+  const data = await attachMaps(await collect(ps), 520, 360);
   const S16 = 'width:100%;aspect-ratio:16/9;border:1px solid #ccc;padding:22px;margin-bottom:10px;display:flex;flex-direction:column;overflow:hidden';
   const root = $('#printroot');
   const bySido = {}; ps.forEach(p => { const k = p.sido || '미상'; bySido[k] = (bySido[k] || 0) + 1; });
@@ -2195,7 +3374,7 @@ async function buildSlides(list) {
   setTimeout(() => window.print(), 350);
 }
 $('#btnReport').onclick = () => buildReport(S.projects.filter(p => S.sel.has(p.id)));
-$('#btnSlides').onclick = () => buildSlides(S.projects.filter(p => S.sel.has(p.id)));
+$('#btnSlides').onclick = () => pptxDialog(S.projects.filter(p => S.sel.has(p.id)));
 $('#detReport').onclick = () => buildReport(S.projects.filter(p => p.id === S.cur));
 
 /* ---------- 출력 화면 ---------- */
@@ -2213,8 +3392,11 @@ function renderOutput() {
         <p class="hint">사례별 기본정보·사진·답사 기록을 A4 문서로 배치합니다. 인쇄 대화상자에서 <b>PDF로 저장</b>을 선택하세요.</p>
         <button class="btn pri" style="margin-top:10px" id="oRep">보고서 만들기 (${n}건)</button></div>
       <div class="card pad"><div class="sech"><h3>세미나 발표자료</h3><div class="ln"></div></div>
-        <p class="hint">표지 · 연구 개요 · 사례별 정보와 사진 · 답사 기록 · 유형 가설 순의 16:9 슬라이드입니다. PDF로 저장해 발표에 쓰거나 대화창에 올려 PPT로 변환하세요.</p>
-        <button class="btn pri" style="margin-top:10px" id="oSlide">발표자료 만들기 (${n}건)</button></div>
+        <p class="hint">표지 · 연구 개요 · 전국 분포 지도 · 사례별 정보와 사진 · 입면 · 답사 기록 · 교통시설 · 비교 · 유형 가설.
+        넣을 슬라이드를 직접 고를 수 있고, <b>파워포인트에서 그대로 편집되는 .pptx</b> 파일로 나옵니다.</p>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn pri" id="oPptx">PPT 만들기 (${n}건)</button>
+          <button class="btn" id="oSlide">PDF 슬라이드</button></div></div>
       <div class="card pad"><div class="sech"><h3>선택</h3><div class="ln"></div></div>
         <p class="hint">프로젝트 화면에서 체크한 항목만 출력 대상이 됩니다. 선택이 없으면 전체가 대상입니다.</p>
         <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" onclick="go('list')">프로젝트에서 선택</button>
@@ -2223,6 +3405,7 @@ function renderOutput() {
   $('#oCsv').onclick = () => exportCsv();
   $('#oRep').onclick = () => buildReport();
   $('#oSlide').onclick = () => buildSlides();
+  $('#oPptx').onclick = () => pptxDialog(target());
   $('#oJson').onclick = () => backup();
   $('#oClear').onclick = () => { S.sel.clear(); renderOutput(); renderTable(); MAP.draw(); };
 }

@@ -6,7 +6,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const SCHEMA_VERSION = 2;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -44,7 +44,7 @@ function openModal(html, opts) {
 function closeModal() { $('#modal').classList.remove('on'); $('#modalbox').innerHTML = ''; }
 $('#modal').addEventListener('mousedown', e => { if (e.target.id === 'modal') closeModal(); });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); $('#lightbox').classList.remove('on'); if (MAP.picking) MAP.setPick(false); }
+  if (e.key === 'Escape') { closeModal(); $('#lightbox').classList.remove('on'); if (MAP.picking) MAP.setPick(false); if (MAP.drawing) MAP.cancelLine(); }
 });
 function confirmBox(title, body, okLabel) {
   return new Promise(res => {
@@ -117,7 +117,7 @@ function makeDbBackend(db) {
 const S = {
   store: null, projects: [], facilities: [], fields: [], trash: [],
   sel: new Set(), view: 'map', cur: null, photos: [], notes: [],
-  sort: { k: 'surveyDate', dir: 'desc' }, filter: {}, q: '',
+  sort: { k: 'surveyDate', dir: 'desc' }, filter: {}, filterMore: false, q: '',
   sample: null, downloads: null, meta: null, schemaAhead: false
 };
 
@@ -304,6 +304,7 @@ async function saveProject(p) {
   await S.store.put('projects', p.id, p);
   const i = S.projects.findIndex(x => x.id === p.id);
   if (i < 0) S.projects.push(p); else S.projects[i] = p;
+  const hint = $('#firsthint'); if (hint) hint.remove();
   updateCounts(); MAP.draw();
 }
 /** 프로젝트를 휴지통으로 옮긴다. 사진·기록은 지우지 않고 같은 프로젝트 ID 아래 그대로 둔다.
@@ -362,7 +363,7 @@ async function boot() {
 }
 function firstRunHint() {
   const el = document.createElement('div');
-  el.className = 'panel';
+  el.className = 'panel'; el.id = 'firsthint';
   el.style.cssText = 'position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);z-index:4;max-width:340px;padding:16px 18px;text-align:center';
   el.innerHTML = `<h3 style="font-family:var(--f-disp);font-size:17px;margin-bottom:6px">첫 답사를 기록해 보세요</h3>
     <p class="hint" style="margin:0 0 12px">지도에서 위치를 지정하면 시·도와 시·군·구가 자동으로 채워집니다. 사진과 답사 기록은 프로젝트 안에 쌓입니다.</p>

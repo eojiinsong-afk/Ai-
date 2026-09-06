@@ -42,6 +42,7 @@ function pointInRings(lng, lat, rings) {
 const MAP = {
   svg: null, s: 1, tx: 0, ty: 0, W: 0, H: 0,
   sido: [], sgg: [], picking: false, pickCb: null, radius: 0,
+  drawing: null, draft: [],
   layers: { apt: 1, station: 1, oldstation: 1, terminal: 1, market: 1, rail: 1, oldrail: 1 },
   init() {
     const G = window.KRGEO;
@@ -139,8 +140,22 @@ const MAP = {
       const lines = S.facilities.filter(f => f.kind === kind && Array.isArray(f.path) && f.path.length > 1);
       for (const f of lines) {
         const d = f.path.map(p => { const s = this.toScreen(p[0], p[1]); return s[0].toFixed(1) + ' ' + s[1].toFixed(1); }).join('L');
-        out.push(`<path d="M${d}" fill="none" stroke="${FAC_KINDS[kind].color}" stroke-width="${kind === 'rail' ? 2 : 1.6}" ${kind === 'oldrail' ? 'stroke-dasharray="6 4"' : ''} opacity=".8"/>`);
+        out.push(`<g class="mk" data-fac="${f.id}"><path d="M${d}" fill="none" stroke="${FAC_KINDS[kind].color}" stroke-width="${kind === 'rail' ? 2 : 1.6}" ${kind === 'oldrail' ? 'stroke-dasharray="6 4"' : ''} opacity=".8"/>
+          <path class="mk-hit" d="M${d}" fill="none" stroke-width="12"/></g>`);
+        // 노선 이름은 충분히 확대했을 때만
+        if (this.s > 12000 && f.name) {
+          const mid = f.path[Math.floor(f.path.length / 2)];
+          const [mx, my] = this.toScreen(mid[0], mid[1]);
+          out.push(`<text x="${mx.toFixed(1)}" y="${(my - 6).toFixed(1)}" class="geolabel" style="fill:${FAC_KINDS[kind].color};font-size:10px">${esc(f.name)}</text>`);
+        }
       }
+    }
+    // 그리는 중인 노선
+    if (this.drawing && this.draft.length) {
+      const c = FAC_KINDS[this.drawing.kind].color;
+      const pts = this.draft.map(p => this.toScreen(p[0], p[1]));
+      if (pts.length > 1) out.push(`<path d="M${pts.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L')}" fill="none" stroke="${c}" stroke-width="2" stroke-dasharray="5 4"/>`);
+      for (const q of pts) out.push(`<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="3.5" fill="var(--surface)" stroke="${c}" stroke-width="1.8"/>`);
     }
     // 반경
     if (this.radius && this.layers.apt) {
@@ -205,14 +220,18 @@ const MAP = {
         </div></div>`;
       $('#miOpen').onclick = () => openDetail(o.id);
     } else {
+      const isLine = Array.isArray(o.path) && o.path.length > 1;
       box.innerHTML = `<div class="body"><h3>${esc(o.name || FAC_KINDS[o.kind].label)}</h3>
-        <div class="hint">${FAC_KINDS[o.kind].label}${o.year ? ' · ' + esc(o.year) : ''}</div>
+        <div class="hint">${FAC_KINDS[o.kind].label}${o.year ? ' · ' + esc(o.year) : ''}${isLine ? ` · ${o.path.length}점 · ${fmtKm(this.pathLength(o.path))}` : ''}</div>
         ${o.note ? `<p style="font-size:12px;color:var(--ink2);margin:8px 0 0">${esc(o.note)}</p>` : ''}
-        <div style="display:flex;gap:6px;margin-top:10px">
-          <button class="btn sm" id="miEdit">편집</button>
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn sm" id="miEdit">${isLine ? '정보 편집' : '편집'}</button>
+          ${isLine ? '<button class="btn sm" id="miRedraw">경로 다시 그리기</button>' : ''}
           <button class="btn sm dgr" id="miDel">삭제</button>
           <button class="btn sm" id="miClose">닫기</button></div></div>`;
-      $('#miEdit').onclick = () => facilityForm(o);
+      $('#miEdit').onclick = () => isLine ? lineForm(o) : facilityForm(o);
+      const rd = $('#miRedraw');
+      if (rd) rd.onclick = () => { box.hidden = true; this.startLine(o.kind, o); };
       $('#miDel').onclick = async () => {
         if (!await confirmBox('참조 지점 삭제', `<p>${esc(o.name)} 을(를) 삭제할까요?</p>`)) return;
         await S.store.del('facilities', o.id);
@@ -275,7 +294,8 @@ const MAP = {
       if (moved < 6 && ptrs.size === 0) {
         const r = el.getBoundingClientRect();
         const [lat, lng] = this.toLatLng(e.clientX - r.left, e.clientY - r.top);
-        if (this.picking) { const cb = this.pickCb; this.setPick(false); if (cb) cb(lat, lng); }
+        if (this.drawing) { this.draft.push([+lat.toFixed(6), +lng.toFixed(6)]); this.updateDraft(); }
+        else if (this.picking) { const cb = this.pickCb; this.setPick(false); if (cb) cb(lat, lng); }
         else if (e.target === el) $('#mapinfo').hidden = true;
       }
     };
@@ -290,6 +310,37 @@ const MAP = {
     $('#zfit').onclick = () => this.fit();
     $('#pickCancel').onclick = () => this.setPick(false);
     addEventListener('resize', () => { this.resize(); });
+  },
+  /* ---------- 철도 노선 그리기 ----------
+     역(점)과 달리 노선은 여러 점을 잇는 폴리라인이다. 지도를 눌러 점을 찍고
+     「완료」를 누르면 facilities 문서에 path[[lat,lng],…] 로 저장된다. */
+  startLine(kind, existing) {
+    this.drawing = { kind, edit: existing || null };
+    this.draft = existing && Array.isArray(existing.path) ? existing.path.slice() : [];
+    this.picking = false;
+    $('#pickbanner').classList.remove('on');
+    $('#linebanner').classList.add('on');
+    $('#lbKind').textContent = FAC_KINDS[kind].label + (existing ? ' 편집' : ' 그리기');
+    this.svg.style.cursor = 'crosshair';
+    this.updateDraft();
+  },
+  updateDraft() {
+    $('#lbCount').textContent = this.draft.length + '점';
+    $('#lbUndo').disabled = !this.draft.length;
+    $('#lbDone').disabled = this.draft.length < 2;
+    this.apply();
+  },
+  cancelLine() {
+    this.drawing = null; this.draft = [];
+    $('#linebanner').classList.remove('on');
+    this.svg.style.cursor = '';
+    this.apply();
+  },
+  /** 노선 길이(m) */
+  pathLength(path) {
+    let t = 0;
+    for (let i = 1; i < path.length; i++) t += haversine(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]) || 0;
+    return t;
   },
   /** 위경도로 시·도 / 시·군·구 판별 */
   reverse(lat, lng) {
@@ -336,10 +387,145 @@ function nearestFacilities(p) {
   const out = {};
   if (p.lat == null || p.lng == null) return out;
   for (const f of S.facilities) {
-    if (f.lat == null || f.lng == null) continue;
-    const d = haversine(p.lat, p.lng, f.lat, f.lng);
+    let d = null;
+    if (Array.isArray(f.path) && f.path.length > 1) d = pointToPathDist(p.lat, p.lng, f.path);
+    else if (f.lat != null && f.lng != null) d = haversine(p.lat, p.lng, f.lat, f.lng);
     if (d == null) continue;
     if (!out[f.kind] || d < out[f.kind].d) out[f.kind] = { d, f };
   }
   return out;
+}
+/** 점에서 폴리라인까지의 최단거리(m). 국지 범위라 평면 근사로 충분하다. */
+function pointToPathDist(lat, lng, path) {
+  const mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
+  const px = lng * mLng, py = lat * mLat;
+  let best = null;
+  for (let i = 1; i < path.length; i++) {
+    const ax = path[i - 1][1] * mLng, ay = path[i - 1][0] * mLat;
+    const bx = path[i][1] * mLng, by = path[i][0] * mLat;
+    const dx = bx - ax, dy = by - ay;
+    const L2 = dx * dx + dy * dy;
+    const t = L2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)) : 0;
+    const d = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    if (best == null || d < best) best = d;
+  }
+  return best;
+}
+
+/* ============================================================
+   정적 지도 이미지 — 보고서 · 발표자료 · PPTX 용
+   화면 지도는 CSS 변수로 색을 쓰지만, 내보내는 SVG는 홀로 서야 하므로
+   색을 리터럴로 박아 넣는다(테마와 무관하게 인쇄용 밝은 배경).
+   ============================================================ */
+const MAPPAL = {
+  sea: '#F4F6F8', land: '#DCE1E6', line: '#B4BDC6', sggline: '#C9D0D8',
+  ink: '#14171A', muted: '#6A737D',
+  apt: '#C2472C', station: '#14477D', oldstation: '#14477D', terminal: '#2E7157', market: '#6D4C86'
+};
+/**
+ * 독립 실행 가능한 SVG 문자열을 만든다.
+ * @param {object} o  items(강조할 프로젝트) · all(회색 배경 점) · W · H · labels · facilities · pad
+ */
+function staticMapSvg(o) {
+  const W = o.W || 1200, H = o.H || 760, pad = o.pad == null ? 26 : o.pad;
+  const items = (o.items || []).filter(p => p.lat != null && p.lng != null);
+  const all = (o.all || []).filter(p => p.lat != null && p.lng != null);
+  let x0, x1, y0, y1;
+  if (o.whole || !items.length) {
+    x0 = w2x(125.0); x1 = w2x(130.0); y0 = w2y(38.7); y1 = w2y(33.1);
+  } else {
+    x0 = 1e9; x1 = -1e9; y0 = 1e9; y1 = -1e9;
+    for (const p of items) { const x = w2x(p.lng), y = w2y(p.lat); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const mx = Math.max(0.06, (x1 - x0) * 0.35), my = Math.max(0.06, (y1 - y0) * 0.35);
+    x0 -= mx; x1 += mx; y0 -= my; y1 += my;
+  }
+  const s = Math.min((W - pad * 2) / (x1 - x0), (H - pad * 2) / (y1 - y0));
+  const tx = W / 2 - ((x0 + x1) / 2) * s, ty = H / 2 - ((y0 + y1) / 2) * s;
+  const P = (lat, lng) => [w2x(lng) * s + tx, w2y(lat) * s + ty];
+  const scalePath = rings => {
+    let d = '';
+    for (const r of rings) d += 'M' + r.map(q => { const t = P(q[1], q[0]); return t[0].toFixed(1) + ' ' + t[1].toFixed(1); }).join('L') + 'Z';
+    return d;
+  };
+  const parts = [`<rect width="${W}" height="${H}" fill="${MAPPAL.sea}"/>`];
+  // 시도 경계
+  parts.push(`<g fill="${MAPPAL.land}" stroke="${MAPPAL.line}" stroke-width="0.9" stroke-linejoin="round">` +
+    MAP.sido.map(f => `<path d="${scalePath(f.rawRings || decodeRingsCache(f))}"/>`).join('') + `</g>`);
+  // 시군구 경계는 충분히 확대했을 때만
+  if (s > 3600) {
+    parts.push(`<g fill="none" stroke="${MAPPAL.sggline}" stroke-width="0.6">` +
+      MAP.sgg.filter(f => f.ct && f.ct[0] > (x0 / KX) - 0.5 && f.ct[0] < (x1 / KX) + 0.5 && -f.ct[1] > y0 - 0.5 && -f.ct[1] < y1 + 0.5)
+        .map(f => `<path d="${scalePath(f.rings)}"/>`).join('') + `</g>`);
+  }
+  // 지역 이름
+  if (o.geoLabels !== false) {
+    const src = s > 3600 ? MAP.sgg : MAP.sido;
+    parts.push(src.map(f => {
+      if (!f.ct) return '';
+      const [x, y] = P(f.ct[1], f.ct[0]);
+      if (x < 4 || y < 10 || x > W - 4 || y > H - 4) return '';
+      return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-family="sans-serif" font-size="${s > 3600 ? 10 : 12}" fill="${MAPPAL.muted}" text-anchor="middle">${esc(f.n)}</text>`;
+    }).join(''));
+  }
+  // 철도 노선
+  for (const kind of ['rail', 'oldrail']) {
+    for (const f of (o.facilities || []).filter(f => f.kind === kind && Array.isArray(f.path) && f.path.length > 1)) {
+      const d = f.path.map(q => { const t = P(q[0], q[1]); return t[0].toFixed(1) + ' ' + t[1].toFixed(1); }).join('L');
+      parts.push(`<path d="M${d}" fill="none" stroke="${MAPPAL.station}" stroke-width="${kind === 'rail' ? 2 : 1.6}" ${kind === 'oldrail' ? 'stroke-dasharray="7 5"' : ''} opacity="0.75"/>`);
+    }
+  }
+  // 참조 지점
+  for (const f of (o.facilities || [])) {
+    if (f.lat == null || f.kind === 'rail' || f.kind === 'oldrail') continue;
+    const [x, y] = P(f.lat, f.lng);
+    if (x < 0 || y < 0 || x > W || y > H) continue;
+    const c = MAPPAL[f.kind] || MAPPAL.muted;
+    if (f.kind === 'terminal') parts.push(`<path d="M${x} ${y - 5} L${x + 5} ${y + 4} L${x - 5} ${y + 4}Z" fill="${c}"/>`);
+    else if (f.kind === 'market') parts.push(`<path d="M${x} ${y - 5} L${x + 5} ${y} L${x} ${y + 5} L${x - 5} ${y}Z" fill="${c}"/>`);
+    else if (f.kind === 'oldstation') parts.push(`<circle cx="${x}" cy="${y}" r="4" fill="#fff" stroke="${c}" stroke-width="1.6" stroke-dasharray="2.4 1.8"/>`);
+    else parts.push(`<circle cx="${x}" cy="${y}" r="4" fill="${c}"/>`);
+  }
+  // 선택되지 않은 프로젝트는 연한 점으로 배경에
+  const hi = new Set(items.map(p => p.id));
+  for (const p of all) {
+    if (hi.has(p.id)) continue;
+    const [x, y] = P(p.lat, p.lng);
+    parts.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.4" fill="${MAPPAL.apt}" opacity="0.3"/>`);
+  }
+  // 강조 프로젝트
+  for (const p of items) {
+    const [x, y] = P(p.lat, p.lng);
+    parts.push(`<rect x="${(x - 5).toFixed(1)}" y="${(y - 5).toFixed(1)}" width="10" height="10" rx="1.5" fill="${MAPPAL.apt}" stroke="#fff" stroke-width="1.6"/>`);
+    if (o.labels) parts.push(`<text x="${(x + 9).toFixed(1)}" y="${(y + 4).toFixed(1)}" font-family="sans-serif" font-size="12" fill="${MAPPAL.ink}">${esc(projName(p))}</text>`);
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${parts.join('')}</svg>`;
+}
+/* MAP.sido 는 경로 문자열만 갖고 있어 좌표를 다시 쓸 수 없다 → 최초 1회만 링을 복원해 캐시한다. */
+function decodeRingsCache(f) {
+  if (f.rawRings) return f.rawRings;
+  const src = window.KRGEO.sido.find(g => g.c === f.c);
+  f.rawRings = src ? decodeRings(src) : [];
+  return f.rawRings;
+}
+/** SVG → JPEG dataURL. 외부 참조가 없는 SVG라 캔버스가 오염되지 않는다. */
+function svgToJpeg(svg, W, H, scale) {
+  const k = scale || 2;
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = W * k; c.height = H * k;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      res(c.toDataURL('image/jpeg', 0.86));
+    };
+    img.onerror = () => rej(new Error('지도 이미지를 만들지 못했습니다'));
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+}
+/** 보고서·발표자료에서 바로 쓰는 지도 이미지 */
+async function mapImage(o) {
+  const W = o.W || 1200, H = o.H || 760;
+  return await svgToJpeg(staticMapSvg(Object.assign({ facilities: S.facilities }, o, { W, H })), W, H, o.scale || 1.6);
 }

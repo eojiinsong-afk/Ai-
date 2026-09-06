@@ -9,29 +9,61 @@ function fieldValue(p, f) {
 const TABLE_COLS = ['surveyDate', 'sido', 'sgg', 'marketName', 'aptName', 'address', 'builtYear', 'marketFloors', 'aptFloors', 'totalFloors', 'parking', 'relation', 'status', 'nearStation', 'nearTerminal'];
 
 /* ---------- filters + table ---------- */
+/* 근접 필터: 값은 미터 문자열(‘1000’ = 1km 이내) 또는 'none'(등록된 지점이 없거나 멀리 떨어짐) */
+const NEAR_OPTS = [['500', '500m 이내'], ['1000', '1km 이내'], ['2000', '2km 이내'], ['none', '2km 밖 · 없음']];
+function nearPass(v, d) {
+  if (!v) return true;
+  if (v === 'none') return d == null || d > 2000;
+  return d != null && d <= +v;
+}
 function renderFilters() {
   const sidos = Array.from(new Set(S.projects.map(p => p.sido).filter(Boolean))).sort();
+  const sggs = Array.from(new Set(S.projects.filter(p => !S.filter.sido || p.sido === S.filter.sido).map(p => p.sgg).filter(Boolean))).sort();
   const tags = Array.from(new Set(S.projects.flatMap(p => p.tags || []))).sort();
   const rel = BASE_FIELDS.find(f => f.k === 'relation').options;
   const st = BASE_FIELDS.find(f => f.k === 'status').options;
   const opt = (arr, cur) => ['<option value="">전체</option>'].concat(arr.map(o => `<option ${cur === o ? 'selected' : ''}>${esc(o)}</option>`)).join('');
+  const pairs = (arr, cur) => ['<option value="">전체</option>'].concat(arr.map(o => `<option value="${esc(o[0])}" ${cur === o[0] ? 'selected' : ''}>${esc(o[1])}</option>`)).join('');
+  // 사용자가 만든 선택형 항목도 그대로 필터가 된다
+  const cf = S.fields.filter(f => f.type === 'select' && (f.options || []).length);
+  const ADV = ['y0', 'y1', 'd0', 'd1', 'mf', 'af', 'nstation', 'noldstation', 'nterminal', 'hasphoto'];
+  const advN = Object.keys(S.filter).filter(k => S.filter[k] && (ADV.includes(k) || k.slice(0, 3) === 'cf_')).length;
   $('#filters').innerHTML = `
     <span class="f">시·도 <select data-fk="sido">${opt(sidos, S.filter.sido)}</select></span>
+    <span class="f">시·군·구 <select data-fk="sgg">${opt(sggs, S.filter.sgg)}</select></span>
     <span class="f">결합유형 <select data-fk="relation">${opt(rel, S.filter.relation)}</select></span>
     <span class="f">상태 <select data-fk="status">${opt(st, S.filter.status)}</select></span>
     <span class="f">주차장 <select data-fk="parking"><option value="">전체</option><option ${S.filter.parking === 'y' ? 'selected' : ''} value="y">있음</option><option ${S.filter.parking === 'n' ? 'selected' : ''} value="n">없음</option></select></span>
     <span class="f">태그 <select data-fk="tag">${opt(tags, S.filter.tag)}</select></span>
-    <span class="f">건축연도 <input type="number" data-fk="y0" placeholder="부터" value="${S.filter.y0 || ''}" style="width:76px"> – <input type="number" data-fk="y1" placeholder="까지" value="${S.filter.y1 || ''}" style="width:76px"></span>
+    <button class="btn sm" id="fmoreb" aria-expanded="${S.filterMore ? 'true' : 'false'}">상세 필터${advN ? ' · ' + advN : ''}</button>
+    <span class="fmore" ${S.filterMore ? '' : 'hidden'}>
+    <span class="f">건축연도 <input type="number" data-fk="y0" placeholder="부터" value="${esc(S.filter.y0 || '')}" style="width:76px"> – <input type="number" data-fk="y1" placeholder="까지" value="${esc(S.filter.y1 || '')}" style="width:76px"></span>
+    <span class="f">답사일 <input type="date" data-fk="d0" value="${esc(S.filter.d0 || '')}" style="width:134px"> – <input type="date" data-fk="d1" value="${esc(S.filter.d1 || '')}" style="width:134px"></span>
+    <span class="f">시장층수 ≤ <input type="number" data-fk="mf" value="${esc(S.filter.mf || '')}" style="width:62px"></span>
+    <span class="f">아파트층수 ≥ <input type="number" data-fk="af" value="${esc(S.filter.af || '')}" style="width:62px"></span>
+    <span class="f">현재역 <select data-fk="nstation">${pairs(NEAR_OPTS, S.filter.nstation)}</select></span>
+    <span class="f">과거역 <select data-fk="noldstation">${pairs(NEAR_OPTS, S.filter.noldstation)}</select></span>
+    <span class="f">터미널 <select data-fk="nterminal">${pairs(NEAR_OPTS, S.filter.nterminal)}</select></span>
+    <span class="f">사진 <select data-fk="hasphoto"><option value="">전체</option><option value="y" ${S.filter.hasphoto === 'y' ? 'selected' : ''}>있음</option><option value="n" ${S.filter.hasphoto === 'n' ? 'selected' : ''}>없음</option></select></span>
+    ${cf.map(f => `<span class="f">${esc(f.label)} <select data-fk="cf_${f.id}">${opt(f.options, S.filter['cf_' + f.id])}</select></span>`).join('')}
+    </span>
     <button class="btn sm" id="fclear">필터 해제</button>
     <span class="spacer"></span><span class="hint" id="fcount"></span>`;
-  $$('#filters [data-fk]').forEach(el => el.onchange = () => { S.filter[el.dataset.fk] = el.value; renderTable(); });
+  $$('#filters [data-fk]').forEach(el => el.onchange = () => {
+    S.filter[el.dataset.fk] = el.value;
+    if (el.dataset.fk === 'sido') S.filter.sgg = '';
+    renderTable();
+  });
+  $('#fmoreb').onclick = () => { S.filterMore = !S.filterMore; renderTable(); };
   $('#fclear').onclick = () => { S.filter = {}; S.q = ''; $('#q').value = ''; renderTable(); };
 }
 function filtered() {
   const q = S.q.trim().toLowerCase();
+  const f = S.filter;
+  const needNear = f.nstation || f.noldstation || f.nterminal;
   return S.projects.filter(p => {
-    const f = S.filter;
     if (f.sido && p.sido !== f.sido) return false;
+    if (f.sgg && p.sgg !== f.sgg) return false;
     if (f.relation && p.relation !== f.relation) return false;
     if (f.status && p.status !== f.status) return false;
     if (f.parking === 'y' && !p.parking) return false;
@@ -39,6 +71,22 @@ function filtered() {
     if (f.tag && !(p.tags || []).includes(f.tag)) return false;
     if (f.y0 && !(p.builtYear >= +f.y0)) return false;
     if (f.y1 && !(p.builtYear <= +f.y1)) return false;
+    if (f.d0 && !(p.surveyDate && p.surveyDate >= f.d0)) return false;
+    if (f.d1 && !(p.surveyDate && p.surveyDate <= f.d1)) return false;
+    if (f.mf && !(p.marketFloors != null && p.marketFloors <= +f.mf)) return false;
+    if (f.af && !(p.aptFloors != null && p.aptFloors >= +f.af)) return false;
+    if (f.hasphoto === 'y' && !(p.photoCount > 0)) return false;
+    if (f.hasphoto === 'n' && p.photoCount > 0) return false;
+    for (const k of Object.keys(f)) {
+      if (!f[k] || k.slice(0, 3) !== 'cf_') continue;
+      if ((p.custom || {})[k.slice(3)] !== f[k]) return false;
+    }
+    if (needNear) {
+      const n = nearestFacilities(p);
+      if (!nearPass(f.nstation, n.station && n.station.d)) return false;
+      if (!nearPass(f.noldstation, n.oldstation && n.oldstation.d)) return false;
+      if (!nearPass(f.nterminal, n.terminal && n.terminal.d)) return false;
+    }
     if (q) {
       const hay = [projName(p), p.marketName, p.aptName, p.address, p.sido, p.sgg, (p.tags || []).join(' '), p.note].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
@@ -46,7 +94,8 @@ function filtered() {
     return true;
   }).sort((a, b) => {
     const k = S.sort.k, dir = S.sort.dir === 'asc' ? 1 : -1;
-    let va = k === 'name' ? projName(a) : a[k], vb = k === 'name' ? projName(b) : b[k];
+    let va = k === 'name' ? projName(a) : (k.slice(0, 2) === 'c_' ? (a.custom || {})[k.slice(2)] : a[k]);
+    let vb = k === 'name' ? projName(b) : (k.slice(0, 2) === 'c_' ? (b.custom || {})[k.slice(2)] : b[k]);
     if (va == null || va === '') return 1; if (vb == null || vb === '') return -1;
     return (typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'ko')) * dir;
   });
@@ -180,6 +229,56 @@ function facilityForm(f, lat, lng) {
   };
 }
 
+/* ---------- 철도 노선 (폴리라인 참조 지점) ----------
+   역·터미널과 저장 구조는 같고 path[[lat,lng],…] 를 추가로 갖는다.
+   과거 노선은 kind='oldrail' 로 저장되어 지도 레이어에서 따로 켜고 끌 수 있다. */
+function lineForm(f, path) {
+  const isNew = !S.facilities.some(x => x.id === (f && f.id));
+  f = f || { id: uid(), kind: 'rail', name: '', year: '', note: '', path: [] };
+  if (path) f = Object.assign({}, f, { path });
+  const len = MAP.pathLength(f.path || []);
+  openModal(`<div class="mh"><h3>${isNew ? '철도 노선 저장' : '노선 정보 편집'}</h3><button class="x">×</button></div>
+    <div class="mb"><div class="formgrid">
+      <label class="fld"><span>구분</span><select id="ln_kind">
+        <option value="rail" ${f.kind === 'rail' ? 'selected' : ''}>현재 철도 노선</option>
+        <option value="oldrail" ${f.kind === 'oldrail' ? 'selected' : ''}>과거 철도 노선 (1970–80s)</option></select></label>
+      <label class="fld"><span>노선명</span><input type="text" id="ln_name" value="${esc(f.name)}" placeholder="예) 장항선 (구선형)"></label>
+      <label class="fld"><span>연도·시기</span><input type="text" id="ln_year" value="${esc(f.year)}" placeholder="예) 1978년 기준"></label>
+      <label class="fld"><span>길이</span><input type="text" value="${fmtKm(len)} · ${(f.path || []).length}점" disabled></label>
+    </div>
+    <label class="fld" style="margin-top:10px"><span>메모 (출처·근거)</span><textarea id="ln_note" rows="3" placeholder="예) 1980년 철도청 노선도에서 옮겨 그림">${esc(f.note)}</textarea></label>
+    <p class="hint" style="margin-top:8px">과거 노선은 <b>어느 자료에서 옮겨 그렸는지</b>를 메모에 남겨두면 논문 각주로 그대로 쓸 수 있습니다.</p></div>
+    <div class="mf">${isNew ? '' : '<button class="btn dgr" id="ln_del">삭제</button>'}<span class="spacer"></span>
+      <button class="btn pri" id="ln_ok">저장</button></div>`);
+  $('#ln_ok').onclick = async () => {
+    f.kind = $('#ln_kind').value; f.name = $('#ln_name').value.trim();
+    f.year = $('#ln_year').value.trim(); f.note = $('#ln_note').value.trim();
+    if (!Array.isArray(f.path) || f.path.length < 2) return toast('노선에는 점이 2개 이상 필요합니다');
+    await S.store.put('facilities', f.id, f);
+    const i = S.facilities.findIndex(x => x.id === f.id);
+    if (i < 0) S.facilities.push(f); else S.facilities[i] = f;
+    closeModal(); MAP.draw(); updateCounts(); toast('노선을 저장했습니다');
+  };
+  const del = $('#ln_del');
+  if (del) del.onclick = async () => {
+    if (!await confirmBox('노선 삭제', `<p>${esc(f.name || '이 노선')} 을(를) 삭제할까요?</p>`)) return;
+    await S.store.del('facilities', f.id);
+    S.facilities = S.facilities.filter(x => x.id !== f.id);
+    closeModal(); $('#mapinfo').hidden = true; MAP.draw(); updateCounts();
+  };
+}
+$('#drawRail').onclick = () => { go('map'); MAP.startLine('rail'); toast('지도를 눌러 노선을 따라 점을 찍으세요', 3400); };
+$('#drawOldRail').onclick = () => { go('map'); MAP.startLine('oldrail'); toast('과거 노선을 따라 점을 찍으세요 — 출처를 메모에 남겨두면 좋습니다', 3800); };
+$('#addFac').onclick = () => { go('map'); facilityForm(); };
+$('#lbUndo').onclick = () => { MAP.draft.pop(); MAP.updateDraft(); };
+$('#lbCancel').onclick = () => MAP.cancelLine();
+$('#lbDone').onclick = () => {
+  const d = MAP.drawing; if (!d) return;
+  const path = MAP.draft.slice(), edit = d.edit;
+  MAP.cancelLine();
+  lineForm(edit || { id: uid(), kind: d.kind, name: '', year: '', note: '', path: [] }, path);
+};
+
 /* ---------- 이미지 처리 ---------- */
 async function fileToImage(file) {
   if (window.createImageBitmap) { try { return await createImageBitmap(file); } catch (e) { } }
@@ -292,6 +391,7 @@ function renderDetail() {
     <div class="sec">
       <div class="sech"><h3>교통시설과의 거리</h3><div class="ln"></div><button class="btn sm" id="dtFac">＋ 참조 지점</button></div>
       ${distRow('station', '현재 기차역')}${distRow('oldstation', '과거 기차역')}${distRow('terminal', '버스터미널')}${distRow('market', '시장')}
+      ${distRow('rail', '현재 철도 노선')}${distRow('oldrail', '과거 철도 노선')}
       <p class="hint" style="margin-top:8px">역·터미널·시장을 참조 지점으로 등록하면 모든 프로젝트에서 자동으로 거리를 계산합니다.</p>
     </div>
     <div class="sec">

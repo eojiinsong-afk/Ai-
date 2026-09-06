@@ -173,9 +173,10 @@ $('#btnCompare').onclick = async () => {
       <tr><td class="stickycol">과거역 거리</td>${ps.map(p => { const n = nearestFacilities(p); return `<td class="n">${fmtKm(n.oldstation && n.oldstation.d)}</td>`; }).join('')}</tr>
       <tr><td class="stickycol">터미널 거리</td>${ps.map(p => { const n = nearestFacilities(p); return `<td class="n">${fmtKm(n.terminal && n.terminal.d)}</td>`; }).join('')}</tr>
     </tbody></table></div></div>
-    <div class="mf"><button class="btn" id="cmpCsv">CSV로 내보내기</button><button class="btn pri" id="cmpRep">보고서 만들기</button></div>`, { wide: true });
+    <div class="mf"><button class="btn" id="cmpCsv">CSV로 내보내기</button><button class="btn" id="cmpPpt">PPT 만들기</button><button class="btn pri" id="cmpRep">보고서 만들기</button></div>`, { wide: true });
   $('#cmpCsv').onclick = () => exportCsv(ps);
   $('#cmpRep').onclick = () => { closeModal(); buildReport(ps); };
+  $('#cmpPpt').onclick = () => { closeModal(); pptxDialog(ps); };
 };
 
 /* ---------- CSV ---------- */
@@ -206,6 +207,15 @@ async function collect(ps) {
   }
   return out;
 }
+/** 사례별 위치 지도 이미지를 붙인다 (지도 생성이 실패해도 보고서는 그대로 나온다) */
+async function attachMaps(data, W, H) {
+  for (const d of data) {
+    if (d.p.lat == null) continue;
+    try { d.mapImg = await mapImage({ items: [d.p], all: S.projects, W: W || 560, H: H || 380 }); }
+    catch (e) { console.warn(e); }
+  }
+  return data;
+}
 function infoTable(p, near) {
   const rows = [
     ['시장 / 시장아파트', [p.marketName, p.aptName].filter(Boolean).join(' / ')],
@@ -225,12 +235,21 @@ function infoTable(p, near) {
 async function buildReport(list) {
   const ps = list || target();
   toast('보고서를 만드는 중…');
-  const data = await collect(ps);
+  const data = await attachMaps(await collect(ps));
   const root = $('#printroot');
+  let distImg = '', locImg = '';
+  try {
+    distImg = await mapImage({ all: S.projects, items: ps, whole: true, W: 620, H: 470 });
+    if (ps.some(p => p.lat != null)) locImg = await mapImage({ all: S.projects, items: ps, labels: true, W: 620, H: 400 });
+  } catch (e) { console.warn('지도 이미지 생략', e); }
   root.innerHTML = `<div style="padding-bottom:20px">
       <p class="mono" style="font-size:11px;letter-spacing:.1em">MARKET–HOUSING COMPLEX / FIELD SURVEY</p>
       <h1>시장아파트 답사 보고서</h1>
       <p style="font-size:12px;color:#444">${ps.length}개 사례 · 작성일 ${today()}</p>
+      ${distImg ? `<h2>분포</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <figure style="margin:0"><img src="${distImg}" style="width:100%;border:1px solid #ccc"><figcaption style="font-size:9px;color:#555">전국 분포 — 네모가 이 보고서의 사례</figcaption></figure>
+        ${locImg ? `<figure style="margin:0"><img src="${locImg}" style="width:100%;border:1px solid #ccc"><figcaption style="font-size:9px;color:#555">사례 위치</figcaption></figure>` : ''}
+      </div>` : ''}
       <table style="margin-top:12px"><tr><th>사례</th><th>소재지</th><th>답사일</th><th>층수</th><th>현재역</th><th>과거역</th></tr>
       ${data.map(d => `<tr><td>${esc(projName(d.p))}</td><td>${esc([d.p.sido, d.p.sgg].filter(Boolean).join(' '))}</td><td>${esc(d.p.surveyDate || '')}</td>
         <td>${d.p.marketFloors || '?'}+${d.p.aptFloors || '?'}</td><td>${fmtKm(d.near.station && d.near.station.d)}</td><td>${fmtKm(d.near.oldstation && d.near.oldstation.d)}</td></tr>`).join('')}</table>
@@ -239,6 +258,8 @@ async function buildReport(list) {
       <h1>${esc(projName(d.p))}</h1>
       <p style="font-size:12px;color:#444">${esc([d.p.sido, d.p.sgg, d.p.marketName].filter(Boolean).join(' · '))}</p>
       <h2>기본 정보</h2>${infoTable(d.p, d.near)}
+      ${d.mapImg ? `<h2>위치</h2><img src="${d.mapImg}" style="width:58%;border:1px solid #ccc">
+        <p style="font-size:9px;color:#555;margin:2px 0 0">반경 약 2km · 사각형이 대상 건물, 원·삼각형·마름모가 역·터미널·시장</p>` : ''}
       ${d.photos.length ? `<h2>현장 사진</h2><div class="pgal">${d.photos.slice(0, 9).map(ph => `<figure><img src="${ph.thumb}" alt=""><figcaption>${esc(ph.cat)}${ph.caption ? ' — ' + esc(ph.caption) : ''}</figcaption></figure>`).join('')}</div>` : ''}
       ${d.notes.length ? `<h2>답사 기록</h2>${d.notes.map(n => `<div style="margin-bottom:8px"><b>${esc(n.title || '무제')}</b> <span style="font-size:10px;color:#666">${esc(n.date || '')} ${esc(n.kind || '')}</span>
         <div style="font-size:11px;white-space:pre-wrap">${esc(n.body || '')}</div></div>`).join('')}` : ''}
@@ -249,7 +270,7 @@ async function buildReport(list) {
 async function buildSlides(list) {
   const ps = list || target();
   toast('발표자료를 만드는 중…');
-  const data = await collect(ps);
+  const data = await attachMaps(await collect(ps), 520, 360);
   const S16 = 'width:100%;aspect-ratio:16/9;border:1px solid #ccc;padding:22px;margin-bottom:10px;display:flex;flex-direction:column;overflow:hidden';
   const root = $('#printroot');
   const bySido = {}; ps.forEach(p => { const k = p.sido || '미상'; bySido[k] = (bySido[k] || 0) + 1; });
@@ -284,7 +305,7 @@ async function buildSlides(list) {
   setTimeout(() => window.print(), 350);
 }
 $('#btnReport').onclick = () => buildReport(S.projects.filter(p => S.sel.has(p.id)));
-$('#btnSlides').onclick = () => buildSlides(S.projects.filter(p => S.sel.has(p.id)));
+$('#btnSlides').onclick = () => pptxDialog(S.projects.filter(p => S.sel.has(p.id)));
 $('#detReport').onclick = () => buildReport(S.projects.filter(p => p.id === S.cur));
 
 /* ---------- 출력 화면 ---------- */
@@ -302,8 +323,11 @@ function renderOutput() {
         <p class="hint">사례별 기본정보·사진·답사 기록을 A4 문서로 배치합니다. 인쇄 대화상자에서 <b>PDF로 저장</b>을 선택하세요.</p>
         <button class="btn pri" style="margin-top:10px" id="oRep">보고서 만들기 (${n}건)</button></div>
       <div class="card pad"><div class="sech"><h3>세미나 발표자료</h3><div class="ln"></div></div>
-        <p class="hint">표지 · 연구 개요 · 사례별 정보와 사진 · 답사 기록 · 유형 가설 순의 16:9 슬라이드입니다. PDF로 저장해 발표에 쓰거나 대화창에 올려 PPT로 변환하세요.</p>
-        <button class="btn pri" style="margin-top:10px" id="oSlide">발표자료 만들기 (${n}건)</button></div>
+        <p class="hint">표지 · 연구 개요 · 전국 분포 지도 · 사례별 정보와 사진 · 입면 · 답사 기록 · 교통시설 · 비교 · 유형 가설.
+        넣을 슬라이드를 직접 고를 수 있고, <b>파워포인트에서 그대로 편집되는 .pptx</b> 파일로 나옵니다.</p>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn pri" id="oPptx">PPT 만들기 (${n}건)</button>
+          <button class="btn" id="oSlide">PDF 슬라이드</button></div></div>
       <div class="card pad"><div class="sech"><h3>선택</h3><div class="ln"></div></div>
         <p class="hint">프로젝트 화면에서 체크한 항목만 출력 대상이 됩니다. 선택이 없으면 전체가 대상입니다.</p>
         <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" onclick="go('list')">프로젝트에서 선택</button>
@@ -312,6 +336,7 @@ function renderOutput() {
   $('#oCsv').onclick = () => exportCsv();
   $('#oRep').onclick = () => buildReport();
   $('#oSlide').onclick = () => buildSlides();
+  $('#oPptx').onclick = () => pptxDialog(target());
   $('#oJson').onclick = () => backup();
   $('#oClear').onclick = () => { S.sel.clear(); renderOutput(); renderTable(); MAP.draw(); };
 }
