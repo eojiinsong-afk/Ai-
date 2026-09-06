@@ -1,0 +1,172 @@
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<g id="i-map"><path d="M2 5.5 7 3l6 2.5L18 3v11.5L13 17 7 14.5 2 17z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M7 3v11.5M13 5.5V17" fill="none" stroke="currentColor" stroke-width="1.5"/></g>
+<g id="i-list"><rect x="2.5" y="3.5" width="15" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 7.5h15M8 7.5V16.5M2.5 12h15" fill="none" stroke="currentColor" stroke-width="1.3"/></g>
+<g id="i-elev"><path d="M3 16.5h14M4.5 16.5V6l6-3 5 3v10.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="7" y="8" width="2.5" height="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="11" y="8" width="2.5" height="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M4.5 12.5h11" stroke="currentColor" stroke-width="1.2"/></g>
+<g id="i-ana"><path d="M3 17V3M3 17h14" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="6" y="10" width="2.6" height="7" fill="currentColor" opacity=".75"/><rect x="10" y="6.5" width="2.6" height="10.5" fill="currentColor" opacity=".55"/><rect x="14" y="12.5" width="2.6" height="4.5" fill="currentColor" opacity=".9"/></g>
+<g id="i-out"><path d="M10 13V3m0 0L6.5 6.5M10 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 12v4a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-4" fill="none" stroke="currentColor" stroke-width="1.5"/></g>
+<g id="i-set"><circle cx="10" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 2.5v2.2M10 15.3v2.2M17.5 10h-2.2M4.7 10H2.5M15.3 4.7l-1.6 1.6M6.3 13.7l-1.6 1.6M15.3 15.3l-1.6-1.6M6.3 6.3 4.7 4.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></g>
+</defs></svg>
+
+<div id="app">
+  <aside id="rail">
+    <div class="brand">
+      <h1>시장아파트<br>답사 아카이브</h1>
+      <p id="brandsub">Market–Housing Complex Survey</p>
+    </div>
+    <nav id="nav"></nav>
+    <div class="railfoot">
+      <span id="storelbl">저장소 확인 중…</span>
+      <button class="btn sm" id="themebtn" title="밝게/어둡게">◐</button>
+    </div>
+  </aside>
+
+  <div id="main">
+    <!-- ============ MAP ============ -->
+    <section class="view on" data-view="map">
+      <div class="bar">
+        <h2>전국 분포</h2>
+        <span class="hint" id="mapstat"></span>
+        <span class="spacer"></span>
+        <button class="btn" id="btnPick">＋ 지도에서 위치 지정</button>
+        <button class="btn pri" id="btnNewPrj">＋ 새 프로젝트</button>
+      </div>
+      <div id="mapwrap">
+        <svg id="mapsvg"></svg>
+        <div id="pickbanner"><span>지도를 눌러 위치를 지정하세요</span><button class="btn sm" id="pickCancel">취소</button></div>
+        <div id="maptools">
+          <div class="panel">
+            <div class="phd">레이어</div>
+            <div class="layerlist" id="layerlist"></div>
+          </div>
+          <div class="panel" id="radiuspanel">
+            <div class="phd">반경 분석</div>
+            <div class="layerlist">
+              <label class="lyr"><input type="radio" name="rad" value="0" checked><span>끄기</span></label>
+              <label class="lyr"><input type="radio" name="rad" value="500"><span>500 m</span></label>
+              <label class="lyr"><input type="radio" name="rad" value="1000"><span>1 km</span></label>
+              <label class="lyr"><input type="radio" name="rad" value="2000"><span>2 km</span></label>
+            </div>
+          </div>
+        </div>
+        <div id="mapinfo" class="panel" hidden></div>
+        <div id="zoombox">
+          <button class="zbtn" id="zin" aria-label="확대">＋</button>
+          <button class="zbtn" id="zout" aria-label="축소">−</button>
+          <button class="zbtn" id="zfit" aria-label="전국 보기" style="font-size:11px">전국</button>
+        </div>
+        <div id="scalebar"><span>—</span><i></i></div>
+      </div>
+    </section>
+
+    <!-- ============ PROJECTS ============ -->
+    <section class="view" data-view="list">
+      <div class="bar">
+        <h2>프로젝트</h2>
+        <input type="search" id="q" placeholder="이름·시장·주소·태그 검색" style="max-width:230px">
+        <span class="spacer"></span>
+        <span class="hint" id="selstat"></span>
+        <button class="btn sm" id="btnCompare" disabled>비교</button>
+        <button class="btn sm" id="btnOnMap" disabled>지도에서 보기</button>
+        <button class="btn sm" id="btnReport" disabled>보고서</button>
+        <button class="btn sm" id="btnSlides" disabled>발표자료</button>
+        <button class="btn pri sm" id="btnNewPrj2">＋ 새 프로젝트</button>
+      </div>
+      <div class="filters" id="filters"></div>
+      <div class="tblwrap" id="tblwrap"></div>
+    </section>
+
+    <!-- ============ DETAIL ============ -->
+    <section class="view" data-view="detail">
+      <div class="bar">
+        <button class="btn sm" id="detBack">← 목록</button>
+        <h2 id="detTitle">—</h2>
+        <span class="spacer"></span>
+        <button class="btn sm" id="detElev">입면 작업</button>
+        <button class="btn sm" id="detReport">보고서</button>
+        <button class="btn sm dgr" id="detDel">삭제</button>
+      </div>
+      <div class="scroll"><div class="detailgrid" id="detailgrid"></div></div>
+    </section>
+
+    <!-- ============ ELEVATION ============ -->
+    <section class="view" data-view="elev">
+      <div class="bar">
+        <h2>입면 보정</h2>
+        <select id="elevPrj" style="max-width:220px"></select>
+        <span class="spacer"></span>
+        <span class="hint" id="elevHint">건물 정면 사진을 고르고 네 모서리를 맞추세요</span>
+      </div>
+      <div class="elevgrid">
+        <div style="display:flex;flex-direction:column;gap:10px;min-height:0">
+          <div id="elevstage"><canvas id="elevcv"></canvas><div id="handles"></div></div>
+          <div>
+            <div class="sech"><h3>사진 선택</h3><div class="ln"></div><span class="hint" id="elevSort">선명도순</span></div>
+            <div class="pickstrip" id="elevStrip"></div>
+          </div>
+        </div>
+        <div class="sidepanel">
+          <div>
+            <div class="sech"><h3>보정</h3><div class="ln"></div></div>
+            <p class="hint" style="margin:0 0 8px">네 개의 점을 건물 입면의 <b>네 모서리</b>에 맞추면 원근 왜곡을 펴서 정면 입면에 가까운 이미지를 만듭니다.</p>
+            <label class="fld" style="margin-bottom:8px"><span>가로:세로 비율</span>
+              <select id="elevRatio">
+                <option value="auto">자동 (사진에서 추정)</option>
+                <option value="1.5">3 : 2</option><option value="1.3333">4 : 3</option>
+                <option value="1">1 : 1</option><option value="0.75">3 : 4</option><option value="0.6667">2 : 3</option>
+              </select></label>
+            <div class="rng"><span class="hint" style="width:52px">기울기°</span><input type="range" id="elevSkewX" min="-15" max="15" step="0.5" value="0"><span class="v" id="vSkewX">0</span></div>
+            <div class="rng"><span class="hint" style="width:52px">대비</span><input type="range" id="elevContrast" min="-40" max="80" value="0"><span class="v" id="vContrast">0</span></div>
+            <label class="lyr"><input type="checkbox" id="elevGray"><span>흑백</span></label>
+            <label class="lyr"><input type="checkbox" id="elevEdge"><span>선 추출 (트레이싱용)</span></label>
+            <div class="rng" id="edgeRow" hidden><span class="hint" style="width:52px">임계값</span><input type="range" id="elevEdgeT" min="8" max="90" value="34"><span class="v" id="vEdgeT">34</span></div>
+            <label class="lyr"><input type="checkbox" id="elevGrid"><span>격자 가이드</span></label>
+          </div>
+          <div>
+            <div class="sech"><h3>내보내기</h3><div class="ln"></div></div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button class="btn pri" id="elevApply">보정 실행</button>
+              <button class="btn" id="elevReset">모서리 다시 조정</button>
+              <button class="btn" id="elevSave" disabled>프로젝트에 입면 이미지로 저장</button>
+              <button class="btn" id="elevPng" disabled>PNG 내려받기</button>
+              <button class="btn" id="elevDxf" disabled>선 데이터 DXF 내려받기</button>
+            </div>
+            <p class="hint" style="margin-top:8px">DXF는 사진을 그대로 변환하지 않고, 추출된 <b>외곽선·수직/수평선</b>을 CAD용 폴리라인으로 내보냅니다. 트레이싱 베이스로 사용하세요.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ANALYSIS ============ -->
+    <section class="view" data-view="ana">
+      <div class="bar">
+        <h2>분석</h2>
+        <span class="spacer"></span>
+        <button class="btn sm" id="anaRefresh">다시 계산</button>
+      </div>
+      <div class="scroll"><div class="anagrid" id="anagrid"></div></div>
+    </section>
+
+    <!-- ============ OUTPUT ============ -->
+    <section class="view" data-view="out">
+      <div class="bar"><h2>출력</h2><span class="spacer"></span><span class="hint" id="outSel"></span></div>
+      <div class="scroll"><div class="pad" id="outpad"></div></div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section class="view" data-view="set">
+      <div class="bar"><h2>설정 · 데이터</h2><span class="spacer"></span></div>
+      <div class="scroll"><div class="pad" id="setpad"></div></div>
+    </section>
+  </div>
+
+  <nav id="tabbar"></nav>
+</div>
+
+<div class="ovl" id="modal"><div class="modal" id="modalbox"></div></div>
+<div class="ovl" id="lightbox"><div style="max-width:1000px;text-align:center">
+  <img id="lbimg" alt="">
+  <div id="lbcap" style="color:#e8eaec;font-size:13px;margin-top:10px"></div>
+  <button class="btn sm" id="lbclose" style="margin-top:12px">닫기</button>
+</div></div>
+<div id="toast"></div>
+<div id="printroot"></div>

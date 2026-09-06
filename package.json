@@ -1,0 +1,15 @@
+{
+  "name": "market-apartment-archive",
+  "version": "1.1.0",
+  "private": true,
+  "description": "시장아파트(시장+주거 복합건축물) 답사 아카이빙 · 공간 데이터 연구 도구",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --dev",
+    "check": "node --check src/core.js && node --check src/map.js && node --check src/projects.js && node --check src/elevation.js && node --check src/analysis.js && echo OK",
+    "geo": "python3 scripts/simplify-geo.py"
+  },
+  "license": "UNLICENSED"
+}
