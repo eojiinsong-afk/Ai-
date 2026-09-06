@@ -29,7 +29,7 @@ S.store.del(coll, id)                      // 삭제
 | `photos` | 사진 메타 + 썸네일(약 300px) | `pid` 로 프로젝트를 가리킴 |
 | `photofull` | 사진 원본 (JPEG dataURL) | 문서 id = 사진 id. 갤러리에서는 불러오지 않음 |
 | `notes` | 답사 기록 | `pid`, `title`, `date`, `kind`, `body` |
-| `facilities` | 참조 지점 | `kind`: station / oldstation / rail / oldrail / terminal / market. 역·터미널·시장은 `lat`/`lng`, 노선은 `path[[lat,lng],…]` 를 갖는다 |
+| `facilities` | 참조 지점 | `kind`: station / oldstation / rail / oldrail / terminal / market. 역·터미널·시장은 `lat`/`lng`, 노선은 `path[[lat,lng],…]` 를 갖는다. 가져온 항목에는 `src{batch,file,crs,at}` 이 붙는다 |
 | `fields` | 사용자 정의 항목 정의 | `label`, `type`, `options[]` |
 | `meta/app` | 스키마·앱 버전, 마이그레이션 이력 | |
 | `snapshots` | 마이그레이션 직전 안전 스냅샷 | |
@@ -75,6 +75,19 @@ Artifact 의 `sample` capability 로 Claude 에게 묻습니다. 프롬프트에
 - 표본이 적으면 한계를 먼저 말할 것
 
 로컬 개발 환경에서는 이 기능이 꺼지고 안내 문구가 대신 보입니다.
+
+## 공간 데이터 가져오기 (`src/import.js`)
+
+외부 라이브러리를 못 쓰므로 인코딩 판별·CSV·DBF·SHP·ZIP·좌표계 변환을 전부 직접 씁니다.
+
+- **인코딩** — UTF-8 로 `fatal: true` 디코드를 시도해 실패하면 EUC-KR(CP949)로 다시 읽습니다. 공공데이터포털 CSV 가 아직 EUC-KR 인 경우가 많아 이 판별이 없으면 이름이 전부 깨집니다.
+- **ZIP** — 중앙 디렉터리를 읽고, deflate 항목은 `DecompressionStream('deflate-raw')` 로 풉니다(브라우저 내장). 지원하지 않는 환경에서는 압축을 풀고 올리라고 안내합니다.
+- **Shapefile** — `.shp` 는 점(1/11/21)·선(3/13/23)·면(5/15/25)을 읽고, `.dbf` 는 dBASE III 헤더를 파싱해 속성을 꺼냅니다. 문자열 인코딩은 `.cpg` 를 보고 없으면 CP949 로 가정합니다.
+- **좌표계** — `.prj`(WKT)에서 이름이 아니라 **파라미터**(central_meridian, false_easting, SPHEROID …)를 읽어 투영을 구성하므로 목록에 없는 변종도 처리됩니다. `.prj` 가 없으면 좌표값의 크기로 짐작합니다(`sniffCrs`).
+  변환은 Snyder 의 횡메르카토르 역변환(`tmInverse`). 구 좌표계(Korean Datum 1985, Bessel)는 **Molodensky-Badekas**(회전 기준점을 둔 10-파라미터, coordinate_frame 규약)로 옮깁니다 — 단순 7-파라미터 Helmert 로 계산하면 전국에서 20m 가량 어긋납니다.
+  검증: pyproj 와 10개 좌표계 × 6개 지점을 대조해 최대 오차 7mm.
+- **가져오기 규칙** — 언제나 더하기만 합니다. 같은 자리(40m 이내)의 같은 종류는 건너뛰고, 남한 범위 밖 좌표는 넣지 않습니다. 들여온 문서에 `src.batch` 를 남겨 `deleteBatch()` 로 한 파일씩 되돌립니다(새 컬렉션을 만들지 않으므로 스키마가 그대로입니다).
+- **노선** — 점이 400개를 넘으면 균등 추출로 줄입니다. 문서 1건이 256KB 를 넘으면 저장되지 않기 때문입니다.
 
 ## PPTX (`src/pptx.js`)
 

@@ -395,6 +395,7 @@ async function restore(file) {
 const FIELD_TYPES = { text: '텍스트', number: '숫자', date: '날짜', bool: '예/아니오', select: '선택형', multi: '다중 선택', long: '긴 텍스트' };
 async function renderSettings() {
   const photos = await S.store.list('photos');
+  const batches = importBatches();
   const totalBytes = photos.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0);
   const dup = {}; photos.forEach(p => { const k = (p.w || 0) + 'x' + (p.h || 0) + '|' + (p.thumb || '').slice(-64); (dup[k] = dup[k] || []).push(p); });
   const dups = Object.values(dup).filter(a => a.length > 1);
@@ -412,9 +413,18 @@ async function renderSettings() {
         ${['시장 형태', '아파트 진입 방식', '상부 주거동 형태', '건물 배치', '대지 형태', '도로 접면', '광장 유무', '아케이드 유무', '건물 구조', '공실 여부'].map(s => `<button class="chip" data-quick="${esc(s)}">＋ ${esc(s)}</button>`).join('')}
       </div>
     </div>
-    <div class="card pad"><div class="sech"><h3>참조 지점</h3><div class="ln"></div><button class="btn sm" id="stFac">＋ 추가</button></div>
+    <div class="card pad"><div class="sech"><h3>참조 지점</h3><div class="ln"></div>
+        <button class="btn sm" id="stImp">↑ 가져오기</button><button class="btn sm" id="stFac">＋ 추가</button></div>
       ${Object.entries(FAC_KINDS).filter(([k]) => k !== 'apt').map(([k, v]) => `<div class="dist"><span>${v.label}</span><span class="d">${S.facilities.filter(f => f.kind === k).length}</span></div>`).join('')}
-      <p class="hint" style="margin-top:8px">과거 철도역은 위치와 함께 <b>연도·출처</b>를 메모에 남겨두면 나중에 논문 각주로 쓸 수 있습니다.</p></div>
+      <p class="hint" style="margin-top:8px">공공데이터포털의 CSV·Shapefile 을 그대로 올릴 수 있습니다. 과거 철도역은 위치와 함께 <b>연도·출처</b>를 메모에 남겨두면 나중에 논문 각주로 쓸 수 있습니다.</p></div>
+    <div class="card pad" style="grid-column:1/-1"><div class="sech"><h3>가져온 데이터</h3><div class="ln"></div>
+        <button class="btn sm pri" id="stImp2">↑ 공간 데이터 가져오기</button></div>
+      ${batches.length ? `<table class="grid" style="width:100%"><thead><tr><th>원본 파일</th><th>좌표계</th><th>종류</th><th>건수</th><th>가져온 때</th><th></th></tr></thead><tbody>
+        ${batches.map(b => `<tr><td>${esc(b.file)}</td><td class="hint">${esc(b.crs || '—')}</td><td>${esc(Array.from(b.kinds).join(', '))}</td>
+          <td class="n">${b.n}</td><td class="n">${esc((b.at || '').slice(0, 16).replace('T', ' '))}</td>
+          <td><button class="btn sm dgr" data-ub="${esc(b.batch)}">되돌리기</button></td></tr>`).join('')}</tbody></table>`
+      : '<p class="hint">CSV · GeoJSON · Shapefile(.shp+.dbf) 또는 이들을 담은 ZIP 을 올리면 역·터미널·시장·철도 노선으로 들어옵니다. 좌표계는 .prj 에서 읽거나 직접 고를 수 있고, 구 좌표계(Bessel)는 데이텀 변환까지 합니다.</p>'}
+      <p class="hint" style="margin-top:8px">한 묶음을 되돌리면 그 파일로 들여온 항목만 지워집니다. 직접 입력한 지점은 그대로 남습니다.</p></div>
     <div class="card pad"><div class="sech"><h3>저장 공간</h3><div class="ln"></div></div>
       <div class="statrow"><div class="stat"><b>${photos.length}</b><span>사진</span></div>
         <div class="stat"><b>${bytes(totalBytes)}</b><span>이미지 용량</span></div>
@@ -463,6 +473,9 @@ async function renderSettings() {
     renderSettings(); renderTable();
   });
   $('#stFac').onclick = () => facilityForm();
+  $('#stImp').onclick = () => importDialog();
+  $('#stImp2').onclick = () => importDialog();
+  $$('[data-ub]').forEach(b => b.onclick = () => deleteBatch(b.dataset.ub));
   $('#stBk').onclick = () => backup();
   $('#stRs').onchange = async e => { try { await restore(e.target.files[0]); renderSettings(); } catch (err) { toast('복원 실패: ' + err.message); } };
   $('#stTrash').onclick = () => trashModal();

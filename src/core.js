@@ -6,7 +6,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const SCHEMA_VERSION = 2;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -184,6 +184,8 @@ function go(v) {
   if (v === 'elev') renderElevPicker();
 }
 function updateCounts() {
+  // 첫 안내는 데이터가 하나라도 생기면 사라진다 (프로젝트든 참조 지점이든)
+  if (S.projects.length || S.facilities.length) { const h = $('#firsthint'); if (h) h.remove(); }
   const c = { map: '', list: S.projects.length, elev: '', ana: '', out: S.sel.size || '', set: '' };
   $$('[data-cnt]').forEach(e => e.textContent = c[e.dataset.cnt] || '');
   $('#mapstat').textContent = `프로젝트 ${S.projects.length} · 참조지점 ${S.facilities.length}`;
@@ -304,7 +306,6 @@ async function saveProject(p) {
   await S.store.put('projects', p.id, p);
   const i = S.projects.findIndex(x => x.id === p.id);
   if (i < 0) S.projects.push(p); else S.projects[i] = p;
-  const hint = $('#firsthint'); if (hint) hint.remove();
   updateCounts(); MAP.draw();
 }
 /** 프로젝트를 휴지통으로 옮긴다. 사진·기록은 지우지 않고 같은 프로젝트 ID 아래 그대로 둔다.

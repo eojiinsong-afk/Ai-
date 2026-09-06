@@ -198,35 +198,134 @@ $('#btnNewPrj2').onclick = () => newProject();
 $('#btnPick').onclick = () => { go('map'); MAP.setPick(true, (la, ln) => newProject(la, ln)); };
 $('#btnOnMap').onclick = () => { go('map'); MAP.fitTo(S.projects.filter(p => S.sel.has(p.id))); };
 
-/* ---------- facility (참조 지점) ---------- */
+/* ---------- facility (참조 지점) ----------
+   역·터미널·시장은 좌표가 곧 데이터다. 그래서 이 폼은 좌표를 넣는 방법을 세 가지로 둔다.
+   (1) 위도·경도 직접 입력  (2) 지도에서 찍기  (3) 다른 지도 서비스에서 복사한 문자열 붙여넣기.
+   어느 쪽이든 입력한 좌표가 어느 시·군·구에 떨어지는지 즉시 보여줘서 잘못 넣은 것을 바로 알아챈다. */
+const KR_BOUNDS = { lat: [32.5, 39.5], lng: [123.5, 132.5] };
+/** 붙여넣은 문자열에서 위경도를 뽑아낸다. 십진수·도분초·지도 URL 을 모두 받는다. */
+function parseLatLng(str) {
+  const t = String(str || '').trim();
+  if (!t) return null;
+  // 36°48'35.3"N 127°08'56.0"E  /  36 48 35.3 N, 127 8 56 E
+  const dms = [];
+  const re = /(\d{1,3})\s*[°d\s]\s*(\d{1,2})\s*['′\s]\s*([\d.]+)\s*["″]?\s*([NSEW북남동서])?/gi;
+  let m;
+  while ((m = re.exec(t)) && dms.length < 2) {
+    let v = +m[1] + +m[2] / 60 + +m[3] / 3600;
+    const h = (m[4] || '').toUpperCase();
+    if (h === 'S' || h === 'W' || h === '남' || h === '서') v = -v;
+    dms.push({ v, h });
+  }
+  if (dms.length === 2) return orient(dms[0], dms[1]);
+  // 십진수 두 개. 지도 URL(@36.8,127.1 / lat=..&lng=.. / c=127.1,36.8) 도 결국 숫자 두 개다.
+  const nums = (t.match(/-?\d{1,3}\.\d{3,}/g) || []).map(Number);
+  if (nums.length < 2) {
+    const loose = (t.match(/-?\d{1,3}(?:\.\d+)?/g) || []).map(Number)
+      .filter(v => (v >= KR_BOUNDS.lat[0] && v <= KR_BOUNDS.lat[1]) || (v >= KR_BOUNDS.lng[0] && v <= KR_BOUNDS.lng[1]));
+    if (loose.length < 2) return null;
+    return orient({ v: loose[0] }, { v: loose[1] });
+  }
+  // 이름표(lat=/lng=)가 있으면 그대로 믿는다
+  const la = t.match(/(?:lat|latitude|위도|y)\s*[=:]\s*(-?\d{1,3}\.\d+)/i);
+  const ln = t.match(/(?:lng|lon|longitude|경도|x)\s*[=:]\s*(-?\d{1,3}\.\d+)/i);
+  if (la && ln) return check(+la[1], +ln[1]);
+  // 그 밖에는 값의 범위로 어느 쪽이 위도인지 정한다
+  for (let i = 0; i + 1 < nums.length; i++) {
+    const r = orient({ v: nums[i] }, { v: nums[i + 1] });
+    if (r) return r;
+  }
+  return null;
+  function orient(a, b) {
+    const ha = (a.h || '').toUpperCase(), hb = (b.h || '').toUpperCase();
+    const isLng = h => h && 'EW동서'.includes(h), isLat = h => h && 'NS북남'.includes(h);
+    if (isLng(ha) || isLat(hb)) return check(b.v, a.v);   // 앞이 경도
+    if (isLat(ha) || isLng(hb)) return check(a.v, b.v);   // 앞이 위도
+    // 방위 표시가 없으면 값의 크기로 정한다 — 한반도에서 경도는 항상 위도보다 크다
+    return Math.abs(a.v) > Math.abs(b.v) ? check(b.v, a.v) : check(a.v, b.v);
+  }
+  function check(lat, lng) {
+    if (!isFinite(lat) || !isFinite(lng)) return null;
+    return { lat: +lat.toFixed(6), lng: +lng.toFixed(6) };
+  }
+}
+function inKorea(lat, lng) {
+  return lat != null && lng != null && lat >= KR_BOUNDS.lat[0] && lat <= KR_BOUNDS.lat[1] && lng >= KR_BOUNDS.lng[0] && lng <= KR_BOUNDS.lng[1];
+}
 function facilityForm(f, lat, lng) {
-  const isNew = !f;
-  f = f || { id: uid(), kind: 'station', name: '', lat: lat != null ? +lat.toFixed(6) : null, lng: lng != null ? +lng.toFixed(6) : null, year: '', note: '' };
-  const m = openModal(`<div class="mh"><h3>${isNew ? '참조 지점 추가' : '참조 지점 편집'}</h3><button class="x">×</button></div>
+  const isNew = !S.facilities.some(x => x.id === (f && f.id));
+  f = Object.assign({ id: uid(), kind: 'station', name: '', lat: null, lng: null, year: '', note: '' }, f || {});
+  if (lat != null) { f.lat = +lat.toFixed(6); f.lng = +lng.toFixed(6); }
+  openModal(`<div class="mh"><h3>${isNew ? '참조 지점 추가' : '참조 지점 편집'}</h3><button class="x">×</button></div>
     <div class="mb"><div class="formgrid">
       <label class="fld"><span>종류</span><select id="fc_kind">${Object.entries(FAC_KINDS).filter(([k]) => k !== 'apt' && k !== 'rail' && k !== 'oldrail').map(([k, v]) => `<option value="${k}" ${f.kind === k ? 'selected' : ''}>${v.label}</option>`).join('')}</select></label>
       <label class="fld"><span>이름</span><input type="text" id="fc_name" value="${esc(f.name)}" placeholder="예) 구 천안역"></label>
       <label class="fld"><span>연도·시기</span><input type="text" id="fc_year" value="${esc(f.year)}" placeholder="예) 1978"></label>
-      <label class="fld"><span>위도</span><input type="number" step="0.000001" id="fc_lat" value="${f.lat != null ? f.lat : ''}"></label>
-      <label class="fld"><span>경도</span><input type="number" step="0.000001" id="fc_lng" value="${f.lng != null ? f.lng : ''}"></label>
     </div>
-    <label class="fld" style="margin-top:10px"><span>메모 (출처·근거)</span><textarea id="fc_note" rows="2">${esc(f.note)}</textarea></label></div>
-    <div class="mf"><button class="btn" id="fc_pick">지도에서 위치 지정</button><button class="btn pri" id="fc_ok">저장</button></div>`);
-  $('#fc_pick').onclick = () => {
-    closeModal(); go('map');
-    MAP.setPick(true, (la, ln) => facilityForm(Object.assign(f, {
-      kind: $('#fc_kind') ? f.kind : f.kind, lat: +la.toFixed(6), lng: +ln.toFixed(6)
-    })));
-  };
-  $('#fc_ok').onclick = async () => {
+    <div class="sech" style="margin:14px 0 8px"><h3>좌표</h3><div class="ln"></div><span class="hint">WGS84 십진도</span></div>
+    <div class="formgrid">
+      <label class="fld"><span>위도 (lat)</span><input type="number" step="0.000001" id="fc_lat" value="${f.lat != null ? f.lat : ''}" placeholder="36.809800"></label>
+      <label class="fld"><span>경도 (lng)</span><input type="number" step="0.000001" id="fc_lng" value="${f.lng != null ? f.lng : ''}" placeholder="127.148900"></label>
+      <label class="fld"><span>좌표 붙여넣기</span><input type="text" id="fc_paste" placeholder="36.8098, 127.1489 · 36°48'35&quot;N 127°08'56&quot;E · 지도 링크"></label>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px;margin-top:10px;align-items:start">
+      <label class="fld"><span>메모 (출처·근거)</span><textarea id="fc_note" rows="4" placeholder="예) 국토지리정보원 1978년 지형도에서 판독">${esc(f.note)}</textarea></label>
+      <div><svg id="fc_map" style="width:100%;height:150px;border:1px solid var(--line);border-radius:var(--r);background:var(--sea);display:block"></svg>
+        <p class="hint" id="fc_where" style="margin:6px 0 0">좌표를 넣으면 어느 시·군·구인지 확인해 드립니다.</p></div>
+    </div></div>
+    <div class="mf"><button class="btn" id="fc_pick">지도에서 찍기</button><span class="spacer"></span>
+      ${isNew ? '<button class="btn" id="fc_more">저장하고 계속 추가</button>' : ''}
+      <button class="btn pri" id="fc_ok">저장</button></div>`, { wide: true });
+
+  /** 화면의 입력값을 f 에 담는다. 지도로 나갔다 돌아와도 입력이 사라지지 않게 하는 핵심. */
+  const collect = () => {
     f.kind = $('#fc_kind').value; f.name = $('#fc_name').value.trim(); f.year = $('#fc_year').value.trim();
     f.lat = num($('#fc_lat').value); f.lng = num($('#fc_lng').value); f.note = $('#fc_note').value.trim();
+    return f;
+  };
+  const preview = () => {
+    const la = num($('#fc_lat').value), ln = num($('#fc_lng').value);
+    const w = $('#fc_where');
+    if (la == null || ln == null) { w.textContent = '좌표를 넣으면 어느 시·군·구인지 확인해 드립니다.'; w.style.color = ''; $('#fc_map').innerHTML = ''; return; }
+    if (!inKorea(la, ln)) {
+      w.innerHTML = '⚠ 남한 범위를 벗어난 좌표입니다. 위도와 경도가 바뀌지 않았는지 확인하세요.';
+      w.style.color = 'var(--signal)'; $('#fc_map').innerHTML = ''; return;
+    }
+    const r = MAP.reverse(la, ln);
+    w.textContent = (r.sgg ? `${r.sido} ${r.sgg}` : '행정구역을 판별하지 못했습니다 (해안·경계 부근)');
+    w.style.color = '';
+    MAP.mini($('#fc_map'), la, ln, [500]);
+  };
+  ['#fc_lat', '#fc_lng'].forEach(id => $(id).oninput = preview);
+  $('#fc_paste').oninput = e => {
+    const r = parseLatLng(e.target.value);
+    if (!r) return;
+    $('#fc_lat').value = r.lat; $('#fc_lng').value = r.lng;
+    preview();
+  };
+  preview();
+
+  $('#fc_pick').onclick = () => {
+    collect(); closeModal(); go('map');
+    MAP.setPick(true, (la, ln) => facilityForm(f, la, ln));
+  };
+  const save = async keepOpen => {
+    collect();
     if (f.lat == null || f.lng == null) return toast('좌표가 필요합니다');
+    if (!inKorea(f.lat, f.lng) && !await confirmBox('범위 밖 좌표',
+      `<p>위도 ${f.lat}, 경도 ${f.lng} 는 남한 범위를 벗어납니다. 그대로 저장할까요?</p>
+       <p class="hint">위도와 경도를 바꿔 넣은 경우가 가장 흔합니다.</p>`, '그대로 저장')) return;
     await S.store.put('facilities', f.id, f);
     const i = S.facilities.findIndex(x => x.id === f.id);
     if (i < 0) S.facilities.push(f); else S.facilities[i] = f;
-    closeModal(); MAP.draw(); updateCounts(); toast('저장했습니다');
+    MAP.draw(); updateCounts();
+    if (keepOpen) {
+      toast(`${f.name || FAC_KINDS[f.kind].label} 저장 — 이어서 입력하세요`);
+      facilityForm({ kind: f.kind, year: f.year, note: f.note });
+    } else { closeModal(); toast('저장했습니다'); }
   };
+  $('#fc_ok').onclick = () => save(false);
+  const more = $('#fc_more'); if (more) more.onclick = () => save(true);
 }
 
 /* ---------- 철도 노선 (폴리라인 참조 지점) ----------
@@ -270,6 +369,7 @@ function lineForm(f, path) {
 $('#drawRail').onclick = () => { go('map'); MAP.startLine('rail'); toast('지도를 눌러 노선을 따라 점을 찍으세요', 3400); };
 $('#drawOldRail').onclick = () => { go('map'); MAP.startLine('oldrail'); toast('과거 노선을 따라 점을 찍으세요 — 출처를 메모에 남겨두면 좋습니다', 3800); };
 $('#addFac').onclick = () => { go('map'); facilityForm(); };
+$('#impFac').onclick = () => importDialog();
 $('#lbUndo').onclick = () => { MAP.draft.pop(); MAP.updateDraft(); };
 $('#lbCancel').onclick = () => MAP.cancelLine();
 $('#lbDone').onclick = () => {

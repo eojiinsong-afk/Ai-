@@ -29,6 +29,7 @@ const SCRIPTS = [
   'src/map.js',         // 지도 엔진
   'src/projects.js',    // 프로젝트 목록 · 상세 · 사진 · 기록
   'src/elevation.js',   // 입면 원근 보정 · 선 추출 · 내보내기
+  'src/import.js',      // CSV · GeoJSON · Shapefile · ZIP 가져오기 + 좌표계 변환
   'src/pptx.js',        // ZIP + OOXML → 진짜 .pptx 내보내기
   'src/analysis.js'     // 분석 · 출력 · 설정  (마지막 줄에서 boot() 호출)
 ];
