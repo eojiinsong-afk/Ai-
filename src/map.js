@@ -190,56 +190,33 @@ const MAP = {
       }
     }
     $('#gMk').innerHTML = out.join('');
-    $$('#gMk .mk').forEach(g => g.onclick = e => {
-      e.stopPropagation();
-      if (g.dataset.prj) this.showInfo(S.projects.find(p => p.id === g.dataset.prj), 'prj');
-      else this.showInfo(S.facilities.find(f => f.id === g.dataset.fac), 'fac');
-    });
   },
   draw() { this.buildLayerUI(); this.apply(); },
-  showInfo(o, kind) {
+  /** 참조 지점 정보창. 프로젝트는 마커를 누르면 곧장 상세 화면으로 간다. */
+  showInfo(o) {
     if (!o) return;
     const box = $('#mapinfo');
     box.hidden = false;
-    if (kind === 'prj') {
-      const near = nearestFacilities(o);
-      box.innerHTML = `<div class="body">
-        <h3>${esc(projName(o))}</h3>
-        <div class="hint">${esc([o.sido, o.sgg].filter(Boolean).join(' '))}${o.marketName ? ' · ' + esc(o.marketName) : ''}</div>
-        <dl class="kv">
-          <dt>답사일</dt><dd class="num">${esc(o.surveyDate || '—')}</dd>
-          <dt>층수</dt><dd class="num">${o.marketFloors || '?'}＋${o.aptFloors || '?'} 층</dd>
-          <dt>건축</dt><dd class="num">${o.builtYear || '—'}</dd>
-          <dt>현재역</dt><dd class="num">${fmtKm(near.station && near.station.d)}</dd>
-          <dt>과거역</dt><dd class="num">${fmtKm(near.oldstation && near.oldstation.d)}</dd>
-          <dt>터미널</dt><dd class="num">${fmtKm(near.terminal && near.terminal.d)}</dd>
-        </dl>
-        <div style="display:flex;gap:6px;margin-top:10px">
-          <button class="btn sm pri" id="miOpen">상세 열기</button>
-          <button class="btn sm" id="miClose">닫기</button>
-        </div></div>`;
-      $('#miOpen').onclick = () => openDetail(o.id);
-    } else {
-      const isLine = Array.isArray(o.path) && o.path.length > 1;
-      box.innerHTML = `<div class="body"><h3>${esc(o.name || FAC_KINDS[o.kind].label)}</h3>
-        <div class="hint">${FAC_KINDS[o.kind].label}${o.year ? ' · ' + esc(o.year) : ''}${isLine ? ` · ${o.path.length}점 · ${fmtKm(this.pathLength(o.path))}` : ''}</div>
-        ${o.note ? `<p style="font-size:12px;color:var(--ink2);margin:8px 0 0">${esc(o.note)}</p>` : ''}
-        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-          <button class="btn sm" id="miEdit">${isLine ? '정보 편집' : '편집'}</button>
-          ${isLine ? '<button class="btn sm" id="miRedraw">경로 다시 그리기</button>' : ''}
-          <button class="btn sm dgr" id="miDel">삭제</button>
-          <button class="btn sm" id="miClose">닫기</button></div></div>`;
-      $('#miEdit').onclick = () => isLine ? lineForm(o) : facilityForm(o);
-      const rd = $('#miRedraw');
-      if (rd) rd.onclick = () => { box.hidden = true; this.startLine(o.kind, o); };
-      $('#miDel').onclick = async () => {
-        if (!await confirmBox('참조 지점 삭제', `<p>${esc(o.name)} 을(를) 삭제할까요?</p>`)) return;
-        await S.store.del('facilities', o.id);
-        S.facilities = S.facilities.filter(f => f.id !== o.id);
-        box.hidden = true; this.draw(); updateCounts();
-      };
-    }
-    const c = $('#miClose'); if (c) c.onclick = () => box.hidden = true;
+    const isLine = Array.isArray(o.path) && o.path.length > 1;
+    box.innerHTML = `<div class="body"><h3>${esc(o.name || FAC_KINDS[o.kind].label)}</h3>
+      <div class="hint">${FAC_KINDS[o.kind].label}${o.year ? ' · ' + esc(o.year) : ''}${isLine ? ` · ${o.path.length}점 · ${fmtKm(this.pathLength(o.path))}` : ''}</div>
+      ${o.note ? `<p style="font-size:12px;color:var(--ink2);margin:8px 0 0">${esc(o.note)}</p>` : ''}
+      ${o.src ? `<p class="hint" style="margin:6px 0 0">가져온 데이터 · ${esc(o.src.file || '')}</p>` : ''}
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn sm" id="miEdit">${isLine ? '정보 편집' : '편집'}</button>
+        ${isLine ? '<button class="btn sm" id="miRedraw">경로 다시 그리기</button>' : ''}
+        <button class="btn sm dgr" id="miDel">삭제</button>
+        <button class="btn sm" id="miClose">닫기</button></div></div>`;
+    $('#miEdit').onclick = () => isLine ? lineForm(o) : facilityForm(o);
+    const rd = $('#miRedraw');
+    if (rd) rd.onclick = () => { box.hidden = true; this.startLine(o.kind, o); };
+    $('#miDel').onclick = async () => {
+      if (!await confirmBox('참조 지점 삭제', `<p>${esc(o.name || FAC_KINDS[o.kind].label)} 을(를) 삭제할까요?</p>`)) return;
+      await S.store.del('facilities', o.id);
+      S.facilities = S.facilities.filter(f => f.id !== o.id);
+      box.hidden = true; this.draw(); updateCounts();
+    };
+    $('#miClose').onclick = () => box.hidden = true;
   },
   setPick(on, cb) {
     this.picking = on; this.pickCb = cb || null;
@@ -266,6 +243,16 @@ const MAP = {
   /* ---------- 커서를 올렸을 때 이름 보여주기 ----------
      마커가 작아서 클릭해 보기 전에는 무엇인지 알 수 없었다. 전국 축척에서
      이름을 다 그리면 겹쳐서 못 읽으므로, 커서를 따라다니는 쪽지로 보여준다. */
+  /** 화면 좌표에 어떤 마커가 있는지. 눌린 지점 둘레도 조금 살펴 손가락 오차를 흡수한다. */
+  hitAt(cx, cy) {
+    const seen = [[0, 0], [0, -7], [0, 7], [-7, 0], [7, 0]];
+    for (const [dx, dy] of seen) {
+      const t = document.elementFromPoint(cx + dx, cy + dy);
+      const g = t && t.closest && t.closest('.mk');
+      if (g) return g;
+    }
+    return null;
+  },
   bindTip() {
     const el = this.svg, tip = $('#maptip');
     const wrap = () => $('#mapwrap').getBoundingClientRect();
@@ -322,7 +309,12 @@ const MAP = {
         const [lat, lng] = this.toLatLng(e.clientX - r.left, e.clientY - r.top);
         if (this.drawing) { this.draft.push([+lat.toFixed(6), +lng.toFixed(6)]); this.updateDraft(); }
         else if (this.picking) { const cb = this.pickCb; this.setPick(false); if (cb) cb(lat, lng); }
-        else if (e.target === el) $('#mapinfo').hidden = true;
+        else {
+          const hit = this.hitAt(e.clientX, e.clientY);
+          if (hit && hit.dataset.prj) { $('#mapinfo').hidden = true; openDetail(hit.dataset.prj); }
+          else if (hit && hit.dataset.fac) this.showInfo(S.facilities.find(f => f.id === hit.dataset.fac));
+          else $('#mapinfo').hidden = true;
+        }
       }
     };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);

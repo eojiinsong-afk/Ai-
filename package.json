@@ -1,6 +1,6 @@
 {
   "name": "market-apartment-archive",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "시장아파트(시장+주거 복합건축물) 답사 아카이빙 · 공간 데이터 연구 도구",
   "type": "module",

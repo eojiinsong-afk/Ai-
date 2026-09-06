@@ -6,7 +6,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 const SCHEMA_VERSION = 2;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -290,6 +290,50 @@ async function snapshotProjects(fromVersion) {
   } catch (e) { console.warn('snapshot skipped', e); }
 }
 
+/* ---------- 저장 재시도 ----------
+   사진 한 장이 문서 두 개(메타+원본)를 쓴다. 48장이면 96번을 몰아서 쓰게 되는데,
+   계정 저장소는 순간적으로 몰리면 쓰기를 거절하기도 한다. 한 번 실패했다고 그 사진을
+   버리면 답사 기록이 조용히 새어 나가므로, 잠깐 쉬었다가 다시 시도한다.
+   문서가 한도보다 크거나 저장 공간이 찬 경우는 다시 해도 같으므로 바로 알린다. */
+/* 다시 해 볼 가치가 있는 실패와 그렇지 않은 실패를 가른다.
+   "rate limit exceeded" 처럼 두 낱말이 겹치는 문구가 흔하므로 재시도 쪽을 먼저 본다.
+   어느 쪽도 아닌 처음 보는 오류는 일단 다시 시도한다 — 한 번 더 해 보는 값이
+   답사 사진 한 장을 잃는 값보다 싸다. */
+const RETRY_PUT = /rate|429|too many|timeout|timed ?out|network|unavailable|busy|temporar|try again|conflict|abort|failed to fetch|internal|502|503|504/i;
+const FATAL_PUT = /too large|payload|document size|quota|storage full|invalid|permission|denied|not.?allowed|unauthor|forbidden|401|403/i;
+async function putRetry(coll, id, data, tries) {
+  let last = null;
+  const n = tries || 4;
+  for (let i = 0; i < n; i++) {
+    try { await S.store.put(coll, id, data); return; }
+    catch (e) {
+      last = e;
+      const msg = String((e && (e.message || e.code)) || e);
+      if (!RETRY_PUT.test(msg) && FATAL_PUT.test(msg)) throw e;
+      if (i < n - 1) await new Promise(r => setTimeout(r, 250 * Math.pow(2, i) + Math.random() * 200));
+    }
+  }
+  throw last;
+}
+
+/* ---------- 진행 표시 ----------
+   사진 수십 장은 시간이 걸린다. 아무 표시가 없으면 멈춘 것으로 오해해
+   창을 닫아 버리게 되므로, 몇 장째인지 계속 보여준다. */
+function progressStart(total, label) {
+  const el = $('#progress');
+  el.classList.add('on');
+  el.innerHTML = `<div class="pt"><b id="pgLbl">${esc(label || '처리 중')}</b><span class="mono" id="pgN">0 / ${total}</span></div>
+    <div class="pbar"><i id="pgBar" style="width:0%"></i></div><div class="hint" id="pgSub"></div>`;
+  return {
+    set(i, sub) {
+      $('#pgN').textContent = `${i} / ${total}`;
+      $('#pgBar').style.width = (total ? i / total * 100 : 0).toFixed(1) + '%';
+      if (sub != null) $('#pgSub').textContent = sub;
+    },
+    done() { el.classList.remove('on'); el.innerHTML = ''; }
+  };
+}
+
 /* ---------- data ops ---------- */
 async function loadAll() {
   const [p, f, fl, tr] = await Promise.all([
@@ -303,7 +347,7 @@ async function loadAll() {
 async function saveProject(p) {
   p.updatedAt = new Date().toISOString();
   if (!p.createdAt) p.createdAt = p.updatedAt;
-  await S.store.put('projects', p.id, p);
+  await putRetry('projects', p.id, p);
   const i = S.projects.findIndex(x => x.id === p.id);
   if (i < 0) S.projects.push(p); else S.projects[i] = p;
   updateCounts(); MAP.draw();

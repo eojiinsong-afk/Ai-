@@ -315,7 +315,7 @@ function facilityForm(f, lat, lng) {
     if (!inKorea(f.lat, f.lng) && !await confirmBox('범위 밖 좌표',
       `<p>위도 ${f.lat}, 경도 ${f.lng} 는 남한 범위를 벗어납니다. 그대로 저장할까요?</p>
        <p class="hint">위도와 경도를 바꿔 넣은 경우가 가장 흔합니다.</p>`, '그대로 저장')) return;
-    await S.store.put('facilities', f.id, f);
+    await putRetry('facilities', f.id, f);
     const i = S.facilities.findIndex(x => x.id === f.id);
     if (i < 0) S.facilities.push(f); else S.facilities[i] = f;
     MAP.draw(); updateCounts();
@@ -353,7 +353,7 @@ function lineForm(f, path) {
     f.kind = $('#ln_kind').value; f.name = $('#ln_name').value.trim();
     f.year = $('#ln_year').value.trim(); f.note = $('#ln_note').value.trim();
     if (!Array.isArray(f.path) || f.path.length < 2) return toast('노선에는 점이 2개 이상 필요합니다');
-    await S.store.put('facilities', f.id, f);
+    await putRetry('facilities', f.id, f);
     const i = S.facilities.findIndex(x => x.id === f.id);
     if (i < 0) S.facilities.push(f); else S.facilities[i] = f;
     closeModal(); MAP.draw(); updateCounts(); toast('노선을 저장했습니다');
@@ -395,40 +395,134 @@ function drawScaled(img, maxW) {
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   return c;
 }
-function sharpness(img) {
-  const c = drawScaled(img, 180), ctx = c.getContext('2d');
-  const d = ctx.getImageData(0, 0, c.width, c.height).data;
-  const g = new Float32Array(c.width * c.height);
-  for (let i = 0; i < g.length; i++) g[i] = (d[i * 4] * .299 + d[i * 4 + 1] * .587 + d[i * 4 + 2] * .114);
-  let sum = 0, sq = 0, n = 0;
-  for (let y = 1; y < c.height - 1; y++) for (let x = 1; x < c.width - 1; x++) {
-    const i = y * c.width + x;
-    const l = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - c.width] - g[i + c.width];
-    sum += l; sq += l * l; n++;
-  }
-  return n ? Math.round((sq / n) - (sum / n) ** 2) : 0;
-}
+/* 캔버스를 명시적으로 놓아준다.
+   iOS 사파리는 캔버스에 쓸 수 있는 메모리 총량이 정해져 있어서, 수십 장을 잇달아
+   처리하면 어느 순간부터 toDataURL 이 조용히 빈 문자열("data:,")을 돌려준다.
+   폭·높이를 0으로 만들면 그 자리에서 메모리가 풀린다. */
+function releaseCanvas(c) { try { c.width = 0; c.height = 0; } catch (e) { } }
+const MIN_JPEG = 1200;                 // 이보다 짧으면 변환이 실패한 것으로 본다
+const PHOTO_MAX = 220000;              // 문서 한도 256KB 안쪽 (dataURL 기준)
+const THUMB_MAX = 42000;
+
 function toJpeg(canvas, maxBytes) {
   let q = 0.85, url = canvas.toDataURL('image/jpeg', q);
-  while (url.length > maxBytes && q > 0.32) { q -= 0.12; url = canvas.toDataURL('image/jpeg', q); }
+  while (url.length > maxBytes && q > 0.3) { q -= 0.1; url = canvas.toDataURL('image/jpeg', q); }
   return url;
 }
+/** 한도 안에 들어올 때까지 크기를 줄여 가며 JPEG 을 만든다. 못 만들면 null. */
+function encodeWithin(img, sizes, maxBytes) {
+  let best = null;
+  for (const maxW of sizes) {
+    const c = drawScaled(img, maxW);
+    let url = '';
+    try { url = toJpeg(c, maxBytes); } catch (e) { /* 메모리 부족 */ }
+    releaseCanvas(c);
+    if (!url || url.length < MIN_JPEG) continue;      // 빈 결과 — 다음(더 작은) 크기로
+    best = url;
+    if (url.length <= maxBytes) return url;
+  }
+  return (best && best.length <= maxBytes) ? best : null;
+}
+function sharpness(img) {
+  try {
+    const c = drawScaled(img, 180), ctx = c.getContext('2d');
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    const g = new Float32Array(c.width * c.height);
+    for (let i = 0; i < g.length; i++) g[i] = (d[i * 4] * .299 + d[i * 4 + 1] * .587 + d[i * 4 + 2] * .114);
+    let sum = 0, sq = 0, n = 0;
+    for (let y = 1; y < c.height - 1; y++) for (let x = 1; x < c.width - 1; x++) {
+      const i = y * c.width + x;
+      const l = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - c.width] - g[i + c.width];
+      sum += l; sq += l * l; n++;
+    }
+    releaseCanvas(c);
+    return n ? Math.round((sq / n) - (sum / n) ** 2) : 0;
+  } catch (e) { return 0; }   // 선명도는 추천 정렬에만 쓰이므로 실패해도 사진은 살린다
+}
+/** 사진 한 장을 저장한다. 실패하면 왜 실패했는지 알 수 있는 오류를 던진다. */
 async function ingestPhoto(file, pid, extra) {
-  const img = await fileToImage(file);
-  const full = drawScaled(img, 1500);
-  let data = toJpeg(full, 235000);
-  if (data.length > 235000) data = toJpeg(drawScaled(img, 1100), 235000);
-  const thumb = toJpeg(drawScaled(img, 300), 40000);
-  const id = uid();
-  const meta = Object.assign({
-    pid, cat: (extra && extra.cat) || '건물 전체', caption: '', date: today(), place: '', memo: '', tags: [],
-    w: img.width, h: img.height, sharp: sharpness(img), size: data.length, kind: 'photo',
-    createdAt: new Date().toISOString(), thumb
-  }, extra || {});
-  await S.store.put('photofull', id, { data });
-  await S.store.put('photos', id, meta);
-  if (img.close) img.close();
-  return Object.assign({ id }, meta);
+  let img = null;
+  try { img = await fileToImage(file); }
+  catch (e) { throw new Error('이 브라우저가 열 수 없는 형식입니다 (HEIC 등)'); }
+  if (!img || !img.width || !img.height) { if (img && img.close) img.close(); throw new Error('이미지 크기를 읽지 못했습니다'); }
+  const W = img.width, H = img.height;
+  try {
+    const data = encodeWithin(img, [1500, 1200, 1000, 820, 640], PHOTO_MAX);
+    if (!data) throw new Error('압축해도 저장 한도를 넘습니다 — 사진을 줄여서 올려주세요');
+    const thumb = encodeWithin(img, [300, 220, 160], THUMB_MAX);
+    if (!thumb) throw new Error('축소본을 만들지 못했습니다 (메모리 부족일 수 있습니다)');
+    const sharp = sharpness(img);
+    const id = uid();
+    const meta = Object.assign({
+      pid, cat: (extra && extra.cat) || '건물 전체', caption: '', date: today(), place: '', memo: '', tags: [],
+      w: W, h: H, sharp, size: data.length, kind: 'photo',
+      createdAt: new Date().toISOString(), thumb
+    }, extra || {});
+    await putRetry('photofull', id, { data });
+    try {
+      await putRetry('photos', id, meta);
+    } catch (e) {
+      // 메타를 못 썼으면 원본만 남아 떠돌게 되므로 되돌린다
+      try { await S.store.del('photofull', id); } catch (e2) { }
+      throw e;
+    }
+    return Object.assign({ id }, meta);
+  } finally {
+    if (img && img.close) img.close();
+  }
+}
+/** 여러 장을 차례로 올린다. 한 장이 실패해도 나머지는 계속 올리고, 무엇이 왜 실패했는지 남긴다. */
+async function uploadPhotos(files, p, cat) {
+  const prog = progressStart(files.length, '사진 올리는 중');
+  const ok = [], fail = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    prog.set(i, `${f.name} · ${bytes(f.size || 0)}`);
+    try {
+      const ph = await ingestPhoto(f, p.id, { cat });
+      S.photos.push(ph); ok.push(ph);
+    } catch (err) {
+      console.error('사진 실패', f.name, err);
+      fail.push({ name: f.name, file: f, msg: String((err && (err.message || err.code)) || err) });
+    }
+    // 한 장마다 화면에 숨 쉴 틈을 준다 — 안 그러면 진행 표시가 멈춘 것처럼 보인다
+    await new Promise(r => setTimeout(r, 0));
+  }
+  prog.set(files.length, '');
+  prog.done();
+  p.photoCount = S.photos.length;
+  try { await saveProject(p); } catch (e) { console.error(e); }
+  renderDetail();
+  if (!fail.length) { toast(`${ok.length}장 추가했습니다`); return; }
+  photoFailReport(ok.length, fail, p, cat);
+}
+/** 실패한 사진을 숨기지 않는다. 무엇이 왜 안 됐는지 보여주고 다시 시도할 수 있게 한다. */
+async function photoFailReport(okN, fail, p, cat) {
+  const byMsg = {};
+  for (const f of fail) (byMsg[f.msg] = byMsg[f.msg] || []).push(f.name);
+  // 저장 공간이 원인일 수 있으므로 지금 얼마나 쓰고 있는지 함께 보여준다
+  let usage = '';
+  try {
+    const [ph, nt] = await Promise.all([S.store.list('photos'), S.store.list('notes')]);
+    const docs = ph.length * 2 + nt.length + S.projects.length + S.trash.length + S.facilities.length + S.fields.length + 2;
+    usage = `<p class="hint" style="margin-top:8px">지금 저장소에 문서 약 <b class="mono">${docs}</b>개를 쓰고 있습니다
+      (사진 ${ph.length}장 = 문서 ${ph.length * 2}개). 아티팩트 한 개의 한도는 약 5,000개입니다.
+      ${docs > 4200 ? '<b style="color:var(--warn)">한도에 가까워졌습니다 — 백업을 내려받고 오래된 사진을 정리해 주세요.</b>' : ''}</p>`;
+  } catch (e) { }
+  openModal(`<div class="mh"><h3>사진 ${okN}장 저장 · ${fail.length}장 실패</h3><button class="x">×</button></div>
+    <div class="mb">
+      <p>${okN}장은 저장됐고 <b class="mono">${fail.length}</b>장이 저장되지 않았습니다. 실패한 사진은 <b>아직 올라가지 않았습니다</b> — 아래에서 다시 시도하거나, 원인을 보고 사진을 줄여 다시 올려주세요.</p>
+      <div class="tblwrap" style="max-height:260px;border:1px solid var(--line);border-radius:var(--r);margin-top:10px">
+        <table class="grid"><thead><tr><th style="cursor:default">원인</th><th style="cursor:default">장수</th><th style="cursor:default">파일</th></tr></thead><tbody>
+        ${Object.entries(byMsg).map(([m, names]) => `<tr><td>${esc(m)}</td><td class="n">${names.length}</td>
+          <td class="hint">${esc(names.slice(0, 4).join(', '))}${names.length > 4 ? ` 외 ${names.length - 4}` : ''}</td></tr>`).join('')}
+        </tbody></table></div>
+      <p class="hint" style="margin-top:10px">저장이 몰려서 거절된 경우라면 다시 시도하면 대개 들어갑니다.
+      «저장 한도»가 나온 사진은 해상도가 너무 큰 경우이니 줄여서 올려주세요.</p>${usage}
+    </div>
+    <div class="mf"><button class="btn" onclick="closeModal()">닫기</button>
+      <button class="btn pri" id="pfRetry">${fail.length}장 다시 시도</button></div>`);
+  $('#pfRetry').onclick = () => { closeModal(); uploadPhotos(fail.map(f => f.file), p, cat); };
 }
 
 /* ---------- detail ---------- */
@@ -530,15 +624,10 @@ function renderDetail() {
   });
   const up = $('#upFile');
   up.onchange = async e => {
-    const files = Array.from(e.target.files || []); if (!files.length) return;
-    const cat = $('#upCat').value;
-    toast(`사진 ${files.length}장 처리 중…`, 8000);
-    for (const f of files) {
-      try { const ph = await ingestPhoto(f, p.id, { cat }); S.photos.push(ph); }
-      catch (err) { console.error(err); toast('사진 처리 실패: ' + f.name); }
-    }
-    p.photoCount = S.photos.length; await saveProject(p);
-    renderDetail(); toast(`${files.length}장 추가했습니다`);
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';                     // 같은 파일을 다시 고를 수 있게
+    if (!files.length) return;
+    await uploadPhotos(files, p, $('#upCat').value);
   };
   bindGallery();
 }
@@ -639,7 +728,7 @@ async function bulkPatch(list, patch, what) {
   for (const ph of list) {
     if (patch) Object.assign(ph, patch);
     const d = Object.assign({}, ph); delete d.id;
-    await S.store.put('photos', ph.id, d);
+    await putRetry('photos', ph.id, d);
   }
   refreshGallery();
   toast(`${list.length}장의 ${what} 바꿨습니다`);
@@ -683,7 +772,7 @@ async function photoModal(id) {
       tags: $('#ph_tags').value.split(',').map(s => s.trim()).filter(Boolean)
     });
     const d = Object.assign({}, ph); delete d.id;
-    await S.store.put('photos', ph.id, d);
+    await putRetry('photos', ph.id, d);
     closeModal(); renderDetail(); toast('저장했습니다');
   };
   $('#ph_del').onclick = async () => {
@@ -711,7 +800,7 @@ function noteForm(n) {
     Object.assign(n, { title: $('#nt_t').value.trim(), date: $('#nt_d').value, kind: $('#nt_k').value, body: $('#nt_b').value });
     if (!n.createdAt) n.createdAt = new Date().toISOString();
     const d = Object.assign({}, n); delete d.id;
-    await S.store.put('notes', n.id, d);
+    await putRetry('notes', n.id, d);
     const i = S.notes.findIndex(x => x.id === n.id);
     if (i < 0) S.notes.unshift(n); else S.notes[i] = n;
     const p = S.projects.find(x => x.id === S.cur); if (p) { p.noteCount = S.notes.length; await saveProject(p); }

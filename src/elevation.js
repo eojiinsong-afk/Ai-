@@ -591,8 +591,13 @@ $('#elevSave').onclick = async () => {
     memo: '4점 원근 보정' + ($('#elevEdge').checked ? ' + 선 추출' : '') + (EL.ops.length ? ' · ' + EL.ops.map(k => LINE_OPS[k].label).join(' → ') : ''),
     tags: ['보정'], w: EL.out.width, h: EL.out.height, sharp: 0, size: data.length, createdAt: new Date().toISOString(), thumb
   };
-  await S.store.put('photofull', id, { data });
-  await S.store.put('photos', id, meta);
+  try {
+    await putRetry('photofull', id, { data });
+    await putRetry('photos', id, meta);
+  } catch (e) {
+    try { await S.store.del('photofull', id); } catch (e2) { }
+    return toast('저장하지 못했습니다: ' + String((e && (e.message || e.code)) || e), 5000);
+  }
   const p = S.projects.find(x => x.id === pid);
   if (p) { p.photoCount = (p.photoCount || 0) + 1; await saveProject(p); }
   toast('프로젝트에 입면 이미지로 저장했습니다');

@@ -200,6 +200,16 @@ thead .stickycol{z-index:3}
 .x:hover{background:var(--surface2);color:var(--ink)}
 #lightbox{background:rgba(8,10,13,.92)}
 #lightbox img{max-width:100%;max-height:76dvh;object-fit:contain;border-radius:4px}
+#progress{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:95;display:none;
+  background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:var(--shadow);
+  padding:11px 14px;min-width:min(340px,86vw);max-width:86vw}
+#progress.on{display:block}
+#progress .pt{display:flex;align-items:baseline;gap:10px;font-size:13px}
+#progress .pt b{font-weight:600}
+#progress .pt .mono{margin-left:auto;color:var(--faint);font-size:11px}
+#progress .pbar{height:5px;border-radius:3px;background:var(--surface3);margin:7px 0 4px;overflow:hidden}
+#progress .pbar i{display:block;height:100%;background:var(--accent);transition:width .15s;border-radius:3px}
+#progress .hint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;z-index:90;opacity:0;transition:.22s;pointer-events:none;font-size:13px;max-width:86vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%)}
 
