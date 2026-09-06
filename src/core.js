@@ -6,7 +6,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
 const SCHEMA_VERSION = 2;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -19,6 +19,25 @@ const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtKm = m => m == null ? '—' : (m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(m < 10000 ? 2 : 1) + ' km');
 const bytes = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n > 1024 ? (n / 1024).toFixed(0) + ' KB' : n + ' B';
+
+/* 층 구성 표기. 지하는 지상 층수와 성격이 다르므로(주차·시장 하역·창고)
+   합산하지 않고 «지하 2층 · 시장 2 + 주거 4층 · 지상 전체 6층» 처럼 따로 적는다. */
+function floorText(p) {
+  const parts = [];
+  if (p.basementFloors) parts.push(`지하 ${p.basementFloors}층`);
+  const up = [];
+  if (p.marketFloors != null) up.push('시장 ' + p.marketFloors);
+  if (p.aptFloors != null) up.push('주거 ' + p.aptFloors);
+  if (up.length) parts.push(up.join(' + ') + '층');
+  if (p.totalFloors != null) parts.push(`지상 전체 ${p.totalFloors}층`);
+  return parts.join(' · ') || '—';
+}
+/** 표·쪽지에 들어가는 짧은 표기 — B2/2＋4 */
+function floorShort(p) {
+  const b = p.basementFloors ? 'B' + p.basementFloors + '/' : '';
+  if (p.marketFloors == null && p.aptFloors == null) return b ? b.slice(0, -1) : '—';
+  return b + `${p.marketFloors == null ? '?' : p.marketFloors}＋${p.aptFloors == null ? '?' : p.aptFloors}`;
+}
 
 function toast(msg, ms) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('on');
@@ -135,7 +154,8 @@ const BASE_FIELDS = [
   { k: 'remodel', label: '리모델링·증축', type: 'select', options: ['미확인', '없음', '리모델링', '증축', '리모델링+증축'], core: 1 },
   { k: 'marketFloors', label: '시장 층수', type: 'number', core: 1 },
   { k: 'aptFloors', label: '아파트 층수', type: 'number', core: 1 },
-  { k: 'totalFloors', label: '전체 층수', type: 'number', core: 1 },
+  { k: 'basementFloors', label: '지하 층수', type: 'number', core: 1 },
+  { k: 'totalFloors', label: '지상 전체 층수', type: 'number', core: 1 },
   { k: 'parking', label: '주차장', type: 'bool', core: 1 },
   { k: 'parkingType', label: '주차장 위치·형태', type: 'text', core: 1 },
   { k: 'relation', label: '시장–주거 관계', type: 'select', options: ['미분류', '시장 상부 주거(수직)', '시장 인접 주거(수평)', '별동 주거', '중정형', '가로형', '블록형', '복합형'], core: 1 },

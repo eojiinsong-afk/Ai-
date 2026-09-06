@@ -406,7 +406,7 @@ function prjTip(p) {
   const bits = [];
   if (p.marketName) bits.push(p.marketName);
   if (p.builtYear) bits.push(p.builtYear + '년');
-  if (p.marketFloors != null || p.aptFloors != null) bits.push(`${p.marketFloors == null ? '?' : p.marketFloors}＋${p.aptFloors == null ? '?' : p.aptFloors}층`);
+  const fl = floorShort(p); if (fl !== '—') bits.push(fl + '층');
   return `<b>${esc(projName(p))}</b>` + (sub ? `<i>${esc(sub)}</i>` : '') + (bits.length ? `<i>${esc(bits.join(' · '))}</i>` : '');
 }
 function facTip(f) {

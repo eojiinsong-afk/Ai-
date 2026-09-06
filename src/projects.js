@@ -6,7 +6,7 @@ function fieldValue(p, f) {
   const v = f.custom ? (p.custom || {})[f.custom] : p[f.k];
   return v == null ? '' : v;
 }
-const TABLE_COLS = ['surveyDate', 'sido', 'sgg', 'marketName', 'aptName', 'address', 'builtYear', 'marketFloors', 'aptFloors', 'totalFloors', 'parking', 'relation', 'status', 'nearStation', 'nearTerminal'];
+const TABLE_COLS = ['surveyDate', 'sido', 'sgg', 'marketName', 'aptName', 'address', 'builtYear', 'basementFloors', 'marketFloors', 'aptFloors', 'totalFloors', 'parking', 'relation', 'status', 'nearStation', 'nearTerminal'];
 
 /* ---------- filters + table ---------- */
 /* 근접 필터: 값은 미터 문자열(‘1000’ = 1km 이내) 또는 'none'(등록된 지점이 없거나 멀리 떨어짐) */
@@ -26,7 +26,7 @@ function renderFilters() {
   const pairs = (arr, cur) => ['<option value="">전체</option>'].concat(arr.map(o => `<option value="${esc(o[0])}" ${cur === o[0] ? 'selected' : ''}>${esc(o[1])}</option>`)).join('');
   // 사용자가 만든 선택형 항목도 그대로 필터가 된다
   const cf = S.fields.filter(f => f.type === 'select' && (f.options || []).length);
-  const ADV = ['y0', 'y1', 'd0', 'd1', 'mf', 'af', 'nstation', 'noldstation', 'nterminal', 'hasphoto'];
+  const ADV = ['y0', 'y1', 'd0', 'd1', 'bf', 'mf', 'af', 'nstation', 'noldstation', 'nterminal', 'hasphoto'];
   const advN = Object.keys(S.filter).filter(k => S.filter[k] && (ADV.includes(k) || k.slice(0, 3) === 'cf_')).length;
   $('#filters').innerHTML = `
     <span class="f">시·도 <select data-fk="sido">${opt(sidos, S.filter.sido)}</select></span>
@@ -39,6 +39,7 @@ function renderFilters() {
     <span class="fmore" ${S.filterMore ? '' : 'hidden'}>
     <span class="f">건축연도 <input type="number" data-fk="y0" placeholder="부터" value="${esc(S.filter.y0 || '')}" style="width:76px"> – <input type="number" data-fk="y1" placeholder="까지" value="${esc(S.filter.y1 || '')}" style="width:76px"></span>
     <span class="f">답사일 <input type="date" data-fk="d0" value="${esc(S.filter.d0 || '')}" style="width:134px"> – <input type="date" data-fk="d1" value="${esc(S.filter.d1 || '')}" style="width:134px"></span>
+    <span class="f">지하 <select data-fk="bf"><option value="">전체</option><option value="y" ${S.filter.bf === 'y' ? 'selected' : ''}>있음</option><option value="n" ${S.filter.bf === 'n' ? 'selected' : ''}>없음</option></select></span>
     <span class="f">시장층수 ≤ <input type="number" data-fk="mf" value="${esc(S.filter.mf || '')}" style="width:62px"></span>
     <span class="f">아파트층수 ≥ <input type="number" data-fk="af" value="${esc(S.filter.af || '')}" style="width:62px"></span>
     <span class="f">현재역 <select data-fk="nstation">${pairs(NEAR_OPTS, S.filter.nstation)}</select></span>
@@ -73,6 +74,8 @@ function filtered() {
     if (f.y1 && !(p.builtYear <= +f.y1)) return false;
     if (f.d0 && !(p.surveyDate && p.surveyDate >= f.d0)) return false;
     if (f.d1 && !(p.surveyDate && p.surveyDate <= f.d1)) return false;
+    if (f.bf === 'y' && !(p.basementFloors > 0)) return false;
+    if (f.bf === 'n' && p.basementFloors > 0) return false;
     if (f.mf && !(p.marketFloors != null && p.marketFloors <= +f.mf)) return false;
     if (f.af && !(p.aptFloors != null && p.aptFloors >= +f.af)) return false;
     if (f.hasphoto === 'y' && !(p.photoCount > 0)) return false;

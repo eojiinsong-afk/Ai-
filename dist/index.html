@@ -490,7 +490,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
 const SCHEMA_VERSION = 2;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -503,6 +503,25 @@ const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtKm = m => m == null ? '—' : (m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(m < 10000 ? 2 : 1) + ' km');
 const bytes = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n > 1024 ? (n / 1024).toFixed(0) + ' KB' : n + ' B';
+
+/* 층 구성 표기. 지하는 지상 층수와 성격이 다르므로(주차·시장 하역·창고)
+   합산하지 않고 «지하 2층 · 시장 2 + 주거 4층 · 지상 전체 6층» 처럼 따로 적는다. */
+function floorText(p) {
+  const parts = [];
+  if (p.basementFloors) parts.push(`지하 ${p.basementFloors}층`);
+  const up = [];
+  if (p.marketFloors != null) up.push('시장 ' + p.marketFloors);
+  if (p.aptFloors != null) up.push('주거 ' + p.aptFloors);
+  if (up.length) parts.push(up.join(' + ') + '층');
+  if (p.totalFloors != null) parts.push(`지상 전체 ${p.totalFloors}층`);
+  return parts.join(' · ') || '—';
+}
+/** 표·쪽지에 들어가는 짧은 표기 — B2/2＋4 */
+function floorShort(p) {
+  const b = p.basementFloors ? 'B' + p.basementFloors + '/' : '';
+  if (p.marketFloors == null && p.aptFloors == null) return b ? b.slice(0, -1) : '—';
+  return b + `${p.marketFloors == null ? '?' : p.marketFloors}＋${p.aptFloors == null ? '?' : p.aptFloors}`;
+}
 
 function toast(msg, ms) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('on');
@@ -619,7 +638,8 @@ const BASE_FIELDS = [
   { k: 'remodel', label: '리모델링·증축', type: 'select', options: ['미확인', '없음', '리모델링', '증축', '리모델링+증축'], core: 1 },
   { k: 'marketFloors', label: '시장 층수', type: 'number', core: 1 },
   { k: 'aptFloors', label: '아파트 층수', type: 'number', core: 1 },
-  { k: 'totalFloors', label: '전체 층수', type: 'number', core: 1 },
+  { k: 'basementFloors', label: '지하 층수', type: 'number', core: 1 },
+  { k: 'totalFloors', label: '지상 전체 층수', type: 'number', core: 1 },
   { k: 'parking', label: '주차장', type: 'bool', core: 1 },
   { k: 'parkingType', label: '주차장 위치·형태', type: 'text', core: 1 },
   { k: 'relation', label: '시장–주거 관계', type: 'select', options: ['미분류', '시장 상부 주거(수직)', '시장 인접 주거(수평)', '별동 주거', '중정형', '가로형', '블록형', '복합형'], core: 1 },
@@ -1313,7 +1333,7 @@ function prjTip(p) {
   const bits = [];
   if (p.marketName) bits.push(p.marketName);
   if (p.builtYear) bits.push(p.builtYear + '년');
-  if (p.marketFloors != null || p.aptFloors != null) bits.push(`${p.marketFloors == null ? '?' : p.marketFloors}＋${p.aptFloors == null ? '?' : p.aptFloors}층`);
+  const fl = floorShort(p); if (fl !== '—') bits.push(fl + '층');
   return `<b>${esc(projName(p))}</b>` + (sub ? `<i>${esc(sub)}</i>` : '') + (bits.length ? `<i>${esc(bits.join(' · '))}</i>` : '');
 }
 function facTip(f) {
@@ -1483,7 +1503,7 @@ function fieldValue(p, f) {
   const v = f.custom ? (p.custom || {})[f.custom] : p[f.k];
   return v == null ? '' : v;
 }
-const TABLE_COLS = ['surveyDate', 'sido', 'sgg', 'marketName', 'aptName', 'address', 'builtYear', 'marketFloors', 'aptFloors', 'totalFloors', 'parking', 'relation', 'status', 'nearStation', 'nearTerminal'];
+const TABLE_COLS = ['surveyDate', 'sido', 'sgg', 'marketName', 'aptName', 'address', 'builtYear', 'basementFloors', 'marketFloors', 'aptFloors', 'totalFloors', 'parking', 'relation', 'status', 'nearStation', 'nearTerminal'];
 
 /* ---------- filters + table ---------- */
 /* 근접 필터: 값은 미터 문자열(‘1000’ = 1km 이내) 또는 'none'(등록된 지점이 없거나 멀리 떨어짐) */
@@ -1503,7 +1523,7 @@ function renderFilters() {
   const pairs = (arr, cur) => ['<option value="">전체</option>'].concat(arr.map(o => `<option value="${esc(o[0])}" ${cur === o[0] ? 'selected' : ''}>${esc(o[1])}</option>`)).join('');
   // 사용자가 만든 선택형 항목도 그대로 필터가 된다
   const cf = S.fields.filter(f => f.type === 'select' && (f.options || []).length);
-  const ADV = ['y0', 'y1', 'd0', 'd1', 'mf', 'af', 'nstation', 'noldstation', 'nterminal', 'hasphoto'];
+  const ADV = ['y0', 'y1', 'd0', 'd1', 'bf', 'mf', 'af', 'nstation', 'noldstation', 'nterminal', 'hasphoto'];
   const advN = Object.keys(S.filter).filter(k => S.filter[k] && (ADV.includes(k) || k.slice(0, 3) === 'cf_')).length;
   $('#filters').innerHTML = `
     <span class="f">시·도 <select data-fk="sido">${opt(sidos, S.filter.sido)}</select></span>
@@ -1516,6 +1536,7 @@ function renderFilters() {
     <span class="fmore" ${S.filterMore ? '' : 'hidden'}>
     <span class="f">건축연도 <input type="number" data-fk="y0" placeholder="부터" value="${esc(S.filter.y0 || '')}" style="width:76px"> – <input type="number" data-fk="y1" placeholder="까지" value="${esc(S.filter.y1 || '')}" style="width:76px"></span>
     <span class="f">답사일 <input type="date" data-fk="d0" value="${esc(S.filter.d0 || '')}" style="width:134px"> – <input type="date" data-fk="d1" value="${esc(S.filter.d1 || '')}" style="width:134px"></span>
+    <span class="f">지하 <select data-fk="bf"><option value="">전체</option><option value="y" ${S.filter.bf === 'y' ? 'selected' : ''}>있음</option><option value="n" ${S.filter.bf === 'n' ? 'selected' : ''}>없음</option></select></span>
     <span class="f">시장층수 ≤ <input type="number" data-fk="mf" value="${esc(S.filter.mf || '')}" style="width:62px"></span>
     <span class="f">아파트층수 ≥ <input type="number" data-fk="af" value="${esc(S.filter.af || '')}" style="width:62px"></span>
     <span class="f">현재역 <select data-fk="nstation">${pairs(NEAR_OPTS, S.filter.nstation)}</select></span>
@@ -1550,6 +1571,8 @@ function filtered() {
     if (f.y1 && !(p.builtYear <= +f.y1)) return false;
     if (f.d0 && !(p.surveyDate && p.surveyDate >= f.d0)) return false;
     if (f.d1 && !(p.surveyDate && p.surveyDate <= f.d1)) return false;
+    if (f.bf === 'y' && !(p.basementFloors > 0)) return false;
+    if (f.bf === 'n' && p.basementFloors > 0) return false;
     if (f.mf && !(p.marketFloors != null && p.marketFloors <= +f.mf)) return false;
     if (f.af && !(p.aptFloors != null && p.aptFloors >= +f.af)) return false;
     if (f.hasphoto === 'y' && !(p.photoCount > 0)) return false;
@@ -3941,7 +3964,7 @@ async function composeDeck(ps, picked) {
         ['답사일', p.surveyDate || '—'],
         ['건축연도', p.builtYear == null ? '—' : String(p.builtYear)],
         ['리모델링·증축', p.remodel || '—'],
-        ['층수 (시장/아파트/전체)', [p.marketFloors, p.aptFloors, p.totalFloors].map(v => v == null ? '?' : v).join(' / ')],
+        ['층 구성', floorText(p)],
         ['주차장', (p.parking ? '있음' : '없음') + (p.parkingType ? ' · ' + p.parkingType : '')],
         ['시장–주거 관계', p.relation || '—'],
         ['현재 상태', p.status || '—'],
@@ -4022,9 +4045,9 @@ async function composeDeck(ps, picked) {
   if (on('compare') && ps.length > 1) {
     const b = slideBuilder();
     b.head('사례 비교', `${ps.length}개 사례를 같은 기준으로`);
-    const rows = [['사례', '지역', '건축', '시장/아파트층', '결합유형', '현재역', '과거역', '터미널']].concat(
+    const rows = [['사례', '지역', '건축', '지하/시장＋주거', '결합유형', '현재역', '과거역', '터미널']].concat(
       data.map(d => [projName(d.p), [d.p.sido, d.p.sgg].filter(Boolean).join(' '), d.p.builtYear == null ? '—' : String(d.p.builtYear),
-      `${d.p.marketFloors == null ? '?' : d.p.marketFloors}+${d.p.aptFloors == null ? '?' : d.p.aptFloors}`,
+      floorShort(d.p),
       d.p.relation || '—', fmtKm(d.near.station && d.near.station.d), fmtKm(d.near.oldstation && d.near.oldstation.d), fmtKm(d.near.terminal && d.near.terminal.d)])
     );
     b.table(M, 156, SW - M * 2, [240, 190, 100, 140, 190, 116, 116, 60], rows.slice(0, 15), { head: true, size: 12, rowH: Math.min(34, 420 / Math.max(1, rows.length)) });
@@ -4246,7 +4269,7 @@ function renderAI() {
       const n = nearestFacilities(p);
       return {
         이름: projName(p), 시도: p.sido, 시군구: p.sgg, 주소: p.address, 답사일: p.surveyDate, 건축연도: p.builtYear,
-        시장층: p.marketFloors, 아파트층: p.aptFloors, 전체층: p.totalFloors, 주차장: p.parking ? '있음' : '없음',
+        지하층: p.basementFloors, 시장층: p.marketFloors, 아파트층: p.aptFloors, 지상전체층: p.totalFloors, 주차장: p.parking ? '있음' : '없음',
         결합유형: p.relation, 상태: p.status, 태그: (p.tags || []).join('/'),
         현재역m: n.station ? Math.round(n.station.d) : null, 과거역m: n.oldstation ? Math.round(n.oldstation.d) : null,
         터미널m: n.terminal ? Math.round(n.terminal.d) : null, 시장m: n.market ? Math.round(n.market.d) : null,
@@ -4339,7 +4362,7 @@ function infoTable(p, near) {
     ['소재지', [p.sido, p.sgg, p.address].filter(Boolean).join(' ')],
     ['좌표', p.lat != null ? p.lat.toFixed(5) + ', ' + p.lng.toFixed(5) : ''],
     ['답사일', p.surveyDate], ['건축연도', p.builtYear], ['리모델링·증축', p.remodel],
-    ['층수 (시장 / 아파트 / 전체)', [p.marketFloors, p.aptFloors, p.totalFloors].map(v => v == null ? '?' : v).join(' / ')],
+    ['층 구성', floorText(p)],
     ['주차장', (p.parking ? '있음' : '없음') + (p.parkingType ? ' · ' + p.parkingType : '')],
     ['시장–주거 관계', p.relation], ['현재 상태', p.status],
     ['인접 철도역', (p.nearStation || '') + (near.station ? ` (${fmtKm(near.station.d)})` : '')],
@@ -4369,7 +4392,7 @@ async function buildReport(list) {
       </div>` : ''}
       <table style="margin-top:12px"><tr><th>사례</th><th>소재지</th><th>답사일</th><th>층수</th><th>현재역</th><th>과거역</th></tr>
       ${data.map(d => `<tr><td>${esc(projName(d.p))}</td><td>${esc([d.p.sido, d.p.sgg].filter(Boolean).join(' '))}</td><td>${esc(d.p.surveyDate || '')}</td>
-        <td>${d.p.marketFloors || '?'}+${d.p.aptFloors || '?'}</td><td>${fmtKm(d.near.station && d.near.station.d)}</td><td>${fmtKm(d.near.oldstation && d.near.oldstation.d)}</td></tr>`).join('')}</table>
+        <td>${esc(floorShort(d.p))}</td><td>${fmtKm(d.near.station && d.near.station.d)}</td><td>${fmtKm(d.near.oldstation && d.near.oldstation.d)}</td></tr>`).join('')}</table>
     </div>` +
     data.map(d => `<div class="prj">
       <h1>${esc(projName(d.p))}</h1>

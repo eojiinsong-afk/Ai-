@@ -402,7 +402,7 @@ async function composeDeck(ps, picked) {
         ['답사일', p.surveyDate || '—'],
         ['건축연도', p.builtYear == null ? '—' : String(p.builtYear)],
         ['리모델링·증축', p.remodel || '—'],
-        ['층수 (시장/아파트/전체)', [p.marketFloors, p.aptFloors, p.totalFloors].map(v => v == null ? '?' : v).join(' / ')],
+        ['층 구성', floorText(p)],
         ['주차장', (p.parking ? '있음' : '없음') + (p.parkingType ? ' · ' + p.parkingType : '')],
         ['시장–주거 관계', p.relation || '—'],
         ['현재 상태', p.status || '—'],
@@ -483,9 +483,9 @@ async function composeDeck(ps, picked) {
   if (on('compare') && ps.length > 1) {
     const b = slideBuilder();
     b.head('사례 비교', `${ps.length}개 사례를 같은 기준으로`);
-    const rows = [['사례', '지역', '건축', '시장/아파트층', '결합유형', '현재역', '과거역', '터미널']].concat(
+    const rows = [['사례', '지역', '건축', '지하/시장＋주거', '결합유형', '현재역', '과거역', '터미널']].concat(
       data.map(d => [projName(d.p), [d.p.sido, d.p.sgg].filter(Boolean).join(' '), d.p.builtYear == null ? '—' : String(d.p.builtYear),
-      `${d.p.marketFloors == null ? '?' : d.p.marketFloors}+${d.p.aptFloors == null ? '?' : d.p.aptFloors}`,
+      floorShort(d.p),
       d.p.relation || '—', fmtKm(d.near.station && d.near.station.d), fmtKm(d.near.oldstation && d.near.oldstation.d), fmtKm(d.near.terminal && d.near.terminal.d)])
     );
     b.table(M, 156, SW - M * 2, [240, 190, 100, 140, 190, 116, 116, 60], rows.slice(0, 15), { head: true, size: 12, rowH: Math.min(34, 420 / Math.max(1, rows.length)) });

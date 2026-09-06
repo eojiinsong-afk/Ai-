@@ -129,7 +129,7 @@ function renderAI() {
       const n = nearestFacilities(p);
       return {
         이름: projName(p), 시도: p.sido, 시군구: p.sgg, 주소: p.address, 답사일: p.surveyDate, 건축연도: p.builtYear,
-        시장층: p.marketFloors, 아파트층: p.aptFloors, 전체층: p.totalFloors, 주차장: p.parking ? '있음' : '없음',
+        지하층: p.basementFloors, 시장층: p.marketFloors, 아파트층: p.aptFloors, 지상전체층: p.totalFloors, 주차장: p.parking ? '있음' : '없음',
         결합유형: p.relation, 상태: p.status, 태그: (p.tags || []).join('/'),
         현재역m: n.station ? Math.round(n.station.d) : null, 과거역m: n.oldstation ? Math.round(n.oldstation.d) : null,
         터미널m: n.terminal ? Math.round(n.terminal.d) : null, 시장m: n.market ? Math.round(n.market.d) : null,
@@ -222,7 +222,7 @@ function infoTable(p, near) {
     ['소재지', [p.sido, p.sgg, p.address].filter(Boolean).join(' ')],
     ['좌표', p.lat != null ? p.lat.toFixed(5) + ', ' + p.lng.toFixed(5) : ''],
     ['답사일', p.surveyDate], ['건축연도', p.builtYear], ['리모델링·증축', p.remodel],
-    ['층수 (시장 / 아파트 / 전체)', [p.marketFloors, p.aptFloors, p.totalFloors].map(v => v == null ? '?' : v).join(' / ')],
+    ['층 구성', floorText(p)],
     ['주차장', (p.parking ? '있음' : '없음') + (p.parkingType ? ' · ' + p.parkingType : '')],
     ['시장–주거 관계', p.relation], ['현재 상태', p.status],
     ['인접 철도역', (p.nearStation || '') + (near.station ? ` (${fmtKm(near.station.d)})` : '')],
@@ -252,7 +252,7 @@ async function buildReport(list) {
       </div>` : ''}
       <table style="margin-top:12px"><tr><th>사례</th><th>소재지</th><th>답사일</th><th>층수</th><th>현재역</th><th>과거역</th></tr>
       ${data.map(d => `<tr><td>${esc(projName(d.p))}</td><td>${esc([d.p.sido, d.p.sgg].filter(Boolean).join(' '))}</td><td>${esc(d.p.surveyDate || '')}</td>
-        <td>${d.p.marketFloors || '?'}+${d.p.aptFloors || '?'}</td><td>${fmtKm(d.near.station && d.near.station.d)}</td><td>${fmtKm(d.near.oldstation && d.near.oldstation.d)}</td></tr>`).join('')}</table>
+        <td>${esc(floorShort(d.p))}</td><td>${fmtKm(d.near.station && d.near.station.d)}</td><td>${fmtKm(d.near.oldstation && d.near.oldstation.d)}</td></tr>`).join('')}</table>
     </div>` +
     data.map(d => `<div class="prj">
       <h1>${esc(projName(d.p))}</h1>
