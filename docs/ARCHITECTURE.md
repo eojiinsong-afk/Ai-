@@ -51,6 +51,7 @@ S.store.del(coll, id)                      // 삭제
 - **좌표 → 행정구역**: 시군구 폴리곤에 대한 점-다각형 판정(`MAP.reverse`). 경계선 근처에서는 어긋날 수 있어 사용자가 고칠 수 있게 해 둡니다.
 - **거리**: 점끼리는 `haversine`, 점–노선은 `pointToPathDist`(국지 평면 근사 + 선분 투영). `nearestFacilities` 가 종류별 최근접 하나씩을 돌려주며, 노선(`rail`/`oldrail`)도 같은 표에 함께 들어갑니다.
 - **노선 그리기**: `MAP.startLine(kind)` → 지도 클릭이 `MAP.draft` 에 점을 쌓음 → 「완료」가 `lineForm()` 을 열어 이름·연도·출처를 받아 저장. 편집은 같은 문서에 `path` 만 다시 씁니다.
+- **마커 쪽지**: `bindTip()` 이 `#mapsvg` 에 델리게이트로 한 번만 붙습니다. `drawMarkers` 가 매 변환마다 `#gMk` 의 내용을 갈아치우지만 `#gMk` 자체는 남으므로 다시 붙일 필요가 없습니다. 문구는 마커를 그릴 때 `data-tip` 에 넣어 둡니다(`prjTip`/`facTip`). 마우스일 때만 뜨고, 드래그 중에는 감춥니다.
 - **정적 지도**: `staticMapSvg()` 가 CSS 변수 대신 리터럴 색(`MAPPAL`)으로 독립 SVG 를 만들고, `svgToJpeg()` 가 캔버스로 굽습니다. 외부 참조가 없는 SVG 라 캔버스가 오염되지 않아 `toDataURL` 이 됩니다. 보고서·PDF 슬라이드·PPTX 가 모두 이 하나를 씁니다.
 
 ## 입면 보정 (`src/elevation.js`)
@@ -75,6 +76,13 @@ Artifact 의 `sample` capability 로 Claude 에게 묻습니다. 프롬프트에
 - 표본이 적으면 한계를 먼저 말할 것
 
 로컬 개발 환경에서는 이 기능이 꺼지고 안내 문구가 대신 보입니다.
+
+## 사진 다중 선택 (`src/projects.js`)
+
+`PSEL = {on, ids, last}` 하나로 관리합니다. 선택을 누를 때마다 상세 화면 전체를 다시 그리면 스크롤이 튀므로,
+`refreshGallery()` 가 카드의 클래스·체크표시·분류 딱지와 작업 막대만 바꿔 끼웁니다.
+일괄 수정(`bulkPatch`)은 **문서를 통째로 되쓰는** 규칙을 그대로 지킵니다 — 이 버전이 모르는 필드도 남습니다.
+태그는 덮어쓰지 않고 합칩니다. Shift 누른 채 누르면 `S.photos` 의 순서를 기준으로 두 지점 사이를 모두 고릅니다.
 
 ## 공간 데이터 가져오기 (`src/import.js`)
 

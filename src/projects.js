@@ -433,6 +433,7 @@ async function ingestPhoto(file, pid, extra) {
 
 /* ---------- detail ---------- */
 async function openDetail(id) {
+  if (S.cur !== id) { PSEL.on = false; PSEL.ids.clear(); PSEL.last = null; }
   S.cur = id;
   const p = S.projects.find(x => x.id === id);
   if (!p) return;
@@ -476,9 +477,11 @@ function renderDetail() {
       <div class="formgrid">${custom.map(f => inputFor(p, f)).join('')}</div></div>` : ''}
     <div class="sec">
       <div class="sech"><h3>사진 · ${S.photos.length}</h3><div class="ln"></div>
+        ${S.photos.length ? `<button class="btn sm" id="galSel">${PSEL.on ? '선택 끝내기' : '선택'}</button>` : ''}
         <select id="upCat" style="width:auto;font-size:12px;padding:3px 6px">${PHOTO_CATS.map(c => `<option>${c}</option>`).join('')}</select>
         <label class="btn sm pri" style="margin:0">＋ 사진 추가<input type="file" id="upFile" accept="image/*" multiple hidden></label></div>
-      ${S.photos.length ? `<div class="gallery" id="gal">${S.photos.map(ph => photoCard(ph)).join('')}</div>`
+      ${PSEL.on ? bulkBar() : ''}
+      ${S.photos.length ? `<div class="gallery${PSEL.on ? ' picking' : ''}" id="gal">${S.photos.map(ph => photoCard(ph)).join('')}</div>`
         : '<p class="hint">건물 전체·입면·시장 내부·계단·간판 등 범주를 나눠 올려두면 나중에 비교와 발표자료 구성이 쉬워집니다.</p><div class="gallery" id="gal" hidden></div>'}
     </div>
   </div>
@@ -539,13 +542,121 @@ function renderDetail() {
   };
   bindGallery();
 }
+/* ---------- 갤러리 다중 선택 ----------
+   사진을 한 장씩 열어 분류를 고치는 대신, 여러 장을 골라 한 번에 바꾼다.
+   답사 한 번에 수십 장을 찍고 돌아오므로 이쪽이 실제 작업 흐름에 맞다. */
+const PSEL = { on: false, ids: new Set(), last: null };
 function photoCard(ph) {
-  return `<div class="ph" data-ph="${ph.id}"><img src="${ph.thumb}" alt="${esc(ph.caption || ph.cat)}" loading="lazy">
+  const sel = PSEL.ids.has(ph.id);
+  return `<div class="ph${sel ? ' selq' : ''}" data-ph="${ph.id}"><img src="${ph.thumb}" alt="${esc(ph.caption || ph.cat)}" loading="lazy">
+    ${PSEL.on ? `<span class="pick">${sel ? '✓' : ''}</span>` : ''}
     <span class="badge">${esc(ph.kind === 'elevation' ? '입면' : ph.cat)}</span>
     ${ph.caption ? `<span class="cap">${esc(ph.caption)}</span>` : ''}</div>`;
 }
+const FACES = ['동', '서', '남', '북', '북동', '북서', '남동', '남서'];
+function bulkBar() {
+  const n = PSEL.ids.size;
+  return `<div class="bulkbar">
+    <b>${n ? `${n}장 선택됨` : '사진을 눌러 고르세요'}</b>
+    <button class="btn sm" id="bkAll">전체 선택</button>
+    <button class="btn sm" id="bkNone" ${n ? '' : 'disabled'}>선택 해제</button>
+    <span class="spacer"></span>
+    <select id="bkCat" ${n ? '' : 'disabled'}><option value="">카테고리 바꾸기…</option>${PHOTO_CATS.map(c => `<option>${esc(c)}</option>`).join('')}</select>
+    <select id="bkFace" ${n ? '' : 'disabled'}><option value="">입면 방향…</option><option value="-">방향 지우기</option>${FACES.map(d => `<option>${d}</option>`).join('')}</select>
+    <button class="btn sm" id="bkTag" ${n ? '' : 'disabled'}>태그 추가</button>
+    <button class="btn sm" id="bkDate" ${n ? '' : 'disabled'}>촬영일 지정</button>
+    <button class="btn sm dgr" id="bkDel" ${n ? '' : 'disabled'}>삭제</button>
+  </div>`;
+}
 function bindGallery() {
-  $$('#gal [data-ph]').forEach(el => el.onclick = () => photoModal(el.dataset.ph));
+  $$('#gal [data-ph]').forEach(el => el.onclick = e => {
+    const id = el.dataset.ph;
+    if (!PSEL.on) return photoModal(id);
+    const order = S.photos.map(x => x.id);
+    if (e.shiftKey && PSEL.last && PSEL.last !== id) {
+      // 앞서 고른 것과의 사이를 통째로 — 연속 촬영한 구간을 고르는 데 쓴다
+      const a = order.indexOf(PSEL.last), b = order.indexOf(id);
+      if (a >= 0 && b >= 0) order.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(x => PSEL.ids.add(x));
+    } else {
+      PSEL.ids.has(id) ? PSEL.ids.delete(id) : PSEL.ids.add(id);
+    }
+    PSEL.last = id;
+    refreshGallery();
+  });
+  const sel = $('#galSel');
+  if (sel) sel.onclick = () => {
+    PSEL.on = !PSEL.on;
+    if (!PSEL.on) { PSEL.ids.clear(); PSEL.last = null; }
+    renderDetail();
+  };
+  if (!PSEL.on) return;
+  const pick = () => Array.from(PSEL.ids).map(id => S.photos.find(x => x.id === id)).filter(Boolean);
+  $('#bkAll').onclick = () => { S.photos.forEach(ph => PSEL.ids.add(ph.id)); refreshGallery(); };
+  $('#bkNone').onclick = () => { PSEL.ids.clear(); PSEL.last = null; refreshGallery(); };
+  $('#bkCat').onchange = e => { if (e.target.value) bulkPatch(pick(), { cat: e.target.value }, `카테고리를 «${e.target.value}» 로`); };
+  $('#bkFace').onchange = e => {
+    if (!e.target.value) return;
+    const v = e.target.value === '-' ? '' : e.target.value;
+    bulkPatch(pick(), { face: v }, v ? `입면 방향을 «${v}» 으로` : '입면 방향을 비움');
+  };
+  $('#bkTag').onclick = () => {
+    openModal(`<div class="mh"><h3>태그 추가 · ${PSEL.ids.size}장</h3><button class="x">×</button></div>
+      <div class="mb"><label class="fld"><span>태그 <span class="hint">쉼표로 구분 — 기존 태그에 더해집니다</span></span>
+        <input type="text" id="bt_v" placeholder="예) 정면, 재촬영필요"></label></div>
+      <div class="mf"><button class="btn pri" id="bt_ok">추가</button></div>`);
+    $('#bt_ok').onclick = async () => {
+      const add = $('#bt_v').value.split(',').map(t => t.trim()).filter(Boolean);
+      if (!add.length) return toast('태그를 입력하세요');
+      closeModal();
+      const list = pick();
+      for (const ph of list) ph.tags = Array.from(new Set((ph.tags || []).concat(add)));
+      await bulkPatch(list, null, `태그 «${add.join(', ')}» 를`);
+    };
+  };
+  $('#bkDate').onclick = () => {
+    openModal(`<div class="mh"><h3>촬영일 지정 · ${PSEL.ids.size}장</h3><button class="x">×</button></div>
+      <div class="mb"><label class="fld"><span>촬영일</span><input type="date" id="bd_v" value="${today()}"></label>
+      <p class="hint" style="margin-top:8px">같은 날 답사한 사진의 날짜를 한 번에 맞출 때 씁니다.</p></div>
+      <div class="mf"><button class="btn pri" id="bd_ok">적용</button></div>`);
+    $('#bd_ok').onclick = () => { const v = $('#bd_v').value; closeModal(); bulkPatch(pick(), { date: v }, `촬영일을 ${v} 로`); };
+  };
+  $('#bkDel').onclick = async () => {
+    const list = pick();
+    if (!await confirmBox('사진 삭제', `<p>선택한 <b class="mono">${list.length}</b>장을 삭제합니다. 원본까지 지워지며 되돌릴 수 없습니다.</p>
+      <p class="hint">${list.slice(0, 6).map(ph => esc(ph.cat)).join(' · ')}${list.length > 6 ? ' …' : ''}</p>`, `${list.length}장 삭제`)) return;
+    for (const ph of list) { await S.store.del('photos', ph.id); await S.store.del('photofull', ph.id); }
+    const gone = new Set(list.map(ph => ph.id));
+    S.photos = S.photos.filter(x => !gone.has(x.id));
+    PSEL.ids.clear(); PSEL.last = null;
+    const p = S.projects.find(x => x.id === S.cur);
+    if (p) { p.photoCount = S.photos.length; await saveProject(p); }
+    renderDetail(); toast(`${list.length}장을 삭제했습니다`);
+  };
+}
+/** 고른 사진에 같은 값을 적용한다. 문서는 통째로 되쓰므로 이 버전이 모르는 필드도 남는다. */
+async function bulkPatch(list, patch, what) {
+  if (!list.length) return;
+  for (const ph of list) {
+    if (patch) Object.assign(ph, patch);
+    const d = Object.assign({}, ph); delete d.id;
+    await S.store.put('photos', ph.id, d);
+  }
+  refreshGallery();
+  toast(`${list.length}장의 ${what} 바꿨습니다`);
+}
+/** 선택 상태만 다시 그린다 — 전체 재렌더보다 가볍고 스크롤이 튀지 않는다 */
+function refreshGallery() {
+  const gal = $('#gal'); if (!gal) return;
+  $$('#gal [data-ph]').forEach(el => {
+    const ph = S.photos.find(x => x.id === el.dataset.ph);
+    const sel = PSEL.ids.has(el.dataset.ph);
+    el.classList.toggle('selq', sel);
+    const c = el.querySelector('.pick'); if (c) c.textContent = sel ? '✓' : '';
+    const b = el.querySelector('.badge');
+    if (b && ph) b.textContent = ph.kind === 'elevation' ? '입면' : ph.cat;   // 분류를 바꾸면 딱지도 함께
+  });
+  const bar = $('.bulkbar');
+  if (bar) { bar.outerHTML = bulkBar(); bindGallery(); }
 }
 async function photoModal(id) {
   const ph = S.photos.find(x => x.id === id); if (!ph) return;

@@ -42,7 +42,7 @@ function pointInRings(lng, lat, rings) {
 const MAP = {
   svg: null, s: 1, tx: 0, ty: 0, W: 0, H: 0,
   sido: [], sgg: [], picking: false, pickCb: null, radius: 0,
-  drawing: null, draft: [],
+  drawing: null, draft: [], dragging: false,
   layers: { apt: 1, station: 1, oldstation: 1, terminal: 1, market: 1, rail: 1, oldrail: 1 },
   init() {
     const G = window.KRGEO;
@@ -140,7 +140,7 @@ const MAP = {
       const lines = S.facilities.filter(f => f.kind === kind && Array.isArray(f.path) && f.path.length > 1);
       for (const f of lines) {
         const d = f.path.map(p => { const s = this.toScreen(p[0], p[1]); return s[0].toFixed(1) + ' ' + s[1].toFixed(1); }).join('L');
-        out.push(`<g class="mk" data-fac="${f.id}"><path d="M${d}" fill="none" stroke="${FAC_KINDS[kind].color}" stroke-width="${kind === 'rail' ? 2 : 1.6}" ${kind === 'oldrail' ? 'stroke-dasharray="6 4"' : ''} opacity=".8"/>
+        out.push(`<g class="mk" data-fac="${f.id}" data-tip="${esc(facTip(f))}"><path d="M${d}" fill="none" stroke="${FAC_KINDS[kind].color}" stroke-width="${kind === 'rail' ? 2 : 1.6}" ${kind === 'oldrail' ? 'stroke-dasharray="6 4"' : ''} opacity=".8"/>
           <path class="mk-hit" d="M${d}" fill="none" stroke-width="12"/></g>`);
         // 노선 이름은 충분히 확대했을 때만
         if (this.s > 12000 && f.name) {
@@ -176,7 +176,7 @@ const MAP = {
       if (f.lat == null || f.lng == null) continue;
       const [x, y] = this.toScreen(f.lat, f.lng);
       if (x < -20 || y < -20 || x > this.W + 20 || y > this.H + 20) continue;
-      out.push(`<g class="mk" data-fac="${f.id}">${this.markerShape(f.kind, x.toFixed(1), y.toFixed(1))}<circle class="mk-hit" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="13"/></g>`);
+      out.push(`<g class="mk" data-fac="${f.id}" data-tip="${esc(facTip(f))}">${this.markerShape(f.kind, x.toFixed(1), y.toFixed(1))}<circle class="mk-hit" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="13"/></g>`);
     }
     // 프로젝트
     if (this.layers.apt) {
@@ -186,7 +186,7 @@ const MAP = {
         const [x, y] = this.toScreen(p.lat, p.lng);
         if (x < -30 || y < -30 || x > this.W + 30 || y > this.H + 30) continue;
         const act = S.sel.has(p.id) || S.cur === p.id;
-        out.push(`<g class="mk" data-prj="${p.id}">${act ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="12" fill="color-mix(in srgb,var(--signal) 18%,transparent)"/>` : ''}${this.markerShape('apt', x.toFixed(1), y.toFixed(1), act)}${showName ? `<text x="${x.toFixed(1)}" y="${(y - 10).toFixed(1)}" class="geolabel" style="fill:var(--ink);font-size:11px;font-weight:600">${esc(projName(p))}</text>` : ''}<circle class="mk-hit" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="14"/></g>`);
+        out.push(`<g class="mk" data-prj="${p.id}" data-tip="${esc(prjTip(p))}">${act ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="12" fill="color-mix(in srgb,var(--signal) 18%,transparent)"/>` : ''}${this.markerShape('apt', x.toFixed(1), y.toFixed(1), act)}${showName ? `<text x="${x.toFixed(1)}" y="${(y - 10).toFixed(1)}" class="geolabel" style="fill:var(--ink);font-size:11px;font-weight:600">${esc(projName(p))}</text>` : ''}<circle class="mk-hit" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="14"/></g>`);
       }
     }
     $('#gMk').innerHTML = out.join('');
@@ -263,11 +263,36 @@ const MAP = {
     this.tx = this.W / 2 - ((x0 + x1) / 2) * this.s; this.ty = this.H / 2 - ((y0 + y1) / 2) * this.s;
     this.apply();
   },
+  /* ---------- 커서를 올렸을 때 이름 보여주기 ----------
+     마커가 작아서 클릭해 보기 전에는 무엇인지 알 수 없었다. 전국 축척에서
+     이름을 다 그리면 겹쳐서 못 읽으므로, 커서를 따라다니는 쪽지로 보여준다. */
+  bindTip() {
+    const el = this.svg, tip = $('#maptip');
+    const wrap = () => $('#mapwrap').getBoundingClientRect();
+    let cur = null;
+    const hide = () => { cur = null; tip.classList.remove('on'); };
+    el.addEventListener('pointermove', e => {
+      if (e.pointerType !== 'mouse' || this.dragging) return hide();
+      const g = e.target.closest && e.target.closest('.mk');
+      const t = g && g.dataset.tip;
+      if (!t) return hide();
+      if (t !== cur) { cur = t; tip.innerHTML = t; tip.classList.add('on'); }
+      const r = wrap();
+      const w = tip.offsetWidth, h = tip.offsetHeight;
+      let x = e.clientX - r.left + 14, y = e.clientY - r.top - h - 12;
+      if (x + w > r.width - 6) x = e.clientX - r.left - w - 14;   // 오른쪽 끝에서는 왼쪽에
+      if (y < 6) y = e.clientY - r.top + 18;                       // 위쪽 끝에서는 아래에
+      tip.style.transform = `translate(${x.toFixed(0)}px,${y.toFixed(0)}px)`;
+    });
+    el.addEventListener('pointerleave', hide);
+    el.addEventListener('pointerdown', hide);
+  },
   bind() {
     const el = this.svg; const ptrs = new Map(); let moved = 0, lastDist = 0, lastMid = null;
+    this.bindTip();
     el.addEventListener('pointerdown', e => {
       el.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); moved = 0;
-      if (ptrs.size === 1) el.classList.add('drag');
+      if (ptrs.size === 1) { el.classList.add('drag'); this.dragging = true; }
     });
     el.addEventListener('pointermove', e => {
       if (!ptrs.has(e.pointerId)) return;
@@ -290,6 +315,7 @@ const MAP = {
     });
     const up = e => {
       el.classList.remove('drag'); ptrs.delete(e.pointerId);
+      if (!ptrs.size) this.dragging = false;
       if (ptrs.size < 2) { lastDist = 0; lastMid = null; }
       if (moved < 6 && ptrs.size === 0) {
         const r = el.getBoundingClientRect();
@@ -381,6 +407,23 @@ const MAP = {
     canvasSvg.innerHTML = out;
   }
 };
+
+/** 마커 쪽지 문구 — 이름이 먼저, 종류·지역은 작게 */
+function prjTip(p) {
+  const sub = [p.sido, p.sgg].filter(Boolean).join(' ');
+  const bits = [];
+  if (p.marketName) bits.push(p.marketName);
+  if (p.builtYear) bits.push(p.builtYear + '년');
+  if (p.marketFloors != null || p.aptFloors != null) bits.push(`${p.marketFloors == null ? '?' : p.marketFloors}＋${p.aptFloors == null ? '?' : p.aptFloors}층`);
+  return `<b>${esc(projName(p))}</b>` + (sub ? `<i>${esc(sub)}</i>` : '') + (bits.length ? `<i>${esc(bits.join(' · '))}</i>` : '');
+}
+function facTip(f) {
+  const k = FAC_KINDS[f.kind];
+  const bits = [k.label];
+  if (f.year) bits.push(f.year);
+  if (Array.isArray(f.path) && f.path.length > 1) bits.push(fmtKm(MAP.pathLength(f.path)));
+  return `<b>${esc(f.name || k.label)}</b><i>${esc(bits.join(' · '))}</i>`;
+}
 
 /** 프로젝트 기준 종류별 최근접 참조 지점 */
 function nearestFacilities(p) {
