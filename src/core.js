@@ -6,7 +6,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 const SCHEMA_VERSION = 2;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -319,8 +319,10 @@ async function snapshotProjects(fromVersion) {
    "rate limit exceeded" 처럼 두 낱말이 겹치는 문구가 흔하므로 재시도 쪽을 먼저 본다.
    어느 쪽도 아닌 처음 보는 오류는 일단 다시 시도한다 — 한 번 더 해 보는 값이
    답사 사진 한 장을 잃는 값보다 싸다. */
-const RETRY_PUT = /rate|429|too many|timeout|timed ?out|network|unavailable|busy|temporar|try again|conflict|abort|failed to fetch|internal|502|503|504/i;
-const FATAL_PUT = /too large|payload|document size|quota|storage full|invalid|permission|denied|not.?allowed|unauthor|forbidden|401|403/i;
+/* 앞쪽은 저장소가 실제로 내는 코드 이름(계약서의 StoreErrorCode), 뒤쪽은
+   IndexedDB 처럼 코드 대신 문장을 주는 경우를 위한 낱말 규칙이다. */
+const RETRY_PUT = /resource_exhausted|unavailable|rate|429|too many|timeout|timed ?out|network|busy|temporar|try again|conflict|abort|failed to fetch|internal|502|503|504/i;
+const FATAL_PUT = /invalid_argument|quota_exceeded|revoked|not_granted|capability_(disabled|removed)|transform_error|too large|payload|document size|quota|storage full|invalid|permission|denied|not.?allowed|unauthor|forbidden|401|403/i;
 async function putRetry(coll, id, data, tries) {
   let last = null;
   const n = tries || 4;
@@ -334,6 +336,22 @@ async function putRetry(coll, id, data, tries) {
     }
   }
   throw last;
+}
+
+/* ---------- 저장 용량 ----------
+   아티팩트 하나의 데이터베이스는 문서를 최대 5,000개까지 담고, 문서 하나는 256KiB 까지다.
+   사진 한 장이 문서 두 개(메타+원본)를 쓰므로 사진 장수가 사실상 이 한도를 정한다. */
+const DOC_CAP = 5000;
+async function storageUsage() {
+  const [photos, notes] = await Promise.all([S.store.list('photos'), S.store.list('notes')]);
+  const docs = photos.length * 2 + notes.length + S.projects.length + S.trash.length
+    + S.facilities.length + S.fields.length + 2;      // meta/app + 스냅샷 여유
+  return {
+    photos: photos.length, notes: notes.length, docs, cap: DOC_CAP,
+    left: Math.max(0, DOC_CAP - docs),
+    photosLeft: Math.max(0, Math.floor((DOC_CAP - docs) / 2)),
+    bytes: photos.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0)
+  };
 }
 
 /* ---------- 진행 표시 ----------

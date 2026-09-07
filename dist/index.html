@@ -490,7 +490,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 const SCHEMA_VERSION = 2;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -803,8 +803,10 @@ async function snapshotProjects(fromVersion) {
    "rate limit exceeded" 처럼 두 낱말이 겹치는 문구가 흔하므로 재시도 쪽을 먼저 본다.
    어느 쪽도 아닌 처음 보는 오류는 일단 다시 시도한다 — 한 번 더 해 보는 값이
    답사 사진 한 장을 잃는 값보다 싸다. */
-const RETRY_PUT = /rate|429|too many|timeout|timed ?out|network|unavailable|busy|temporar|try again|conflict|abort|failed to fetch|internal|502|503|504/i;
-const FATAL_PUT = /too large|payload|document size|quota|storage full|invalid|permission|denied|not.?allowed|unauthor|forbidden|401|403/i;
+/* 앞쪽은 저장소가 실제로 내는 코드 이름(계약서의 StoreErrorCode), 뒤쪽은
+   IndexedDB 처럼 코드 대신 문장을 주는 경우를 위한 낱말 규칙이다. */
+const RETRY_PUT = /resource_exhausted|unavailable|rate|429|too many|timeout|timed ?out|network|busy|temporar|try again|conflict|abort|failed to fetch|internal|502|503|504/i;
+const FATAL_PUT = /invalid_argument|quota_exceeded|revoked|not_granted|capability_(disabled|removed)|transform_error|too large|payload|document size|quota|storage full|invalid|permission|denied|not.?allowed|unauthor|forbidden|401|403/i;
 async function putRetry(coll, id, data, tries) {
   let last = null;
   const n = tries || 4;
@@ -818,6 +820,22 @@ async function putRetry(coll, id, data, tries) {
     }
   }
   throw last;
+}
+
+/* ---------- 저장 용량 ----------
+   아티팩트 하나의 데이터베이스는 문서를 최대 5,000개까지 담고, 문서 하나는 256KiB 까지다.
+   사진 한 장이 문서 두 개(메타+원본)를 쓰므로 사진 장수가 사실상 이 한도를 정한다. */
+const DOC_CAP = 5000;
+async function storageUsage() {
+  const [photos, notes] = await Promise.all([S.store.list('photos'), S.store.list('notes')]);
+  const docs = photos.length * 2 + notes.length + S.projects.length + S.trash.length
+    + S.facilities.length + S.fields.length + 2;      // meta/app + 스냅샷 여유
+  return {
+    photos: photos.length, notes: notes.length, docs, cap: DOC_CAP,
+    left: Math.max(0, DOC_CAP - docs),
+    photosLeft: Math.max(0, Math.floor((DOC_CAP - docs) / 2)),
+    bytes: photos.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0)
+  };
 }
 
 /* ---------- 진행 표시 ----------
@@ -2003,11 +2021,10 @@ async function photoFailReport(okN, fail, p, cat) {
   // 저장 공간이 원인일 수 있으므로 지금 얼마나 쓰고 있는지 함께 보여준다
   let usage = '';
   try {
-    const [ph, nt] = await Promise.all([S.store.list('photos'), S.store.list('notes')]);
-    const docs = ph.length * 2 + nt.length + S.projects.length + S.trash.length + S.facilities.length + S.fields.length + 2;
-    usage = `<p class="hint" style="margin-top:8px">지금 저장소에 문서 약 <b class="mono">${docs}</b>개를 쓰고 있습니다
-      (사진 ${ph.length}장 = 문서 ${ph.length * 2}개). 아티팩트 한 개의 한도는 약 5,000개입니다.
-      ${docs > 4200 ? '<b style="color:var(--warn)">한도에 가까워졌습니다 — 백업을 내려받고 오래된 사진을 정리해 주세요.</b>' : ''}</p>`;
+    const u = await storageUsage();
+    usage = `<p class="hint" style="margin-top:8px">문서 <b class="mono">${u.docs.toLocaleString()} / ${u.cap.toLocaleString()}</b> 사용 중
+      (사진 ${u.photos}장 = 문서 ${u.photos * 2}개). 지금 상태에서 약 <b class="mono">${u.photosLeft.toLocaleString()}</b>장을 더 넣을 수 있습니다.
+      ${u.docs / u.cap > 0.85 ? '<b style="color:var(--warn)">한도에 가까워졌습니다 — 백업을 내려받고 오래된 사진을 정리해 주세요.</b>' : ''}</p>`;
   } catch (e) { }
   openModal(`<div class="mh"><h3>사진 ${okN}장 저장 · ${fail.length}장 실패</h3><button class="x">×</button></div>
     <div class="mb">
@@ -4536,6 +4553,7 @@ const FIELD_TYPES = { text: '텍스트', number: '숫자', date: '날짜', bool:
 async function renderSettings() {
   const photos = await S.store.list('photos');
   const batches = importBatches();
+  const use = await storageUsage();
   const totalBytes = photos.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0);
   const dup = {}; photos.forEach(p => { const k = (p.w || 0) + 'x' + (p.h || 0) + '|' + (p.thumb || '').slice(-64); (dup[k] = dup[k] || []).push(p); });
   const dups = Object.values(dup).filter(a => a.length > 1);
@@ -4565,12 +4583,19 @@ async function renderSettings() {
           <td><button class="btn sm dgr" data-ub="${esc(b.batch)}">되돌리기</button></td></tr>`).join('')}</tbody></table>`
       : '<p class="hint">CSV · GeoJSON · Shapefile(.shp+.dbf) 또는 이들을 담은 ZIP 을 올리면 역·터미널·시장·철도 노선으로 들어옵니다. 좌표계는 .prj 에서 읽거나 직접 고를 수 있고, 구 좌표계(Bessel)는 데이텀 변환까지 합니다.</p>'}
       <p class="hint" style="margin-top:8px">한 묶음을 되돌리면 그 파일로 들여온 항목만 지워집니다. 직접 입력한 지점은 그대로 남습니다.</p></div>
-    <div class="card pad"><div class="sech"><h3>저장 공간</h3><div class="ln"></div></div>
-      <div class="statrow"><div class="stat"><b>${photos.length}</b><span>사진</span></div>
-        <div class="stat"><b>${bytes(totalBytes)}</b><span>이미지 용량</span></div>
-        <div class="stat"><b>${S.projects.length}</b><span>프로젝트</span></div></div>
+    <div class="card pad"><div class="sech"><h3>저장 공간</h3><div class="ln"></div>
+        <span class="hint">문서 ${use.docs.toLocaleString()} / ${use.cap.toLocaleString()}</span></div>
+      <div class="statrow"><div class="stat"><b>${photos.length}</b><span>저장된 사진</span></div>
+        <div class="stat"><b>${use.photosLeft.toLocaleString()}</b><span>더 넣을 수 있는 사진</span></div>
+        <div class="stat"><b>${bytes(totalBytes)}</b><span>이미지 용량</span></div></div>
+      <div class="pbar" style="height:6px;border-radius:3px;background:var(--surface3);margin:12px 0 6px;overflow:hidden">
+        <i style="display:block;height:100%;border-radius:3px;width:${Math.min(100, use.docs / use.cap * 100).toFixed(1)}%;
+          background:${use.docs / use.cap > 0.85 ? 'var(--signal)' : use.docs / use.cap > 0.6 ? 'var(--warn)' : 'var(--accent)'}"></i></div>
+      <p class="hint" style="margin:0">아티팩트 한 개의 데이터베이스는 문서 <b>5,000개</b>까지 담습니다.
+      사진 1장이 문서 2개(메타 + 원본)를 쓰므로, 지금 상태에서 <b>약 ${use.photosLeft.toLocaleString()}장</b>을 더 넣을 수 있습니다.
+      ${use.docs / use.cap > 0.85 ? '<b style="color:var(--signal)">한도에 가까워졌습니다 — 백업을 내려받고 오래된 원본을 정리하세요.</b>' : ''}</p>
       <div style="margin-top:10px">${bars(S.projects.map(p => [projName(p), p.photoCount || 0]).sort((a, b) => b[1] - a[1]).slice(0, 8), '장')}</div>
-      <p class="hint" style="margin-top:8px">${S.store && S.store.name === 'db' ? '사진은 계정 저장소에 저장되어 다른 기기에서도 열립니다. 사진 1장은 약 150–230KB로 자동 압축됩니다.' : '이 브라우저에만 저장됩니다. 정기적으로 JSON 백업을 내려받으세요.'}</p></div>
+      <p class="hint" style="margin-top:8px">${S.store && S.store.name === 'db' ? '사진은 계정 저장소에 저장되어 다른 기기에서도 열립니다. 문서 하나는 256KB까지라 사진 1장은 약 150–220KB로 자동 압축됩니다.' : '이 브라우저에만 저장됩니다. 정기적으로 JSON 백업을 내려받으세요.'}</p></div>
     <div class="card pad"><div class="sech"><h3>정리</h3><div class="ln"></div></div>
       <div class="dist"><span>중복 의심 사진</span><span class="d">${dups.reduce((a, g) => a + g.length - 1, 0)}</span></div>
       <div class="dist"><span>저해상도 사진 (900px 미만)</span><span class="d">${lowres.length}</span></div>

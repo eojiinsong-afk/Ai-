@@ -396,6 +396,7 @@ const FIELD_TYPES = { text: '텍스트', number: '숫자', date: '날짜', bool:
 async function renderSettings() {
   const photos = await S.store.list('photos');
   const batches = importBatches();
+  const use = await storageUsage();
   const totalBytes = photos.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0);
   const dup = {}; photos.forEach(p => { const k = (p.w || 0) + 'x' + (p.h || 0) + '|' + (p.thumb || '').slice(-64); (dup[k] = dup[k] || []).push(p); });
   const dups = Object.values(dup).filter(a => a.length > 1);
@@ -425,12 +426,19 @@ async function renderSettings() {
           <td><button class="btn sm dgr" data-ub="${esc(b.batch)}">되돌리기</button></td></tr>`).join('')}</tbody></table>`
       : '<p class="hint">CSV · GeoJSON · Shapefile(.shp+.dbf) 또는 이들을 담은 ZIP 을 올리면 역·터미널·시장·철도 노선으로 들어옵니다. 좌표계는 .prj 에서 읽거나 직접 고를 수 있고, 구 좌표계(Bessel)는 데이텀 변환까지 합니다.</p>'}
       <p class="hint" style="margin-top:8px">한 묶음을 되돌리면 그 파일로 들여온 항목만 지워집니다. 직접 입력한 지점은 그대로 남습니다.</p></div>
-    <div class="card pad"><div class="sech"><h3>저장 공간</h3><div class="ln"></div></div>
-      <div class="statrow"><div class="stat"><b>${photos.length}</b><span>사진</span></div>
-        <div class="stat"><b>${bytes(totalBytes)}</b><span>이미지 용량</span></div>
-        <div class="stat"><b>${S.projects.length}</b><span>프로젝트</span></div></div>
+    <div class="card pad"><div class="sech"><h3>저장 공간</h3><div class="ln"></div>
+        <span class="hint">문서 ${use.docs.toLocaleString()} / ${use.cap.toLocaleString()}</span></div>
+      <div class="statrow"><div class="stat"><b>${photos.length}</b><span>저장된 사진</span></div>
+        <div class="stat"><b>${use.photosLeft.toLocaleString()}</b><span>더 넣을 수 있는 사진</span></div>
+        <div class="stat"><b>${bytes(totalBytes)}</b><span>이미지 용량</span></div></div>
+      <div class="pbar" style="height:6px;border-radius:3px;background:var(--surface3);margin:12px 0 6px;overflow:hidden">
+        <i style="display:block;height:100%;border-radius:3px;width:${Math.min(100, use.docs / use.cap * 100).toFixed(1)}%;
+          background:${use.docs / use.cap > 0.85 ? 'var(--signal)' : use.docs / use.cap > 0.6 ? 'var(--warn)' : 'var(--accent)'}"></i></div>
+      <p class="hint" style="margin:0">아티팩트 한 개의 데이터베이스는 문서 <b>5,000개</b>까지 담습니다.
+      사진 1장이 문서 2개(메타 + 원본)를 쓰므로, 지금 상태에서 <b>약 ${use.photosLeft.toLocaleString()}장</b>을 더 넣을 수 있습니다.
+      ${use.docs / use.cap > 0.85 ? '<b style="color:var(--signal)">한도에 가까워졌습니다 — 백업을 내려받고 오래된 원본을 정리하세요.</b>' : ''}</p>
       <div style="margin-top:10px">${bars(S.projects.map(p => [projName(p), p.photoCount || 0]).sort((a, b) => b[1] - a[1]).slice(0, 8), '장')}</div>
-      <p class="hint" style="margin-top:8px">${S.store && S.store.name === 'db' ? '사진은 계정 저장소에 저장되어 다른 기기에서도 열립니다. 사진 1장은 약 150–230KB로 자동 압축됩니다.' : '이 브라우저에만 저장됩니다. 정기적으로 JSON 백업을 내려받으세요.'}</p></div>
+      <p class="hint" style="margin-top:8px">${S.store && S.store.name === 'db' ? '사진은 계정 저장소에 저장되어 다른 기기에서도 열립니다. 문서 하나는 256KB까지라 사진 1장은 약 150–220KB로 자동 압축됩니다.' : '이 브라우저에만 저장됩니다. 정기적으로 JSON 백업을 내려받으세요.'}</p></div>
     <div class="card pad"><div class="sech"><h3>정리</h3><div class="ln"></div></div>
       <div class="dist"><span>중복 의심 사진</span><span class="d">${dups.reduce((a, g) => a + g.length - 1, 0)}</span></div>
       <div class="dist"><span>저해상도 사진 (900px 미만)</span><span class="d">${lowres.length}</span></div>

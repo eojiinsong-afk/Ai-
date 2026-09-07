@@ -506,11 +506,10 @@ async function photoFailReport(okN, fail, p, cat) {
   // 저장 공간이 원인일 수 있으므로 지금 얼마나 쓰고 있는지 함께 보여준다
   let usage = '';
   try {
-    const [ph, nt] = await Promise.all([S.store.list('photos'), S.store.list('notes')]);
-    const docs = ph.length * 2 + nt.length + S.projects.length + S.trash.length + S.facilities.length + S.fields.length + 2;
-    usage = `<p class="hint" style="margin-top:8px">지금 저장소에 문서 약 <b class="mono">${docs}</b>개를 쓰고 있습니다
-      (사진 ${ph.length}장 = 문서 ${ph.length * 2}개). 아티팩트 한 개의 한도는 약 5,000개입니다.
-      ${docs > 4200 ? '<b style="color:var(--warn)">한도에 가까워졌습니다 — 백업을 내려받고 오래된 사진을 정리해 주세요.</b>' : ''}</p>`;
+    const u = await storageUsage();
+    usage = `<p class="hint" style="margin-top:8px">문서 <b class="mono">${u.docs.toLocaleString()} / ${u.cap.toLocaleString()}</b> 사용 중
+      (사진 ${u.photos}장 = 문서 ${u.photos * 2}개). 지금 상태에서 약 <b class="mono">${u.photosLeft.toLocaleString()}</b>장을 더 넣을 수 있습니다.
+      ${u.docs / u.cap > 0.85 ? '<b style="color:var(--warn)">한도에 가까워졌습니다 — 백업을 내려받고 오래된 사진을 정리해 주세요.</b>' : ''}</p>`;
   } catch (e) { }
   openModal(`<div class="mh"><h3>사진 ${okN}장 저장 · ${fail.length}장 실패</h3><button class="x">×</button></div>
     <div class="mb">
