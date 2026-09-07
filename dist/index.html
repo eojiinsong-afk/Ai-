@@ -490,8 +490,8 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '1.7.0';
-const SCHEMA_VERSION = 2;
+const APP_VERSION = '1.8.0';
+const SCHEMA_VERSION = 3;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
 const uid = () => {
@@ -746,6 +746,16 @@ const MIGRATIONS = [
       }
       return n;
     }
+  },
+  {
+    v: 3, name: '사진 묶어 담기 — 기존 사진은 그대로 둔다',
+    async run() {
+      /* 이 버전부터 새 사진은 photobook 묶음에 들어간다. 예전 photos/{id} 문서도
+         그대로 읽히므로 여기서는 아무것도 옮기지 않는다.
+         실제로 옮기는 것은 설정 → 저장 공간의 «묶어 담기»를 눌렀을 때만,
+         백업을 먼저 받고 옮긴 결과를 확인한 뒤에 일어난다. */
+      return 0;
+    }
   }
 ];
 function stripId(o) { const d = Object.assign({}, o); delete d.id; return d; }
@@ -822,19 +832,155 @@ async function putRetry(coll, id, data, tries) {
   throw last;
 }
 
+/* ============================================================
+   사진 저장소 — 묶어 담기
+
+   문서 하나는 256KiB 까지고 아티팩트 하나가 문서를 5,000개까지 담는다.
+   원본(150–220KB)은 어차피 문서 하나를 채우므로 줄일 수 없지만,
+   썸네일(약 11KB)과 메타(약 300B)는 문서 하나에 20장 넘게 들어간다.
+   한 장에 문서 하나씩 쓰던 것을 프로젝트 단위로 묶으면
+   사진 1장당 문서가 2개 → 약 1.05개가 되어 담을 수 있는 장수가 두 배 가까이 는다.
+
+     photofull/{photoId}   원본 (그대로, 1장 = 문서 1개)
+     photobook/{pid}__{n}  { pid, n, items: { photoId: 메타+썸네일 } }
+
+   예전에 한 장씩 저장한 photos/{id} 문서도 그대로 읽는다. 두 가지가 섞여 있어도
+   되고, 옮기는 것은 설정에서 사용자가 직접 «정리»를 눌렀을 때만 일어난다.
+   ============================================================ */
+/* 문서 한도는 256 KiB = 262,144 **바이트**다. 한글 메모는 글자당 3바이트라
+   글자 수로 재면 어긋나므로 직렬화한 바이트를 직접 센다. 여유 17KB 를 남긴다. */
+const BOOK_MAX = 245000;
+const ENC = new TextEncoder();
+const jsonBytes = o => ENC.encode(JSON.stringify(o)).length;
+const PhotoStore = {
+  /** 한 프로젝트의 사진 — 묶음과 옛 문서를 합쳐 돌려준다 */
+  async list(pid) {
+    const [books, legacy] = await Promise.all([
+      S.store.list('photobook', ['pid', '==', pid]),
+      S.store.list('photos', ['pid', '==', pid])
+    ]);
+    return this._merge(books, legacy);
+  },
+  /** 저장된 사진 전부 (설정·백업·무결성 점검) */
+  async listAll() {
+    const [books, legacy] = await Promise.all([S.store.list('photobook'), S.store.list('photos')]);
+    return this._merge(books, legacy);
+  },
+  _merge(books, legacy) {
+    const out = [];
+    for (const b of books) {
+      for (const [id, m] of Object.entries(b.items || {})) {
+        out.push(Object.assign({ id }, m, { _book: b.id }));
+      }
+    }
+    for (const l of legacy) out.push(Object.assign({}, l, { _book: null }));
+    return out.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  },
+  async get(id) {
+    const all = await this.listAll();
+    return all.find(p => p.id === id) || null;
+  },
+  /** 사진 메타를 넣는다. 자리가 남은 묶음이 있으면 거기에, 없으면 새 묶음을 만든다. */
+  async add(pid, id, meta) {
+    const books = await S.store.list('photobook', ['pid', '==', pid]);
+    const item = stripMeta(meta);
+    const itemSize = jsonBytes(item) + id.length + 8;
+    let target = null, maxN = -1;
+    for (const b of books) {
+      maxN = Math.max(maxN, b.n || 0);
+      if (!target && jsonBytes(b.items || {}) + itemSize < BOOK_MAX) target = b;
+    }
+    if (!target) target = { id: `${pid}__${maxN + 1}`, pid, n: maxN + 1, items: {} };
+    target.items[id] = item;
+    await putRetry('photobook', target.id, { pid: target.pid, n: target.n, items: target.items });
+    return target.id;
+  },
+  /** 여러 장의 메타를 고친다. 같은 묶음에 든 것은 한 번에 쓴다 — 20장 일괄 수정이 쓰기 1번이 된다. */
+  async update(photos) {
+    const byBook = new Map();
+    for (const ph of photos) {
+      const key = ph._book || ('@legacy:' + ph.id);
+      if (!byBook.has(key)) byBook.set(key, []);
+      byBook.get(key).push(ph);
+    }
+    for (const [key, list] of byBook) {
+      if (key.slice(0, 8) === '@legacy:') {
+        for (const ph of list) await putRetry('photos', ph.id, stripMeta(ph));
+        continue;
+      }
+      const b = await S.store.get('photobook', key);
+      if (!b) { for (const ph of list) await putRetry('photos', ph.id, stripMeta(ph)); continue; }
+      const overflow = [];
+      for (const ph of list) {
+        const prev = b.items[ph.id];
+        b.items[ph.id] = stripMeta(ph);
+        // 메모가 길어져 묶음이 한도를 넘으면 그 사진만 다른 묶음으로 옮긴다
+        if (jsonBytes(b.items) > BOOK_MAX) {
+          if (prev) b.items[ph.id] = prev; else delete b.items[ph.id];
+          overflow.push(ph);
+        }
+      }
+      await putRetry('photobook', key, { pid: b.pid, n: b.n, items: b.items });
+      for (const ph of overflow) {
+        await this.remove([ph], true);
+        await this.add(ph.pid, ph.id, ph);
+      }
+    }
+  },
+  /** 사진을 지운다 (메타·원본 모두). 같은 묶음은 한 번에 처리한다. */
+  async remove(photos, keepFull) {
+    const byBook = new Map();
+    for (const ph of photos) {
+      const key = ph._book || ('@legacy:' + ph.id);
+      if (!byBook.has(key)) byBook.set(key, []);
+      byBook.get(key).push(ph);
+    }
+    for (const [key, list] of byBook) {
+      if (key.slice(0, 8) === '@legacy:') {
+        for (const ph of list) await S.store.del('photos', ph.id);
+      } else {
+        const b = await S.store.get('photobook', key);
+        if (b) {
+          for (const ph of list) delete b.items[ph.id];
+          if (Object.keys(b.items).length) await putRetry('photobook', key, { pid: b.pid, n: b.n, items: b.items });
+          else await S.store.del('photobook', key);
+        }
+      }
+      if (!keepFull) for (const ph of list) { try { await S.store.del('photofull', ph.id); } catch (e) { } }
+    }
+  }
+};
+/** 문서에 쓰기 전에 화면용 표시 필드를 걷어낸다 */
+function stripMeta(o) {
+  const d = Object.assign({}, o);
+  delete d.id; delete d._book;
+  return d;
+}
+
 /* ---------- 저장 용량 ----------
    아티팩트 하나의 데이터베이스는 문서를 최대 5,000개까지 담고, 문서 하나는 256KiB 까지다.
    사진 한 장이 문서 두 개(메타+원본)를 쓰므로 사진 장수가 사실상 이 한도를 정한다. */
 const DOC_CAP = 5000;
 async function storageUsage() {
-  const [photos, notes] = await Promise.all([S.store.list('photos'), S.store.list('notes')]);
-  const docs = photos.length * 2 + notes.length + S.projects.length + S.trash.length
-    + S.facilities.length + S.fields.length + 2;      // meta/app + 스냅샷 여유
+  const [books, legacy, notes] = await Promise.all([
+    S.store.list('photobook'), S.store.list('photos'), S.store.list('notes')]);
+  const packed = books.reduce((a, b) => a + Object.keys(b.items || {}).length, 0);
+  const photos = packed + legacy.length;
+  // 원본은 장당 문서 1개, 묶음은 실제 문서 수, 옛 사진은 장당 메타 1개
+  const docs = photos + books.length + legacy.length + notes.length
+    + S.projects.length + S.trash.length + S.facilities.length + S.fields.length + 2;
+  /* 앞으로 넣을 사진 한 장이 문서 몇 개를 쓸지 — 짐작하지 말고 지금 쌓인 것에서 잰다.
+     (원본 1개 + 묶음 몫). 아직 묶인 사진이 없으면 넉넉하게 1.15 로 본다. */
+  const perPhoto = packed >= 8 ? Math.max(1.02, 1 + books.length / packed) : 1.15;
+  const all = books.flatMap(b => Object.values(b.items || {})).concat(legacy);
   return {
-    photos: photos.length, notes: notes.length, docs, cap: DOC_CAP,
+    photos, packed, legacy: legacy.length, notes: notes.length, docs, cap: DOC_CAP,
+    perPhoto: +perPhoto.toFixed(2), books: books.length,
     left: Math.max(0, DOC_CAP - docs),
-    photosLeft: Math.max(0, Math.floor((DOC_CAP - docs) / 2)),
-    bytes: photos.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0)
+    photosLeft: Math.max(0, Math.floor((DOC_CAP - docs) / perPhoto)),
+    // 옛 방식 사진을 묶으면 얼마나 되찾는지 (장당 문서 1개 회수, 묶음 문서는 20장에 1개)
+    reclaim: Math.max(0, legacy.length - Math.ceil(legacy.length / 20)),
+    bytes: all.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0)
   };
 }
 
@@ -887,8 +1033,7 @@ async function deleteProject(id) {
 }
 /** 휴지통에서 완전 삭제. 이때만 사진 원본과 기록이 실제로 지워진다. */
 async function purgeProject(id) {
-  const ph = await S.store.list('photos', ['pid', '==', id]);
-  for (const x of ph) { await S.store.del('photos', x.id); await S.store.del('photofull', x.id); }
+  await PhotoStore.remove(await PhotoStore.list(id));
   const nt = await S.store.list('notes', ['pid', '==', id]);
   for (const x of nt) await S.store.del('notes', x.id);
   await S.store.del('trash', id);
@@ -1920,7 +2065,7 @@ function drawScaled(img, maxW) {
 function releaseCanvas(c) { try { c.width = 0; c.height = 0; } catch (e) { } }
 const MIN_JPEG = 1200;                 // 이보다 짧으면 변환이 실패한 것으로 본다
 const PHOTO_MAX = 220000;              // 문서 한도 256KB 안쪽 (dataURL 기준)
-const THUMB_MAX = 42000;
+const THUMB_MAX = 26000;   // 300px 썸네일에 충분하고, 묶음에 더 많이 들어간다
 
 function toJpeg(canvas, maxBytes) {
   let q = 0.85, url = canvas.toDataURL('image/jpeg', q);
@@ -1977,14 +2122,15 @@ async function ingestPhoto(file, pid, extra) {
       createdAt: new Date().toISOString(), thumb
     }, extra || {});
     await putRetry('photofull', id, { data });
+    let book = null;
     try {
-      await putRetry('photos', id, meta);
+      book = await PhotoStore.add(pid, id, meta);
     } catch (e) {
       // 메타를 못 썼으면 원본만 남아 떠돌게 되므로 되돌린다
       try { await S.store.del('photofull', id); } catch (e2) { }
       throw e;
     }
-    return Object.assign({ id }, meta);
+    return Object.assign({ id }, meta, { _book: book });
   } finally {
     if (img && img.close) img.close();
   }
@@ -2051,7 +2197,7 @@ async function openDetail(id) {
   go('detail');
   $('#detTitle').textContent = projName(p);
   $('#detailgrid').innerHTML = '<div class="hint pad">불러오는 중…</div>';
-  const [photos, notes] = await Promise.all([S.store.list('photos', ['pid', '==', id]), S.store.list('notes', ['pid', '==', id])]);
+  const [photos, notes] = await Promise.all([PhotoStore.list(id), S.store.list('notes', ['pid', '==', id])]);
   S.photos = photos.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
   S.notes = notes.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   if ((p.photoCount || 0) !== S.photos.length || (p.noteCount || 0) !== S.notes.length) {
@@ -2230,7 +2376,7 @@ function bindGallery() {
     const list = pick();
     if (!await confirmBox('사진 삭제', `<p>선택한 <b class="mono">${list.length}</b>장을 삭제합니다. 원본까지 지워지며 되돌릴 수 없습니다.</p>
       <p class="hint">${list.slice(0, 6).map(ph => esc(ph.cat)).join(' · ')}${list.length > 6 ? ' …' : ''}</p>`, `${list.length}장 삭제`)) return;
-    for (const ph of list) { await S.store.del('photos', ph.id); await S.store.del('photofull', ph.id); }
+    await PhotoStore.remove(list);
     const gone = new Set(list.map(ph => ph.id));
     S.photos = S.photos.filter(x => !gone.has(x.id));
     PSEL.ids.clear(); PSEL.last = null;
@@ -2242,11 +2388,8 @@ function bindGallery() {
 /** 고른 사진에 같은 값을 적용한다. 문서는 통째로 되쓰므로 이 버전이 모르는 필드도 남는다. */
 async function bulkPatch(list, patch, what) {
   if (!list.length) return;
-  for (const ph of list) {
-    if (patch) Object.assign(ph, patch);
-    const d = Object.assign({}, ph); delete d.id;
-    await putRetry('photos', ph.id, d);
-  }
+  if (patch) for (const ph of list) Object.assign(ph, patch);
+  await PhotoStore.update(list);
   refreshGallery();
   toast(`${list.length}장의 ${what} 바꿨습니다`);
 }
@@ -2288,13 +2431,12 @@ async function photoModal(id) {
       place: $('#ph_place').value.trim(), face: $('#ph_face').value, memo: $('#ph_memo').value.trim(),
       tags: $('#ph_tags').value.split(',').map(s => s.trim()).filter(Boolean)
     });
-    const d = Object.assign({}, ph); delete d.id;
-    await putRetry('photos', ph.id, d);
+    await PhotoStore.update([ph]);
     closeModal(); renderDetail(); toast('저장했습니다');
   };
   $('#ph_del').onclick = async () => {
     if (!await confirmBox('사진 삭제', '<p>이 사진을 삭제할까요? 되돌릴 수 없습니다.</p>')) return;
-    await S.store.del('photos', ph.id); await S.store.del('photofull', ph.id);
+    await PhotoStore.remove([ph]);
     S.photos = S.photos.filter(x => x.id !== ph.id);
     const p = S.projects.find(x => x.id === S.cur); if (p) { p.photoCount = S.photos.length; await saveProject(p); }
     closeModal(); renderDetail();
@@ -2374,7 +2516,7 @@ function renderElevPicker() {
 async function loadStrip(pid) {
   const strip = $('#elevStrip');
   if (!pid) { strip.innerHTML = '<p class="hint">먼저 프로젝트를 만들고 건물 사진을 올려주세요.</p>'; return; }
-  const photos = await S.store.list('photos', ['pid', '==', pid]);
+  const photos = await PhotoStore.list(pid);
   const cand = photos.filter(p => p.kind !== 'elevation');
   if (!cand.length) { strip.innerHTML = '<p class="hint">이 프로젝트에 사진이 없습니다. 프로젝트 상세에서 사진을 올리세요.</p>'; return; }
   // 같은 면끼리 묶고(입면 방향 태그), 선명도·해상도 순으로 추천 정렬
@@ -2390,7 +2532,7 @@ async function loadStrip(pid) {
   $$('#elevStrip [data-el]').forEach(e => e.onclick = () => loadElevPhoto(e.dataset.el));
 }
 async function loadElevPhoto(id) {
-  const meta = await S.store.get('photos', id);
+  const meta = await PhotoStore.get(id);
   const full = await S.store.get('photofull', id);
   if (!full) return toast('원본 이미지를 찾을 수 없습니다');
   if (meta && meta.pid) { $('#elevPrj').value = meta.pid; }
@@ -2930,7 +3072,7 @@ $('#elevSave').onclick = async () => {
   };
   try {
     await putRetry('photofull', id, { data });
-    await putRetry('photos', id, meta);
+    await PhotoStore.add(pid, id, meta);
   } catch (e) {
     try { await S.store.del('photofull', id); } catch (e2) { }
     return toast('저장하지 못했습니다: ' + String((e && (e.message || e.code)) || e), 5000);
@@ -4317,7 +4459,7 @@ $('#btnCompare').onclick = async () => {
   const ps = S.projects.filter(p => S.sel.has(p.id));
   if (!ps.length) return;
   const photos = {};
-  for (const p of ps) photos[p.id] = (await S.store.list('photos', ['pid', '==', p.id])).slice(0, 4);
+  for (const p of ps) photos[p.id] = (await PhotoStore.list(p.id)).slice(0, 4);
   const fields = BASE_FIELDS.filter(f => !['tags', 'note', 'lat', 'lng'].includes(f.k))
     .concat(S.fields.map(f => ({ k: 'c_' + f.id, label: f.label, custom: f.id, type: f.type })));
   const val = (p, f) => { let v = fieldValue(p, f); if (f.type === 'bool') v = v ? '있음' : (v === false ? '없음' : ''); return Array.isArray(v) ? v.join(', ') : v; };
@@ -4358,7 +4500,7 @@ function exportCsv(list) {
 async function collect(ps) {
   const out = [];
   for (const p of ps) {
-    const photos = (await S.store.list('photos', ['pid', '==', p.id])).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+    const photos = await PhotoStore.list(p.id);
     const notes = (await S.store.list('notes', ['pid', '==', p.id])).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     out.push({ p, photos, notes, near: nearestFacilities(p) });
   }
@@ -4499,13 +4641,14 @@ function renderOutput() {
 }
 async function backup() {
   toast('백업을 만드는 중…');
-  const [photos, notes] = await Promise.all([S.store.list('photos'), S.store.list('notes')]);
+  const [photos, notes] = await Promise.all([PhotoStore.listAll(), S.store.list('notes')]);
   const full = {};
   for (const ph of photos) { const f = await S.store.get('photofull', ph.id); if (f) full[ph.id] = f.data; }
   const blob = new Blob([JSON.stringify({
     format: 'mkt-archive', appVersion: APP_VERSION, schemaVersion: (S.meta && S.meta.schemaVersion) || SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
-    projects: S.projects, facilities: S.facilities, fields: S.fields, photos, notes, photofull: full
+    projects: S.projects, facilities: S.facilities, fields: S.fields,
+    photos: photos.map(p => { const d = Object.assign({}, p); delete d._book; return d; }), notes, photofull: full
   })], { type: 'application/json' });
   download(`시장아파트_백업_${today()}.json`, blob);
 }
@@ -4538,11 +4681,14 @@ async function restore(file) {
   for (const f of (d.fields || [])) await put('fields', f.id, f, S.fields.some(x => x.id === f.id));
   const curNotes = new Set((await S.store.list('notes')).map(x => x.id));
   for (const n of (d.notes || [])) await put('notes', n.id, n, curNotes.has(n.id));
-  const curPhotos = new Set((await S.store.list('photos')).map(x => x.id));
+  const curPhotos = new Set((await PhotoStore.listAll()).map(x => x.id));
   for (const ph of (d.photos || [])) {
     const ex = curPhotos.has(ph.id);
-    await put('photos', ph.id, ph, ex);
-    if (!(ex && keep) && d.photofull && d.photofull[ph.id]) await S.store.put('photofull', ph.id, { data: d.photofull[ph.id] });
+    if (ex && keep) { skipped++; continue; }
+    if (d.photofull && d.photofull[ph.id]) await putRetry('photofull', ph.id, { data: d.photofull[ph.id] });
+    if (ex) await PhotoStore.update([ph]);
+    else await PhotoStore.add(ph.pid, ph.id, ph);
+    added++;
   }
   await loadAll(); await runMigrations(); MAP.draw(); updateCounts(); renderTable();
   toast(`복원 완료 · ${added}건 반영${skipped ? `, ${skipped}건은 기존 데이터 유지` : ''}`, 4200);
@@ -4592,8 +4738,13 @@ async function renderSettings() {
         <i style="display:block;height:100%;border-radius:3px;width:${Math.min(100, use.docs / use.cap * 100).toFixed(1)}%;
           background:${use.docs / use.cap > 0.85 ? 'var(--signal)' : use.docs / use.cap > 0.6 ? 'var(--warn)' : 'var(--accent)'}"></i></div>
       <p class="hint" style="margin:0">아티팩트 한 개의 데이터베이스는 문서 <b>5,000개</b>까지 담습니다.
-      사진 1장이 문서 2개(메타 + 원본)를 쓰므로, 지금 상태에서 <b>약 ${use.photosLeft.toLocaleString()}장</b>을 더 넣을 수 있습니다.
+      지금 이 아카이브는 사진 1장에 문서 <b>${use.perPhoto}개</b>를 쓰고 있어(원본 1개 + 묶음 몫),
+      <b>약 ${use.photosLeft.toLocaleString()}장</b>을 더 넣을 수 있습니다.
       ${use.docs / use.cap > 0.85 ? '<b style="color:var(--signal)">한도에 가까워졌습니다 — 백업을 내려받고 오래된 원본을 정리하세요.</b>' : ''}</p>
+      ${use.legacy ? `<div style="margin-top:10px;padding:9px 11px;border:1px solid var(--accent);background:var(--accent-soft);border-radius:var(--r)">
+        <p class="hint" style="margin:0 0 8px;color:var(--accent-ink)">예전 방식으로 저장된 사진 <b>${use.legacy}장</b>이 있습니다.
+        묶어 담으면 문서 <b>약 ${use.reclaim}개</b>를 되찾아 그만큼 더 담을 수 있습니다. 화질은 그대로입니다.</p>
+        <button class="btn sm pri" id="stPack">묶어 담기</button></div>` : ''}
       <div style="margin-top:10px">${bars(S.projects.map(p => [projName(p), p.photoCount || 0]).sort((a, b) => b[1] - a[1]).slice(0, 8), '장')}</div>
       <p class="hint" style="margin-top:8px">${S.store && S.store.name === 'db' ? '사진은 계정 저장소에 저장되어 다른 기기에서도 열립니다. 문서 하나는 256KB까지라 사진 1장은 약 150–220KB로 자동 압축됩니다.' : '이 브라우저에만 저장됩니다. 정기적으로 JSON 백업을 내려받으세요.'}</p></div>
     <div class="card pad"><div class="sech"><h3>정리</h3><div class="ln"></div></div>
@@ -4646,10 +4797,78 @@ async function renderSettings() {
   $('#stTrash').onclick = () => trashModal();
   $('#stDup').onclick = () => dupModal(dups);
   $('#stCheck').onclick = () => integrityCheck();
+  const pk = $('#stPack'); if (pk) pk.onclick = () => repackPhotos();
 }
+/* ---------- 사진 묶어 담기 ----------
+   예전에 한 장씩 저장한 사진을 프로젝트 단위 묶음으로 옮긴다.
+   데이터 보존 원칙에 따라, 옮긴 결과를 다시 읽어 확인한 뒤에만 옛 문서를 지운다.
+   확인에 실패하면 그 사진은 옛 문서를 그대로 남겨 둔다 — 사라지느니 중복이 낫다. */
+async function repackPhotos() {
+  const use = await storageUsage();
+  if (!use.legacy) return toast('이미 모두 묶여 있습니다');
+  const ok = await new Promise(res => {
+    openModal(`<div class="mh"><h3>사진 묶어 담기</h3><button class="x">×</button></div>
+      <div class="mb">
+        <p>예전 방식으로 저장된 <b class="mono">${use.legacy}</b>장을 프로젝트 단위 묶음으로 옮깁니다.
+        사진과 화질은 그대로이고, <b>문서 약 ${use.reclaim}개</b>를 되찾아 그만큼 더 담을 수 있게 됩니다.</p>
+        <div class="statrow" style="margin:12px 0">
+          <div class="stat"><b>${use.docs.toLocaleString()}</b><span>지금 문서</span></div>
+          <div class="stat"><b>${Math.max(0, use.docs - use.reclaim).toLocaleString()}</b><span>옮긴 뒤</span></div>
+          <div class="stat"><b>${use.photosLeft.toLocaleString()} → ${Math.max(0, Math.floor((use.cap - (use.docs - use.reclaim)) / use.perPhoto)).toLocaleString()}</b><span>더 넣을 수 있는 사진</span></div>
+        </div>
+        <p class="hint">옮긴 결과를 다시 읽어 확인한 뒤에만 옛 문서를 지웁니다. 확인에 실패한 사진은 옛 자리에 그대로 둡니다.
+        그래도 <b>시작하기 전에 백업을 한 번 받아 두시길 권합니다.</b></p>
+      </div>
+      <div class="mf"><button class="btn" data-a="">취소</button>
+        <button class="btn" data-a="backup">먼저 백업 받기</button>
+        <button class="btn pri" data-a="go">옮기기</button></div>`);
+    $$('#modalbox [data-a]').forEach(b => b.onclick = () => { closeModal(); res(b.dataset.a); });
+  });
+  if (ok === 'backup') { await backup(); return repackPhotos(); }
+  if (ok !== 'go') return;
+
+  const legacy = await S.store.list('photos');
+  const prog = progressStart(legacy.length, '사진 묶는 중');
+  let moved = 0; const failed = [];
+  for (let i = 0; i < legacy.length; i++) {
+    const ph = legacy[i];
+    prog.set(i, ph.cat || '');
+    try {
+      if (!ph.pid) { failed.push({ id: ph.id, why: '소속 프로젝트가 없습니다' }); continue; }
+      const bookId = await PhotoStore.add(ph.pid, ph.id, ph);
+      // 확인 — 옮긴 것이 실제로 읽히는지 보고 나서 지운다
+      const back = await S.store.get('photobook', bookId);
+      const got = back && back.items && back.items[ph.id];
+      if (!got || (ph.thumb && got.thumb !== ph.thumb)) { failed.push({ id: ph.id, why: '옮긴 결과를 확인하지 못했습니다' }); continue; }
+      await S.store.del('photos', ph.id);
+      moved++;
+    } catch (e) {
+      failed.push({ id: ph.id, why: String((e && (e.message || e.code)) || e) });
+    }
+    if (i % 10 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+  prog.done();
+  const after = await storageUsage();
+  if (S.cur) { const p = S.projects.find(x => x.id === S.cur); if (p) await openDetail(p.id); }
+  renderSettings();
+  openModal(`<div class="mh"><h3>묶어 담기 완료</h3><button class="x">×</button></div>
+    <div class="mb"><p><b class="mono">${moved}</b>장을 옮겼습니다${failed.length ? `, <b class="mono">${failed.length}</b>장은 옛 자리에 그대로 두었습니다` : ''}.</p>
+      <div class="statrow" style="margin:12px 0">
+        <div class="stat"><b>${after.docs.toLocaleString()}</b><span>문서</span></div>
+        <div class="stat"><b>${after.photos.toLocaleString()}</b><span>사진</span></div>
+        <div class="stat"><b>${after.photosLeft.toLocaleString()}</b><span>더 넣을 수 있는 사진</span></div></div>
+      ${failed.length ? `<div class="tblwrap" style="max-height:180px;border:1px solid var(--line);border-radius:var(--r)">
+        <table class="grid"><thead><tr><th style="cursor:default">사유</th><th style="cursor:default">장수</th></tr></thead><tbody>
+        ${Object.entries(failed.reduce((a, f) => { a[f.why] = (a[f.why] || 0) + 1; return a; }, {}))
+          .map(([w, n]) => `<tr><td>${esc(w)}</td><td class="n">${n}</td></tr>`).join('')}</tbody></table></div>
+        <p class="hint" style="margin-top:8px">옮기지 못한 사진도 앱에서는 그대로 보이고 쓰입니다. 다시 「묶어 담기」를 눌러 재시도할 수 있습니다.</p>` : ''}
+    </div>
+    <div class="mf"><button class="btn pri" onclick="closeModal()">닫기</button></div>`);
+}
+
 /** 데이터 무결성 점검 — 읽기 전용. 어떤 것도 자동으로 고치거나 지우지 않는다. */
 async function integrityCheck() {
-  const [photos, notes, fulls] = await Promise.all([S.store.list('photos'), S.store.list('notes'), S.store.list('photofull')]);
+  const [photos, notes, fulls] = await Promise.all([PhotoStore.listAll(), S.store.list('notes'), S.store.list('photofull')]);
   const live = new Set(S.projects.map(p => p.id));
   const trashed = new Set(S.trash.map(p => p.id));
   const known = id => live.has(id) || trashed.has(id);
@@ -4728,7 +4947,7 @@ function dupModal(groups) {
         <div><button class="btn sm ${j === 0 ? '' : 'dgr'}" data-dd="${p.id}" ${j === 0 ? 'disabled' : ''}>${j === 0 ? '유지' : '삭제'}</button></div></div>`).join('')}</div></div>`).join('')}</div>
     <div class="mf"><button class="btn" onclick="closeModal()">닫기</button></div>`, { wide: true });
   $$('[data-dd]').forEach(b => b.onclick = async () => {
-    await S.store.del('photos', b.dataset.dd); await S.store.del('photofull', b.dataset.dd);
+    await PhotoStore.remove([groups.flat().find(x => x.id === b.dataset.dd)].filter(Boolean));
     b.closest('div').parentElement.style.opacity = .3; b.disabled = true; b.textContent = '삭제됨';
     toast('삭제했습니다');
   });

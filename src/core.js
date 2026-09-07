@@ -6,8 +6,8 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '1.7.0';
-const SCHEMA_VERSION = 2;
+const APP_VERSION = '1.8.0';
+const SCHEMA_VERSION = 3;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
 const uid = () => {
@@ -262,6 +262,16 @@ const MIGRATIONS = [
       }
       return n;
     }
+  },
+  {
+    v: 3, name: '사진 묶어 담기 — 기존 사진은 그대로 둔다',
+    async run() {
+      /* 이 버전부터 새 사진은 photobook 묶음에 들어간다. 예전 photos/{id} 문서도
+         그대로 읽히므로 여기서는 아무것도 옮기지 않는다.
+         실제로 옮기는 것은 설정 → 저장 공간의 «묶어 담기»를 눌렀을 때만,
+         백업을 먼저 받고 옮긴 결과를 확인한 뒤에 일어난다. */
+      return 0;
+    }
   }
 ];
 function stripId(o) { const d = Object.assign({}, o); delete d.id; return d; }
@@ -338,19 +348,155 @@ async function putRetry(coll, id, data, tries) {
   throw last;
 }
 
+/* ============================================================
+   사진 저장소 — 묶어 담기
+
+   문서 하나는 256KiB 까지고 아티팩트 하나가 문서를 5,000개까지 담는다.
+   원본(150–220KB)은 어차피 문서 하나를 채우므로 줄일 수 없지만,
+   썸네일(약 11KB)과 메타(약 300B)는 문서 하나에 20장 넘게 들어간다.
+   한 장에 문서 하나씩 쓰던 것을 프로젝트 단위로 묶으면
+   사진 1장당 문서가 2개 → 약 1.05개가 되어 담을 수 있는 장수가 두 배 가까이 는다.
+
+     photofull/{photoId}   원본 (그대로, 1장 = 문서 1개)
+     photobook/{pid}__{n}  { pid, n, items: { photoId: 메타+썸네일 } }
+
+   예전에 한 장씩 저장한 photos/{id} 문서도 그대로 읽는다. 두 가지가 섞여 있어도
+   되고, 옮기는 것은 설정에서 사용자가 직접 «정리»를 눌렀을 때만 일어난다.
+   ============================================================ */
+/* 문서 한도는 256 KiB = 262,144 **바이트**다. 한글 메모는 글자당 3바이트라
+   글자 수로 재면 어긋나므로 직렬화한 바이트를 직접 센다. 여유 17KB 를 남긴다. */
+const BOOK_MAX = 245000;
+const ENC = new TextEncoder();
+const jsonBytes = o => ENC.encode(JSON.stringify(o)).length;
+const PhotoStore = {
+  /** 한 프로젝트의 사진 — 묶음과 옛 문서를 합쳐 돌려준다 */
+  async list(pid) {
+    const [books, legacy] = await Promise.all([
+      S.store.list('photobook', ['pid', '==', pid]),
+      S.store.list('photos', ['pid', '==', pid])
+    ]);
+    return this._merge(books, legacy);
+  },
+  /** 저장된 사진 전부 (설정·백업·무결성 점검) */
+  async listAll() {
+    const [books, legacy] = await Promise.all([S.store.list('photobook'), S.store.list('photos')]);
+    return this._merge(books, legacy);
+  },
+  _merge(books, legacy) {
+    const out = [];
+    for (const b of books) {
+      for (const [id, m] of Object.entries(b.items || {})) {
+        out.push(Object.assign({ id }, m, { _book: b.id }));
+      }
+    }
+    for (const l of legacy) out.push(Object.assign({}, l, { _book: null }));
+    return out.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  },
+  async get(id) {
+    const all = await this.listAll();
+    return all.find(p => p.id === id) || null;
+  },
+  /** 사진 메타를 넣는다. 자리가 남은 묶음이 있으면 거기에, 없으면 새 묶음을 만든다. */
+  async add(pid, id, meta) {
+    const books = await S.store.list('photobook', ['pid', '==', pid]);
+    const item = stripMeta(meta);
+    const itemSize = jsonBytes(item) + id.length + 8;
+    let target = null, maxN = -1;
+    for (const b of books) {
+      maxN = Math.max(maxN, b.n || 0);
+      if (!target && jsonBytes(b.items || {}) + itemSize < BOOK_MAX) target = b;
+    }
+    if (!target) target = { id: `${pid}__${maxN + 1}`, pid, n: maxN + 1, items: {} };
+    target.items[id] = item;
+    await putRetry('photobook', target.id, { pid: target.pid, n: target.n, items: target.items });
+    return target.id;
+  },
+  /** 여러 장의 메타를 고친다. 같은 묶음에 든 것은 한 번에 쓴다 — 20장 일괄 수정이 쓰기 1번이 된다. */
+  async update(photos) {
+    const byBook = new Map();
+    for (const ph of photos) {
+      const key = ph._book || ('@legacy:' + ph.id);
+      if (!byBook.has(key)) byBook.set(key, []);
+      byBook.get(key).push(ph);
+    }
+    for (const [key, list] of byBook) {
+      if (key.slice(0, 8) === '@legacy:') {
+        for (const ph of list) await putRetry('photos', ph.id, stripMeta(ph));
+        continue;
+      }
+      const b = await S.store.get('photobook', key);
+      if (!b) { for (const ph of list) await putRetry('photos', ph.id, stripMeta(ph)); continue; }
+      const overflow = [];
+      for (const ph of list) {
+        const prev = b.items[ph.id];
+        b.items[ph.id] = stripMeta(ph);
+        // 메모가 길어져 묶음이 한도를 넘으면 그 사진만 다른 묶음으로 옮긴다
+        if (jsonBytes(b.items) > BOOK_MAX) {
+          if (prev) b.items[ph.id] = prev; else delete b.items[ph.id];
+          overflow.push(ph);
+        }
+      }
+      await putRetry('photobook', key, { pid: b.pid, n: b.n, items: b.items });
+      for (const ph of overflow) {
+        await this.remove([ph], true);
+        await this.add(ph.pid, ph.id, ph);
+      }
+    }
+  },
+  /** 사진을 지운다 (메타·원본 모두). 같은 묶음은 한 번에 처리한다. */
+  async remove(photos, keepFull) {
+    const byBook = new Map();
+    for (const ph of photos) {
+      const key = ph._book || ('@legacy:' + ph.id);
+      if (!byBook.has(key)) byBook.set(key, []);
+      byBook.get(key).push(ph);
+    }
+    for (const [key, list] of byBook) {
+      if (key.slice(0, 8) === '@legacy:') {
+        for (const ph of list) await S.store.del('photos', ph.id);
+      } else {
+        const b = await S.store.get('photobook', key);
+        if (b) {
+          for (const ph of list) delete b.items[ph.id];
+          if (Object.keys(b.items).length) await putRetry('photobook', key, { pid: b.pid, n: b.n, items: b.items });
+          else await S.store.del('photobook', key);
+        }
+      }
+      if (!keepFull) for (const ph of list) { try { await S.store.del('photofull', ph.id); } catch (e) { } }
+    }
+  }
+};
+/** 문서에 쓰기 전에 화면용 표시 필드를 걷어낸다 */
+function stripMeta(o) {
+  const d = Object.assign({}, o);
+  delete d.id; delete d._book;
+  return d;
+}
+
 /* ---------- 저장 용량 ----------
    아티팩트 하나의 데이터베이스는 문서를 최대 5,000개까지 담고, 문서 하나는 256KiB 까지다.
    사진 한 장이 문서 두 개(메타+원본)를 쓰므로 사진 장수가 사실상 이 한도를 정한다. */
 const DOC_CAP = 5000;
 async function storageUsage() {
-  const [photos, notes] = await Promise.all([S.store.list('photos'), S.store.list('notes')]);
-  const docs = photos.length * 2 + notes.length + S.projects.length + S.trash.length
-    + S.facilities.length + S.fields.length + 2;      // meta/app + 스냅샷 여유
+  const [books, legacy, notes] = await Promise.all([
+    S.store.list('photobook'), S.store.list('photos'), S.store.list('notes')]);
+  const packed = books.reduce((a, b) => a + Object.keys(b.items || {}).length, 0);
+  const photos = packed + legacy.length;
+  // 원본은 장당 문서 1개, 묶음은 실제 문서 수, 옛 사진은 장당 메타 1개
+  const docs = photos + books.length + legacy.length + notes.length
+    + S.projects.length + S.trash.length + S.facilities.length + S.fields.length + 2;
+  /* 앞으로 넣을 사진 한 장이 문서 몇 개를 쓸지 — 짐작하지 말고 지금 쌓인 것에서 잰다.
+     (원본 1개 + 묶음 몫). 아직 묶인 사진이 없으면 넉넉하게 1.15 로 본다. */
+  const perPhoto = packed >= 8 ? Math.max(1.02, 1 + books.length / packed) : 1.15;
+  const all = books.flatMap(b => Object.values(b.items || {})).concat(legacy);
   return {
-    photos: photos.length, notes: notes.length, docs, cap: DOC_CAP,
+    photos, packed, legacy: legacy.length, notes: notes.length, docs, cap: DOC_CAP,
+    perPhoto: +perPhoto.toFixed(2), books: books.length,
     left: Math.max(0, DOC_CAP - docs),
-    photosLeft: Math.max(0, Math.floor((DOC_CAP - docs) / 2)),
-    bytes: photos.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0)
+    photosLeft: Math.max(0, Math.floor((DOC_CAP - docs) / perPhoto)),
+    // 옛 방식 사진을 묶으면 얼마나 되찾는지 (장당 문서 1개 회수, 묶음 문서는 20장에 1개)
+    reclaim: Math.max(0, legacy.length - Math.ceil(legacy.length / 20)),
+    bytes: all.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0)
   };
 }
 
@@ -403,8 +549,7 @@ async function deleteProject(id) {
 }
 /** 휴지통에서 완전 삭제. 이때만 사진 원본과 기록이 실제로 지워진다. */
 async function purgeProject(id) {
-  const ph = await S.store.list('photos', ['pid', '==', id]);
-  for (const x of ph) { await S.store.del('photos', x.id); await S.store.del('photofull', x.id); }
+  await PhotoStore.remove(await PhotoStore.list(id));
   const nt = await S.store.list('notes', ['pid', '==', id]);
   for (const x of nt) await S.store.del('notes', x.id);
   await S.store.del('trash', id);

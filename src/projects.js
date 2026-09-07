@@ -405,7 +405,7 @@ function drawScaled(img, maxW) {
 function releaseCanvas(c) { try { c.width = 0; c.height = 0; } catch (e) { } }
 const MIN_JPEG = 1200;                 // 이보다 짧으면 변환이 실패한 것으로 본다
 const PHOTO_MAX = 220000;              // 문서 한도 256KB 안쪽 (dataURL 기준)
-const THUMB_MAX = 42000;
+const THUMB_MAX = 26000;   // 300px 썸네일에 충분하고, 묶음에 더 많이 들어간다
 
 function toJpeg(canvas, maxBytes) {
   let q = 0.85, url = canvas.toDataURL('image/jpeg', q);
@@ -462,14 +462,15 @@ async function ingestPhoto(file, pid, extra) {
       createdAt: new Date().toISOString(), thumb
     }, extra || {});
     await putRetry('photofull', id, { data });
+    let book = null;
     try {
-      await putRetry('photos', id, meta);
+      book = await PhotoStore.add(pid, id, meta);
     } catch (e) {
       // 메타를 못 썼으면 원본만 남아 떠돌게 되므로 되돌린다
       try { await S.store.del('photofull', id); } catch (e2) { }
       throw e;
     }
-    return Object.assign({ id }, meta);
+    return Object.assign({ id }, meta, { _book: book });
   } finally {
     if (img && img.close) img.close();
   }
@@ -536,7 +537,7 @@ async function openDetail(id) {
   go('detail');
   $('#detTitle').textContent = projName(p);
   $('#detailgrid').innerHTML = '<div class="hint pad">불러오는 중…</div>';
-  const [photos, notes] = await Promise.all([S.store.list('photos', ['pid', '==', id]), S.store.list('notes', ['pid', '==', id])]);
+  const [photos, notes] = await Promise.all([PhotoStore.list(id), S.store.list('notes', ['pid', '==', id])]);
   S.photos = photos.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
   S.notes = notes.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   if ((p.photoCount || 0) !== S.photos.length || (p.noteCount || 0) !== S.notes.length) {
@@ -715,7 +716,7 @@ function bindGallery() {
     const list = pick();
     if (!await confirmBox('사진 삭제', `<p>선택한 <b class="mono">${list.length}</b>장을 삭제합니다. 원본까지 지워지며 되돌릴 수 없습니다.</p>
       <p class="hint">${list.slice(0, 6).map(ph => esc(ph.cat)).join(' · ')}${list.length > 6 ? ' …' : ''}</p>`, `${list.length}장 삭제`)) return;
-    for (const ph of list) { await S.store.del('photos', ph.id); await S.store.del('photofull', ph.id); }
+    await PhotoStore.remove(list);
     const gone = new Set(list.map(ph => ph.id));
     S.photos = S.photos.filter(x => !gone.has(x.id));
     PSEL.ids.clear(); PSEL.last = null;
@@ -727,11 +728,8 @@ function bindGallery() {
 /** 고른 사진에 같은 값을 적용한다. 문서는 통째로 되쓰므로 이 버전이 모르는 필드도 남는다. */
 async function bulkPatch(list, patch, what) {
   if (!list.length) return;
-  for (const ph of list) {
-    if (patch) Object.assign(ph, patch);
-    const d = Object.assign({}, ph); delete d.id;
-    await putRetry('photos', ph.id, d);
-  }
+  if (patch) for (const ph of list) Object.assign(ph, patch);
+  await PhotoStore.update(list);
   refreshGallery();
   toast(`${list.length}장의 ${what} 바꿨습니다`);
 }
@@ -773,13 +771,12 @@ async function photoModal(id) {
       place: $('#ph_place').value.trim(), face: $('#ph_face').value, memo: $('#ph_memo').value.trim(),
       tags: $('#ph_tags').value.split(',').map(s => s.trim()).filter(Boolean)
     });
-    const d = Object.assign({}, ph); delete d.id;
-    await putRetry('photos', ph.id, d);
+    await PhotoStore.update([ph]);
     closeModal(); renderDetail(); toast('저장했습니다');
   };
   $('#ph_del').onclick = async () => {
     if (!await confirmBox('사진 삭제', '<p>이 사진을 삭제할까요? 되돌릴 수 없습니다.</p>')) return;
-    await S.store.del('photos', ph.id); await S.store.del('photofull', ph.id);
+    await PhotoStore.remove([ph]);
     S.photos = S.photos.filter(x => x.id !== ph.id);
     const p = S.projects.find(x => x.id === S.cur); if (p) { p.photoCount = S.photos.length; await saveProject(p); }
     closeModal(); renderDetail();

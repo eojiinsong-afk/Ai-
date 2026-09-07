@@ -37,7 +37,7 @@ function renderElevPicker() {
 async function loadStrip(pid) {
   const strip = $('#elevStrip');
   if (!pid) { strip.innerHTML = '<p class="hint">먼저 프로젝트를 만들고 건물 사진을 올려주세요.</p>'; return; }
-  const photos = await S.store.list('photos', ['pid', '==', pid]);
+  const photos = await PhotoStore.list(pid);
   const cand = photos.filter(p => p.kind !== 'elevation');
   if (!cand.length) { strip.innerHTML = '<p class="hint">이 프로젝트에 사진이 없습니다. 프로젝트 상세에서 사진을 올리세요.</p>'; return; }
   // 같은 면끼리 묶고(입면 방향 태그), 선명도·해상도 순으로 추천 정렬
@@ -53,7 +53,7 @@ async function loadStrip(pid) {
   $$('#elevStrip [data-el]').forEach(e => e.onclick = () => loadElevPhoto(e.dataset.el));
 }
 async function loadElevPhoto(id) {
-  const meta = await S.store.get('photos', id);
+  const meta = await PhotoStore.get(id);
   const full = await S.store.get('photofull', id);
   if (!full) return toast('원본 이미지를 찾을 수 없습니다');
   if (meta && meta.pid) { $('#elevPrj').value = meta.pid; }
@@ -593,7 +593,7 @@ $('#elevSave').onclick = async () => {
   };
   try {
     await putRetry('photofull', id, { data });
-    await putRetry('photos', id, meta);
+    await PhotoStore.add(pid, id, meta);
   } catch (e) {
     try { await S.store.del('photofull', id); } catch (e2) { }
     return toast('저장하지 못했습니다: ' + String((e && (e.message || e.code)) || e), 5000);
