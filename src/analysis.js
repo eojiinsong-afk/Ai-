@@ -453,8 +453,11 @@ async function renderSettings() {
       <div class="dist"><span>저해상도 사진 (900px 미만)</span><span class="d">${lowres.length}</span></div>
       <div class="dist"><span>휴지통</span><span class="d">${S.trash.length}</span></div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn sm pri" id="stClean">저장소 청소</button>
         <button class="btn sm" id="stDup" ${dups.length ? '' : 'disabled'}>중복 사진 검토</button>
-        <button class="btn sm" id="stTrash" ${S.trash.length ? '' : 'disabled'}>휴지통 열기</button></div></div>
+        <button class="btn sm" id="stTrash" ${S.trash.length ? '' : 'disabled'}>휴지통 열기</button></div>
+      <p class="hint" style="margin-top:8px">「저장소 청소」는 쓰이지 않는 문서(주인 없는 원본, 사라진 프로젝트의 자료, 옛 스냅샷)를 찾아
+      되찾을 용량을 보여주고, <b>고르신 것만</b> 지웁니다.</p></div>
     <div class="card pad"><div class="sech"><h3>백업 · 복원</h3><div class="ln"></div></div>
       <p class="hint">사진 원본까지 포함한 전체 백업입니다. 복원은 항상 병합 방식이며, 지금 저장된 기록을 지우지 않습니다.</p>
       <div style="display:flex;gap:8px;margin-top:10px">
@@ -497,9 +500,165 @@ async function renderSettings() {
   $('#stRs').onchange = async e => { try { await restore(e.target.files[0]); renderSettings(); } catch (err) { toast('복원 실패: ' + err.message); } };
   $('#stTrash').onclick = () => trashModal();
   $('#stDup').onclick = () => dupModal(dups);
+  $('#stClean').onclick = () => cleanupModal();
   $('#stCheck').onclick = () => integrityCheck();
   const pk = $('#stPack'); if (pk) pk.onclick = () => repackPhotos();
 }
+/* ---------- 저장소 청소 ----------
+   쓰이지 않는 문서를 찾아 되찾는다. 조사는 읽기만 하고, 지우는 것은
+   사용자가 항목을 골라 확인한 뒤에만 일어난다(데이터 보존 원칙 5절).
+
+   가장 크게 낭비되는 것은 «주인 없는 원본»이다. 사진을 올릴 때 원본을 먼저 쓰고
+   메타를 나중에 쓰는데, 그 사이에 저장이 끊기면 원본만 남는다. 메타가 없으면
+   앱은 그 사진을 영원히 보여줄 수 없으면서 문서 1개와 약 200KB를 계속 쓴다.
+   (v1.5.0부터는 메타 저장이 실패하면 원본을 되돌리지만, 그전에 생긴 것은 남아 있다.) */
+/* 주인 없는 원본을 찾으려면 photofull 을 통째로 읽어야 하는데, 원본은 장당 200KB라
+   수천 장이면 브라우저가 감당하지 못한다. 그래서 사진이 많으면 이 항목만 따로,
+   사용자가 원할 때 살펴본다. 나머지 조사는 가볍다. */
+const HEAVY_SCAN_AT = 600;
+async function cleanupScan(scanOriginals) {
+  const [photos, notes, snaps] = await Promise.all([
+    PhotoStore.listAll(), S.store.list('notes'), S.store.list('snapshots')
+  ]);
+  let fulls = [];
+  if (scanOriginals) {
+    // 데이터는 버리고 id·크기만 남긴다 — 배열이 오래 살아 있지 않게
+    fulls = (await S.store.list('photofull')).map(f => ({ id: f.id, size: f.data ? f.data.length : 0 }));
+  }
+  const photoIds = new Set(photos.map(p => p.id));
+  const known = new Set(S.projects.map(p => p.id).concat(S.trash.map(p => p.id)));
+  const orphanFull = fulls.filter(f => !photoIds.has(f.id));
+  const orphanPhoto = photos.filter(p => !p.pid || !known.has(p.pid));
+  const orphanNote = notes.filter(n => !n.pid || !known.has(n.pid));
+  const trashPhotos = photos.filter(p => p.pid && S.trash.some(t => t.id === p.pid));
+  return [
+    {
+      k: 'orphanFull', on: true, label: '주인 없는 원본 이미지',
+      why: '메타가 없어 앱에서 볼 수 없는 원본입니다. 예전에 업로드가 중간에 끊겼을 때 남습니다.',
+      n: orphanFull.length, docs: orphanFull.length,
+      bytes: orphanFull.reduce((a, f) => a + f.size, 0), items: orphanFull
+    },
+    {
+      k: 'snapshot', on: false, label: '옛 마이그레이션 스냅샷',
+      why: '저장 구조를 바꾸기 직전에 남긴 안전 사본입니다. 지금은 구조가 정상이라 지워도 되지만, 되돌릴 길 하나가 사라집니다.',
+      n: snaps.length, docs: snaps.length,
+      bytes: snaps.reduce((a, x) => a + (x.payload ? x.payload.length : 0), 0), items: snaps
+    },
+    {
+      k: 'orphanNote', on: false, label: '사라진 프로젝트의 답사 기록',
+      why: '소속 프로젝트가 휴지통에도 없습니다. 백업을 복원하면 다시 이어질 수 있으니 신중히 고르세요.',
+      n: orphanNote.length, docs: orphanNote.length,
+      bytes: orphanNote.reduce((a, n2) => a + (n2.body || '').length, 0), items: orphanNote
+    },
+    {
+      k: 'orphanPhoto', on: false, label: '사라진 프로젝트의 사진',
+      why: '소속 프로젝트가 휴지통에도 없습니다. 원본까지 함께 지워집니다.',
+      n: orphanPhoto.length, docs: orphanPhoto.length * 2,
+      bytes: orphanPhoto.reduce((a, p) => a + (p.size || 0), 0), items: orphanPhoto
+    },
+    {
+      k: 'trash', on: false, label: '휴지통 비우기',
+      why: `휴지통의 프로젝트 ${S.trash.length}건과 거기 딸린 사진 ${trashPhotos.length}장을 영구히 지웁니다.`,
+      n: S.trash.length, docs: S.trash.length + trashPhotos.length * 2,
+      bytes: trashPhotos.reduce((a, p) => a + (p.size || 0), 0), items: S.trash
+    }
+  ].filter(c => c.n > 0);
+}
+async function cleanupModal(scanOriginals) {
+  const use = await storageUsage();
+  const heavy = scanOriginals == null ? use.photos <= HEAVY_SCAN_AT : scanOriginals;
+  toast(heavy ? '저장소를 살펴보는 중… (원본까지 확인합니다)' : '저장소를 살펴보는 중…', heavy ? 6000 : 2600);
+  const cats = await cleanupScan(heavy);
+  if (!cats.length) {
+    openModal(`<div class="mh"><h3>저장소 청소</h3><button class="x">×</button></div>
+      <div class="mb"><p>지울 것이 없습니다. 저장된 문서가 모두 쓰이고 있습니다.</p>
+      <p class="hint">문서 ${use.docs.toLocaleString()} / ${use.cap.toLocaleString()} · 사진 ${use.photos.toLocaleString()}장
+      ${heavy ? '' : '<br>«주인 없는 원본»은 아직 살펴보지 않았습니다.'}</p></div>
+      <div class="mf">${heavy ? '' : '<button class="btn" id="clHeavy2">원본까지 살펴보기</button>'}
+        <button class="btn pri" onclick="closeModal()">닫기</button></div>`);
+    const h2 = $('#clHeavy2'); if (h2) h2.onclick = () => { closeModal(); cleanupModal(true); };
+    return;
+  }
+  const row = c => `<tr><td><label class="lyr" style="padding:0"><input type="checkbox" data-cl="${c.k}" ${c.on ? 'checked' : ''}>
+      <span>${esc(c.label)}</span></label><div class="hint" style="margin-left:24px">${esc(c.why)}</div></td>
+    <td class="n">${c.n}</td><td class="n">${c.docs}</td><td class="n">${bytes(c.bytes)}</td></tr>`;
+  openModal(`<div class="mh"><h3>저장소 청소</h3><button class="x">×</button></div>
+    <div class="mb">
+      <p class="hint" style="margin:0 0 10px">지울 항목을 고르세요. 고르지 않은 것은 그대로 둡니다.
+      기본으로 켜 둔 것은 <b>어떤 경우에도 다시 쓸 수 없는 문서</b>뿐입니다.</p>
+      ${heavy ? '' : `<p class="hint" style="margin:0 0 10px;color:var(--warn)">사진이 ${use.photos.toLocaleString()}장이라
+        «주인 없는 원본»은 아직 살펴보지 않았습니다 — 원본을 모두 읽어야 해서 시간과 메모리를 많이 씁니다.
+        <button class="btn sm" id="clHeavy" style="margin-left:6px">원본까지 살펴보기</button></p>`}
+      <table class="grid" style="width:100%"><thead><tr>
+        <th style="cursor:default">항목</th><th style="cursor:default">개수</th>
+        <th style="cursor:default">문서</th><th style="cursor:default">용량</th></tr></thead>
+        <tbody>${cats.map(row).join('')}</tbody></table>
+      <div class="statrow" style="margin-top:14px">
+        <div class="stat"><b id="clDocs">0</b><span>되찾는 문서</span></div>
+        <div class="stat"><b id="clBytes">0</b><span>되찾는 용량</span></div>
+        <div class="stat"><b id="clPhotos">0</b><span>더 넣을 수 있는 사진</span></div>
+      </div>
+      <p class="hint" style="margin-top:10px">되돌릴 수 없습니다. 걱정되면 먼저 백업을 받아 두세요.</p>
+    </div>
+    <div class="mf"><button class="btn" id="clBk">먼저 백업 받기</button><span class="spacer"></span>
+      <button class="btn" onclick="closeModal()">취소</button>
+      <button class="btn dgr" id="clGo">고른 항목 지우기</button></div>`, { wide: true });
+  const picked = () => cats.filter(c => { const el = $(`[data-cl="${c.k}"]`); return el && el.checked; });
+  const tally = () => {
+    const p = picked();
+    const docs = p.reduce((a, c) => a + c.docs, 0);
+    $('#clDocs').textContent = docs.toLocaleString();
+    $('#clBytes').textContent = bytes(p.reduce((a, c) => a + c.bytes, 0));
+    $('#clPhotos').textContent = '+' + Math.floor(docs / use.perPhoto).toLocaleString();
+    $('#clGo').disabled = !docs;
+  };
+  $$('#modalbox [data-cl]').forEach(el => el.onchange = tally);
+  tally();
+  $('#clBk').onclick = () => backup();
+  const hv = $('#clHeavy'); if (hv) hv.onclick = () => { closeModal(); cleanupModal(true); };
+  $('#clGo').onclick = async () => {
+    const p = picked();
+    if (!p.length) return;
+    if (!await confirmBox('저장소 청소',
+      `<p>${p.map(c => `<b>${esc(c.label)}</b> ${c.n}개`).join(', ')} 를 영구히 지웁니다.</p>
+       <p class="hint">문서 ${p.reduce((a, c) => a + c.docs, 0)}개를 되찾습니다. 되돌릴 수 없습니다.</p>`, '지우기')) return;
+    closeModal();
+    const total = p.reduce((a, c) => a + c.items.length, 0);
+    const prog = progressStart(total, '저장소 청소 중');
+    let done = 0, freed = 0, gotBytes = 0, failed = 0;
+    for (const c of p) {
+      for (const it of c.items) {
+        prog.set(done, c.label);
+        try {
+          if (c.k === 'orphanFull') await S.store.del('photofull', it.id);
+          else if (c.k === 'snapshot') await S.store.del('snapshots', it.id);
+          else if (c.k === 'orphanNote') await S.store.del('notes', it.id);
+          else if (c.k === 'orphanPhoto') await PhotoStore.remove([it]);
+          else if (c.k === 'trash') await purgeProject(it.id);
+          freed += c.docs / Math.max(1, c.items.length);
+          gotBytes += c.bytes / Math.max(1, c.items.length);
+        } catch (e) { failed++; console.error('청소 실패', c.k, it.id, e); }
+        done++;
+        if (done % 15 === 0) await new Promise(r => setTimeout(r, 0));
+      }
+    }
+    prog.done();
+    await loadAll();
+    const after = await storageUsage();
+    updateCounts(); MAP.draw(); renderTable(); renderSettings();
+    const gotDocs = Math.round(freed);
+    openModal(`<div class="mh"><h3>청소 완료</h3><button class="x">×</button></div>
+      <div class="mb"><p>문서 <b class="mono">${gotDocs.toLocaleString()}</b>개, <b class="mono">${bytes(gotBytes)}</b> 를 되찾았습니다.</p>
+        <div class="statrow" style="margin:12px 0">
+          <div class="stat"><b>${after.docs.toLocaleString()} / ${after.cap.toLocaleString()}</b><span>지금 문서</span></div>
+          <div class="stat"><b>${after.photos.toLocaleString()}</b><span>사진</span></div>
+          <div class="stat"><b>+${Math.floor(gotDocs / after.perPhoto).toLocaleString()}</b><span>더 넣을 수 있게 된 사진</span></div>
+        </div>
+        ${failed ? `<p class="hint" style="color:var(--warn)">${failed}개는 지우지 못했습니다. 다시 시도해 보세요.</p>` : ''}</div>
+      <div class="mf"><button class="btn pri" onclick="closeModal()">닫기</button></div>`);
+  };
+}
+
 /* ---------- 사진 묶어 담기 ----------
    예전에 한 장씩 저장한 사진을 프로젝트 단위 묶음으로 옮긴다.
    데이터 보존 원칙에 따라, 옮긴 결과를 다시 읽어 확인한 뒤에만 옛 문서를 지운다.
