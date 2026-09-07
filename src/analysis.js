@@ -442,10 +442,10 @@ async function renderSettings() {
       지금 이 아카이브는 사진 1장에 문서 <b>${use.perPhoto}개</b>를 쓰고 있어(원본 1개 + 묶음 몫),
       <b>약 ${use.photosLeft.toLocaleString()}장</b>을 더 넣을 수 있습니다.
       ${use.docs / use.cap > 0.85 ? '<b style="color:var(--signal)">한도에 가까워졌습니다 — 백업을 내려받고 오래된 원본을 정리하세요.</b>' : ''}</p>
-      ${use.legacy ? `<div style="margin-top:10px;padding:9px 11px;border:1px solid var(--accent);background:var(--accent-soft);border-radius:var(--r)">
-        <p class="hint" style="margin:0 0 8px;color:var(--accent-ink)">예전 방식으로 저장된 사진 <b>${use.legacy}장</b>이 있습니다.
-        묶어 담으면 문서 <b>약 ${use.reclaim}개</b>를 되찾아 그만큼 더 담을 수 있습니다. 화질은 그대로입니다.</p>
-        <button class="btn sm pri" id="stPack">묶어 담기</button></div>` : ''}
+      ${use.packed ? `<div style="margin-top:10px;padding:9px 11px;border:1px solid var(--signal);background:var(--signal-soft);border-radius:var(--r)">
+        <p class="hint" style="margin:0 0 8px">묶음에 담긴 사진 <b>${use.packed}장</b>이 남아 있습니다.
+        묶어 담는 방식은 사진을 잃게 만들어 되돌렸습니다 — 이 사진들을 한 장씩 저장하는 방식으로 풀어 두는 것이 안전합니다.</p>
+        <button class="btn sm pri" id="stPack">묶음 풀기</button></div>` : ''}
       <div style="margin-top:10px">${bars(S.projects.map(p => [projName(p), p.photoCount || 0]).sort((a, b) => b[1] - a[1]).slice(0, 8), '장')}</div>
       <p class="hint" style="margin-top:8px">${S.store && S.store.name === 'db' ? '사진은 계정 저장소에 저장되어 다른 기기에서도 열립니다. 문서 하나는 256KB까지라 사진 1장은 약 150–220KB로 자동 압축됩니다.' : '이 브라우저에만 저장됩니다. 정기적으로 JSON 백업을 내려받으세요.'}</p></div>
     <div class="card pad"><div class="sech"><h3>정리</h3><div class="ln"></div></div>
@@ -454,6 +454,7 @@ async function renderSettings() {
       <div class="dist"><span>휴지통</span><span class="d">${S.trash.length}</span></div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button class="btn sm pri" id="stClean">저장소 청소</button>
+        <button class="btn sm" id="stRecover">사라진 사진 되살리기</button>
         <button class="btn sm" id="stDup" ${dups.length ? '' : 'disabled'}>중복 사진 검토</button>
         <button class="btn sm" id="stTrash" ${S.trash.length ? '' : 'disabled'}>휴지통 열기</button></div>
       <p class="hint" style="margin-top:8px">「저장소 청소」는 쓰이지 않는 문서(주인 없는 원본, 사라진 프로젝트의 자료, 옛 스냅샷)를 찾아
@@ -501,6 +502,7 @@ async function renderSettings() {
   $('#stTrash').onclick = () => trashModal();
   $('#stDup').onclick = () => dupModal(dups);
   $('#stClean').onclick = () => cleanupModal();
+  $('#stRecover').onclick = () => recoverPhotos();
   $('#stCheck').onclick = () => integrityCheck();
   const pk = $('#stPack'); if (pk) pk.onclick = () => repackPhotos();
 }
@@ -659,71 +661,115 @@ async function cleanupModal(scanOriginals) {
   };
 }
 
-/* ---------- 사진 묶어 담기 ----------
-   예전에 한 장씩 저장한 사진을 프로젝트 단위 묶음으로 옮긴다.
-   데이터 보존 원칙에 따라, 옮긴 결과를 다시 읽어 확인한 뒤에만 옛 문서를 지운다.
-   확인에 실패하면 그 사진은 옛 문서를 그대로 남겨 둔다 — 사라지느니 중복이 낫다. */
+/* ---------- 묶음 풀기 ----------
+   v1.8.0 의 «묶어 담기» 는 공유 문서를 읽고 고쳐 되쓰는 방식이라 사진 메타를 잃게 했다.
+   되돌렸고, 아직 묶음에 남아 있는 사진을 한 장씩 저장하는 방식으로 풀어 준다.
+   새 문서를 쓰고 다시 읽어 확인한 뒤에만 묶음에서 뺀다. */
 async function repackPhotos() {
-  const use = await storageUsage();
-  if (!use.legacy) return toast('이미 모두 묶여 있습니다');
-  const ok = await new Promise(res => {
-    openModal(`<div class="mh"><h3>사진 묶어 담기</h3><button class="x">×</button></div>
-      <div class="mb">
-        <p>예전 방식으로 저장된 <b class="mono">${use.legacy}</b>장을 프로젝트 단위 묶음으로 옮깁니다.
-        사진과 화질은 그대로이고, <b>문서 약 ${use.reclaim}개</b>를 되찾아 그만큼 더 담을 수 있게 됩니다.</p>
-        <div class="statrow" style="margin:12px 0">
-          <div class="stat"><b>${use.docs.toLocaleString()}</b><span>지금 문서</span></div>
-          <div class="stat"><b>${Math.max(0, use.docs - use.reclaim).toLocaleString()}</b><span>옮긴 뒤</span></div>
-          <div class="stat"><b>${use.photosLeft.toLocaleString()} → ${Math.max(0, Math.floor((use.cap - (use.docs - use.reclaim)) / use.perPhoto)).toLocaleString()}</b><span>더 넣을 수 있는 사진</span></div>
-        </div>
-        <p class="hint">옮긴 결과를 다시 읽어 확인한 뒤에만 옛 문서를 지웁니다. 확인에 실패한 사진은 옛 자리에 그대로 둡니다.
-        그래도 <b>시작하기 전에 백업을 한 번 받아 두시길 권합니다.</b></p>
-      </div>
-      <div class="mf"><button class="btn" data-a="">취소</button>
-        <button class="btn" data-a="backup">먼저 백업 받기</button>
-        <button class="btn pri" data-a="go">옮기기</button></div>`);
-    $$('#modalbox [data-a]').forEach(b => b.onclick = () => { closeModal(); res(b.dataset.a); });
-  });
-  if (ok === 'backup') { await backup(); return repackPhotos(); }
-  if (ok !== 'go') return;
-
-  const legacy = await S.store.list('photos');
-  const prog = progressStart(legacy.length, '사진 묶는 중');
-  let moved = 0; const failed = [];
-  for (let i = 0; i < legacy.length; i++) {
-    const ph = legacy[i];
-    prog.set(i, ph.cat || '');
-    try {
-      if (!ph.pid) { failed.push({ id: ph.id, why: '소속 프로젝트가 없습니다' }); continue; }
-      const bookId = await PhotoStore.add(ph.pid, ph.id, ph);
-      // 확인 — 옮긴 것이 실제로 읽히는지 보고 나서 지운다
-      const back = await S.store.get('photobook', bookId);
-      const got = back && back.items && back.items[ph.id];
-      if (!got || (ph.thumb && got.thumb !== ph.thumb)) { failed.push({ id: ph.id, why: '옮긴 결과를 확인하지 못했습니다' }); continue; }
-      await S.store.del('photos', ph.id);
-      moved++;
-    } catch (e) {
-      failed.push({ id: ph.id, why: String((e && (e.message || e.code)) || e) });
+  const books = await S.store.list('photobook');
+  const total = books.reduce((a, b) => a + Object.keys(b.items || {}).length, 0);
+  if (!total) return toast('묶음에 남은 사진이 없습니다');
+  if (!await confirmBox('묶음 풀기',
+    `<p>묶음에 담긴 <b class="mono">${total}</b>장을 한 장씩 저장하는 방식으로 풉니다.
+     사진과 화질은 그대로입니다.</p>
+     <p class="hint">새 문서를 쓰고 다시 읽어 확인한 뒤에만 묶음에서 뺍니다. 확인에 실패하면 묶음에 그대로 둡니다.</p>`,
+    '풀기')) return;
+  const prog = progressStart(total, '묶음 푸는 중');
+  let moved = 0, failed = 0, n = 0;
+  for (const b of books) {
+    const items = Object.entries(b.items || {});
+    for (const [id, meta] of items) {
+      prog.set(n++, meta.cat || '');
+      try {
+        await putRetry('photos', id, Object.assign({}, meta, { pid: meta.pid || b.pid }));
+        const back = await S.store.get('photos', id);
+        if (!back || (meta.thumb && back.thumb !== meta.thumb)) { failed++; continue; }
+        delete b.items[id];
+        moved++;
+      } catch (e) { failed++; console.error('묶음 풀기 실패', id, e); }
     }
-    if (i % 10 === 0) await new Promise(r => setTimeout(r, 0));
+    try {
+      if (Object.keys(b.items).length) await putRetry('photobook', b.id, { pid: b.pid, n: b.n, items: b.items });
+      else await delRetry('photobook', b.id);
+    } catch (e) { console.error(e); }
   }
   prog.done();
-  const after = await storageUsage();
-  if (S.cur) { const p = S.projects.find(x => x.id === S.cur); if (p) await openDetail(p.id); }
+  if (S.cur) await openDetail(S.cur);
   renderSettings();
-  openModal(`<div class="mh"><h3>묶어 담기 완료</h3><button class="x">×</button></div>
-    <div class="mb"><p><b class="mono">${moved}</b>장을 옮겼습니다${failed.length ? `, <b class="mono">${failed.length}</b>장은 옛 자리에 그대로 두었습니다` : ''}.</p>
-      <div class="statrow" style="margin:12px 0">
-        <div class="stat"><b>${after.docs.toLocaleString()}</b><span>문서</span></div>
-        <div class="stat"><b>${after.photos.toLocaleString()}</b><span>사진</span></div>
-        <div class="stat"><b>${after.photosLeft.toLocaleString()}</b><span>더 넣을 수 있는 사진</span></div></div>
-      ${failed.length ? `<div class="tblwrap" style="max-height:180px;border:1px solid var(--line);border-radius:var(--r)">
-        <table class="grid"><thead><tr><th style="cursor:default">사유</th><th style="cursor:default">장수</th></tr></thead><tbody>
-        ${Object.entries(failed.reduce((a, f) => { a[f.why] = (a[f.why] || 0) + 1; return a; }, {}))
-          .map(([w, n]) => `<tr><td>${esc(w)}</td><td class="n">${n}</td></tr>`).join('')}</tbody></table></div>
-        <p class="hint" style="margin-top:8px">옮기지 못한 사진도 앱에서는 그대로 보이고 쓰입니다. 다시 「묶어 담기」를 눌러 재시도할 수 있습니다.</p>` : ''}
-    </div>
-    <div class="mf"><button class="btn pri" onclick="closeModal()">닫기</button></div>`);
+  toast(`${moved}장을 풀었습니다${failed ? ` · ${failed}장 실패` : ''}`, 4200);
+}
+
+/* ---------- 사라진 사진 되살리기 ----------
+   원본(photofull)은 남아 있는데 목록 정보가 사라진 사진을 찾아, 원본에서 축소본을
+   다시 만들어 목록에 되돌린다. 원본이 곧 사진이므로 사진 자체는 잃지 않았다.
+   다만 어느 프로젝트의 사진이었는지·촬영 설명·분류는 목록 정보에 있었으므로
+   복구할 수 없다. 그래서 어디로 되살릴지는 연구자가 고른다. */
+async function recoverPhotos() {
+  toast('원본을 살펴보는 중… 시간이 걸립니다', 8000);
+  let fulls;
+  try { fulls = await S.store.list('photofull'); }
+  catch (e) { return toast('원본을 읽지 못했습니다: ' + String((e && e.message) || e), 5000); }
+  const known = new Set((await PhotoStore.listAll()).map(p => p.id));
+  const lost = fulls.filter(f => !known.has(f.id) && f.data && f.data.length > 2000);
+  if (!lost.length) return toast('되살릴 사진이 없습니다 — 원본과 목록이 모두 맞습니다');
+  const opts = S.projects.map(p => `<option value="${p.id}">${esc(projName(p))}</option>`).join('');
+  const where = await new Promise(res => {
+    openModal(`<div class="mh"><h3>사라진 사진 되살리기</h3><button class="x">×</button></div>
+      <div class="mb">
+        <p>목록에서 사라졌지만 <b>원본이 남아 있는 사진 <span class="mono">${lost.length}</span>장</b>을 찾았습니다.
+        원본에서 축소본을 다시 만들어 되살립니다.</p>
+        <p class="hint">어느 프로젝트의 사진이었는지와 분류·설명은 사라진 목록 정보에 있던 것이라 되살릴 수 없습니다.
+        한곳에 모아 되살린 뒤, 갤러리에서 「선택」으로 골라 프로젝트를 옮기시면 됩니다.</p>
+        <label class="fld" style="margin-top:12px"><span>어디로 되살릴까요</span>
+          <select id="rcTo"><option value="__new">새 프로젝트 «되살린 사진» 을 만들어 모으기</option>${opts}</select></label>
+      </div>
+      <div class="mf"><button class="btn" data-r="">취소</button><button class="btn pri" data-r="go">${lost.length}장 되살리기</button></div>`);
+    $$('#modalbox [data-r]').forEach(b => b.onclick = () => { const v = b.dataset.r ? $('#rcTo').value : ''; closeModal(); res(v); });
+  });
+  if (!where) return;
+  let pid = where;
+  if (where === '__new') {
+    const p = {
+      id: uid(), name: '되살린 사진', marketName: '', aptName: '', sido: '', sgg: '', address: '',
+      lat: null, lng: null, surveyDate: today(), remodel: '미확인', relation: '미분류', status: '미확인',
+      parking: false, tags: ['복구'], custom: {}, photoCount: 0, noteCount: 0,
+      note: '목록 정보가 사라져 원본에서 되살린 사진입니다. 갤러리에서 선택해 원래 프로젝트로 옮기세요.'
+    };
+    await saveProject(p);
+    pid = p.id;
+  }
+  const prog = progressStart(lost.length, '사진 되살리는 중');
+  let ok = 0, bad = 0;
+  for (let i = 0; i < lost.length; i++) {
+    const f = lost[i];
+    prog.set(i, '');
+    try {
+      const img = await new Promise((res, rej) => {
+        const im = new Image();
+        im.onload = () => res(im); im.onerror = () => rej(new Error('이미지를 읽지 못했습니다'));
+        im.src = f.data;
+      });
+      const thumb = encodeWithin(img, [300, 220, 160], THUMB_MAX);
+      if (!thumb) throw new Error('축소본을 만들지 못했습니다');
+      await PhotoStore.add(pid, f.id, {
+        pid, cat: '기타', kind: 'photo', caption: '', date: '', place: '', memo: '되살린 사진 — 분류를 확인해 주세요',
+        tags: ['복구'], w: img.width, h: img.height, sharp: 0, size: f.data.length,
+        createdAt: new Date().toISOString(), thumb
+      });
+      ok++;
+    } catch (e) { bad++; console.error('되살리기 실패', f.id, e); }
+    if (i % 5 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+  prog.done();
+  const p = S.projects.find(x => x.id === pid);
+  if (p) { p.photoCount = (await PhotoStore.list(pid)).length; await saveProject(p); }
+  await loadAll(); updateCounts(); renderTable(); renderSettings();
+  openModal(`<div class="mh"><h3>되살리기 완료</h3><button class="x">×</button></div>
+    <div class="mb"><p><b class="mono">${ok}</b>장을 되살렸습니다${bad ? `, ${bad}장은 실패했습니다` : ''}.</p>
+      <p class="hint">«${esc(p ? projName(p) : '')}» 에 모여 있습니다. 갤러리에서 「선택」으로 고른 뒤
+      «프로젝트 옮기기» 로 원래 프로젝트에 나눠 주세요.</p></div>
+    <div class="mf"><button class="btn pri" id="rcOpen">그 프로젝트 열기</button></div>`);
+  $('#rcOpen').onclick = () => { closeModal(); openDetail(pid); };
 }
 
 /** 데이터 무결성 점검 — 읽기 전용. 어떤 것도 자동으로 고치거나 지우지 않는다. */

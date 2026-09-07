@@ -6,7 +6,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '1.9.1';
+const APP_VERSION = '2.0.0';
 const SCHEMA_VERSION = 3;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -396,20 +396,20 @@ const PhotoStore = {
     const all = await this.listAll();
     return all.find(p => p.id === id) || null;
   },
-  /** 사진 메타를 넣는다. 자리가 남은 묶음이 있으면 거기에, 없으면 새 묶음을 만든다. */
+  /** 사진 메타를 넣는다. 한 장이 문서 하나를 쓴다.
+
+      v1.8.0 에서 한 프로젝트의 사진 메타를 문서 하나에 «묶어 담아» 용량을 늘렸는데,
+      그것이 데이터를 잃게 만들었다. 묶음에 한 장을 더하려면 문서를 읽고 고쳐서 통째로
+      되써야 하는데, 이 저장소는 last-writer-wins 이고 방금 쓴 것이 곧바로 읽힌다는
+      보장이 없다. 연달아 올리면 두 번째 사진이 «첫 사진이 없는» 묶음을 읽어 자기만
+      담아 되쓰고, 앞의 메타가 지워졌다. 사진 90장을 올려도 마지막 한 장만 남는다.
+
+      용량보다 데이터가 먼저다. 한 장에 문서 하나씩 쓰는 방식으로 되돌린다.
+      담을 수 있는 장수는 약 2,500장으로 줄지만, 공유 문서를 고쳐 쓰지 않으므로
+      이런 경합이 원천적으로 생기지 않는다. */
   async add(pid, id, meta) {
-    const books = await S.store.list('photobook', ['pid', '==', pid]);
-    const item = stripMeta(meta);
-    const itemSize = jsonBytes(item) + id.length + 8;
-    let target = null, maxN = -1;
-    for (const b of books) {
-      maxN = Math.max(maxN, b.n || 0);
-      if (!target && jsonBytes(b.items || {}) + itemSize < BOOK_MAX) target = b;
-    }
-    if (!target) target = { id: `${pid}__${maxN + 1}`, pid, n: maxN + 1, items: {} };
-    target.items[id] = item;
-    await putRetry('photobook', target.id, { pid: target.pid, n: target.n, items: target.items });
-    return target.id;
+    await putRetry('photos', id, Object.assign({}, stripMeta(meta), { pid }));
+    return null;
   },
   /** 여러 장의 메타를 고친다. 같은 묶음에 든 것은 한 번에 쓴다 — 20장 일괄 수정이 쓰기 1번이 된다. */
   async update(photos) {
@@ -511,17 +511,15 @@ async function storageUsage() {
   // 원본은 장당 문서 1개, 묶음은 실제 문서 수, 옛 사진은 장당 메타 1개
   const docs = photos + books.length + legacy.length + notes.length
     + S.projects.length + S.trash.length + S.facilities.length + S.fields.length + 2;
-  /* 앞으로 넣을 사진 한 장이 문서 몇 개를 쓸지 — 짐작하지 말고 지금 쌓인 것에서 잰다.
-     (원본 1개 + 묶음 몫). 아직 묶인 사진이 없으면 넉넉하게 1.15 로 본다. */
-  const perPhoto = packed >= 8 ? Math.max(1.02, 1 + books.length / packed) : 1.15;
+  // 사진 한 장 = 문서 2개 (메타 + 원본)
+  const perPhoto = 2;
   const all = books.flatMap(b => Object.values(b.items || {})).concat(legacy);
   return {
     photos, packed, legacy: legacy.length, notes: notes.length, docs, cap: DOC_CAP,
     perPhoto: +perPhoto.toFixed(2), books: books.length,
     left: Math.max(0, DOC_CAP - docs),
     photosLeft: Math.max(0, Math.floor((DOC_CAP - docs) / perPhoto)),
-    // 옛 방식 사진을 묶으면 얼마나 되찾는지 (장당 문서 1개 회수, 묶음 문서는 20장에 1개)
-    reclaim: Math.max(0, legacy.length - Math.ceil(legacy.length / 20)),
+    reclaim: 0,
     bytes: all.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0)
   };
 }

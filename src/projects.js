@@ -655,6 +655,7 @@ function bulkBar() {
     <span class="spacer"></span>
     <select id="bkCat" ${n ? '' : 'disabled'}><option value="">카테고리 바꾸기…</option>${PHOTO_CATS.map(c => `<option>${esc(c)}</option>`).join('')}</select>
     <select id="bkFace" ${n ? '' : 'disabled'}><option value="">입면 방향…</option><option value="-">방향 지우기</option>${FACES.map(d => `<option>${d}</option>`).join('')}</select>
+    <button class="btn sm" id="bkMove" ${n ? '' : 'disabled'}>프로젝트 옮기기</button>
     <button class="btn sm" id="bkTag" ${n ? '' : 'disabled'}>태그 추가</button>
     <button class="btn sm" id="bkDate" ${n ? '' : 'disabled'}>촬영일 지정</button>
     <button class="btn sm dgr" id="bkDel" ${n ? '' : 'disabled'}>삭제</button>
@@ -690,6 +691,41 @@ function bindGallery() {
     if (!e.target.value) return;
     const v = e.target.value === '-' ? '' : e.target.value;
     bulkPatch(pick(), { face: v }, v ? `입면 방향을 «${v}» 으로` : '입면 방향을 비움');
+  };
+  $('#bkMove').onclick = () => {
+    const list = pick();
+    const opts = S.projects.filter(p => p.id !== S.cur).map(p => `<option value="${p.id}">${esc(projName(p))}</option>`).join('');
+    if (!opts) return toast('옮길 다른 프로젝트가 없습니다');
+    openModal(`<div class="mh"><h3>프로젝트 옮기기 · ${list.length}장</h3><button class="x">×</button></div>
+      <div class="mb"><label class="fld"><span>어느 프로젝트로</span><select id="mv_to">${opts}</select></label>
+      <p class="hint" style="margin-top:8px">사진과 원본은 그대로이고 소속만 바뀝니다.</p></div>
+      <div class="mf"><button class="btn pri" id="mv_ok">옮기기</button></div>`);
+    $('#mv_ok').onclick = async () => {
+      const to = $('#mv_to').value;
+      closeModal();
+      const prog = list.length > 4 ? progressStart(list.length, '옮기는 중') : null;
+      let moved = 0, failed = 0;
+      for (let i = 0; i < list.length; i++) {
+        const ph = list[i];
+        if (prog) prog.set(i, ph.cat || '');
+        try {
+          // 새 소속으로 먼저 쓰고, 확인한 뒤에 옛 자리를 정리한다
+          await putRetry('photos', ph.id, Object.assign({}, stripMeta(ph), { pid: to }));
+          const back = await S.store.get('photos', ph.id);
+          if (!back || back.pid !== to) { failed++; continue; }
+          if (ph._book) await PhotoStore.remove([ph], true);   // 원본은 그대로 둔다
+          moved++;
+        } catch (e) { failed++; console.error('옮기기 실패', ph.id, e); }
+      }
+      if (prog) prog.done();
+      const from = S.projects.find(x => x.id === S.cur), toP = S.projects.find(x => x.id === to);
+      S.photos = await PhotoStore.list(S.cur);
+      if (from) { from.photoCount = S.photos.length; await saveProject(from); }
+      if (toP) { toP.photoCount = (await PhotoStore.list(to)).length; await saveProject(toP); }
+      PSEL.ids.clear(); PSEL.last = null;
+      renderDetail(); renderTable();
+      toast(`${moved}장을 «${toP ? projName(toP) : ''}» 로 옮겼습니다${failed ? ` · ${failed}장 실패` : ''}`, 4200);
+    };
   };
   $('#bkTag').onclick = () => {
     openModal(`<div class="mh"><h3>태그 추가 · ${PSEL.ids.size}장</h3><button class="x">×</button></div>
