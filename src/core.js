@@ -6,7 +6,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.9.1';
 const SCHEMA_VERSION = 3;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -444,6 +444,8 @@ const PhotoStore = {
     }
   },
   /** 사진을 지운다 (메타·원본 모두). 같은 묶음은 한 번에 처리한다. */
+  /** 사진을 지운다. 한 장이 실패해도 나머지는 계속 지우고, 무엇이 왜 안 됐는지 돌려준다.
+   *  {removed, failed:[{id, why}]} */
   async remove(photos, keepFull) {
     const byBook = new Map();
     for (const ph of photos) {
@@ -451,19 +453,43 @@ const PhotoStore = {
       if (!byBook.has(key)) byBook.set(key, []);
       byBook.get(key).push(ph);
     }
+    let removed = 0; const failed = [];
     for (const [key, list] of byBook) {
+      const gone = [];                                   // 메타를 확실히 지운 것만 원본을 지운다
       if (key.slice(0, 8) === '@legacy:') {
-        for (const ph of list) await S.store.del('photos', ph.id);
+        for (const ph of list) {
+          try { await delRetry('photos', ph.id); gone.push(ph); }
+          catch (e) { failed.push({ id: ph.id, why: String((e && (e.message || e.code)) || e) }); }
+        }
       } else {
-        const b = await S.store.get('photobook', key);
-        if (b) {
-          for (const ph of list) delete b.items[ph.id];
-          if (Object.keys(b.items).length) await putRetry('photobook', key, { pid: b.pid, n: b.n, items: b.items });
-          else await S.store.del('photobook', key);
+        let b = null;
+        try { b = await S.store.get('photobook', key); } catch (e) { }
+        // 묶음을 못 찾으면 조용히 넘기지 않는다 — 다른 묶음에 들어 있을 수 있으니 찾아본다
+        if (!b) {
+          const ids = new Set(list.map(ph => ph.id));
+          try {
+            const all = await S.store.list('photobook', list[0].pid ? ['pid', '==', list[0].pid] : null);
+            b = all.find(x => Object.keys(x.items || {}).some(i => ids.has(i))) || null;
+          } catch (e) { }
+        }
+        if (!b) {
+          for (const ph of list) failed.push({ id: ph.id, why: '사진이 담긴 묶음을 찾지 못했습니다' });
+          continue;
+        }
+        for (const ph of list) delete b.items[ph.id];
+        try {
+          if (Object.keys(b.items).length) await putRetry('photobook', b.id, { pid: b.pid, n: b.n, items: b.items });
+          else await delRetry('photobook', b.id);
+          gone.push(...list);
+        } catch (e) {
+          const why = String((e && (e.message || e.code)) || e);
+          for (const ph of list) failed.push({ id: ph.id, why });
         }
       }
-      if (!keepFull) for (const ph of list) { try { await S.store.del('photofull', ph.id); } catch (e) { } }
+      removed += gone.length;
+      if (!keepFull) for (const ph of gone) { try { await delRetry('photofull', ph.id); } catch (e) { console.warn('원본 삭제 실패', ph.id, e); } }
     }
+    return { removed, failed };
   }
 };
 /** 문서에 쓰기 전에 화면용 표시 필드를 걷어낸다 */
@@ -498,6 +524,24 @@ async function storageUsage() {
     reclaim: Math.max(0, legacy.length - Math.ceil(legacy.length / 20)),
     bytes: all.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0)
   };
+}
+
+/** 지우기도 쓰기와 같은 호출 한도를 쓴다. 사진 20장을 한 번에 지우면 40번 넘게
+    부르게 되어 저장소가 거절할 수 있다. 쓰기만 재시도하고 지우기는 그냥 두면
+    «지워지지 않는» 것처럼 보인다. */
+async function delRetry(coll, id, tries) {
+  let last = null;
+  const n = tries || 4;
+  for (let i = 0; i < n; i++) {
+    try { await S.store.del(coll, id); return; }
+    catch (e) {
+      last = e;
+      const msg = String((e && (e.message || e.code)) || e);
+      if (!RETRY_PUT.test(msg) && FATAL_PUT.test(msg)) throw e;
+      if (i < n - 1) await new Promise(r => setTimeout(r, 250 * Math.pow(2, i) + Math.random() * 200));
+    }
+  }
+  throw last;
 }
 
 /* ---------- 진행 표시 ----------
@@ -551,8 +595,8 @@ async function deleteProject(id) {
 async function purgeProject(id) {
   await PhotoStore.remove(await PhotoStore.list(id));
   const nt = await S.store.list('notes', ['pid', '==', id]);
-  for (const x of nt) await S.store.del('notes', x.id);
-  await S.store.del('trash', id);
+  for (const x of nt) await delRetry('notes', x.id);
+  await delRetry('trash', id);
   S.trash = S.trash.filter(x => x.id !== id);
   updateCounts();
 }

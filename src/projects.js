@@ -716,13 +716,28 @@ function bindGallery() {
     const list = pick();
     if (!await confirmBox('사진 삭제', `<p>선택한 <b class="mono">${list.length}</b>장을 삭제합니다. 원본까지 지워지며 되돌릴 수 없습니다.</p>
       <p class="hint">${list.slice(0, 6).map(ph => esc(ph.cat)).join(' · ')}${list.length > 6 ? ' …' : ''}</p>`, `${list.length}장 삭제`)) return;
-    await PhotoStore.remove(list);
-    const gone = new Set(list.map(ph => ph.id));
-    S.photos = S.photos.filter(x => !gone.has(x.id));
+    const prog = list.length > 4 ? progressStart(list.length, '사진 지우는 중') : null;
+    let r;
+    try { r = await PhotoStore.remove(list); }
+    catch (e) { if (prog) prog.done(); return toast('삭제하지 못했습니다: ' + String((e && (e.message || e.code)) || e), 5000); }
+    if (prog) prog.done();
+    const bad = new Set(r.failed.map(f => f.id));
+    S.photos = S.photos.filter(x => !list.some(l => l.id === x.id) || bad.has(x.id));
     PSEL.ids.clear(); PSEL.last = null;
+    for (const f of r.failed) PSEL.ids.add(f.id);        // 실패한 것은 고른 채로 남겨 다시 시도할 수 있게
     const p = S.projects.find(x => x.id === S.cur);
     if (p) { p.photoCount = S.photos.length; await saveProject(p); }
-    renderDetail(); toast(`${list.length}장을 삭제했습니다`);
+    renderDetail();
+    if (!r.failed.length) return toast(`${r.removed}장을 삭제했습니다`);
+    const why = {};
+    for (const f of r.failed) why[f.why] = (why[f.why] || 0) + 1;
+    openModal(`<div class="mh"><h3>${r.removed}장 삭제 · ${r.failed.length}장 실패</h3><button class="x">×</button></div>
+      <div class="mb"><p>${r.removed}장은 지워졌고 <b class="mono">${r.failed.length}</b>장이 남았습니다.
+      남은 사진은 <b>그대로 선택되어 있으니</b> 「삭제」를 다시 누르면 재시도합니다.</p>
+      <table class="grid" style="width:100%;margin-top:10px"><thead><tr><th style="cursor:default">원인</th><th style="cursor:default">장수</th></tr></thead>
+      <tbody>${Object.entries(why).map(([w, n]) => `<tr><td>${esc(w)}</td><td class="n">${n}</td></tr>`).join('')}</tbody></table>
+      <p class="hint" style="margin-top:10px">저장이 몰려서 거절된 경우라면 잠시 뒤 다시 누르면 대개 지워집니다.</p></div>
+      <div class="mf"><button class="btn pri" onclick="closeModal()">닫기</button></div>`);
   };
 }
 /** 고른 사진에 같은 값을 적용한다. 문서는 통째로 되쓰므로 이 버전이 모르는 필드도 남는다. */
@@ -776,10 +791,13 @@ async function photoModal(id) {
   };
   $('#ph_del').onclick = async () => {
     if (!await confirmBox('사진 삭제', '<p>이 사진을 삭제할까요? 되돌릴 수 없습니다.</p>')) return;
-    await PhotoStore.remove([ph]);
+    let r;
+    try { r = await PhotoStore.remove([ph]); }
+    catch (e) { return toast('삭제하지 못했습니다: ' + String((e && (e.message || e.code)) || e), 5000); }
+    if (!r.removed) return toast('삭제하지 못했습니다: ' + (r.failed[0] ? r.failed[0].why : '알 수 없는 이유'), 5000);
     S.photos = S.photos.filter(x => x.id !== ph.id);
     const p = S.projects.find(x => x.id === S.cur); if (p) { p.photoCount = S.photos.length; await saveProject(p); }
-    closeModal(); renderDetail();
+    closeModal(); renderDetail(); toast('삭제했습니다');
   };
   $('#ph_elev').onclick = () => { closeModal(); go('elev'); loadElevPhoto(ph.id); };
 }

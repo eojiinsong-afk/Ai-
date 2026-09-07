@@ -630,10 +630,10 @@ async function cleanupModal(scanOriginals) {
       for (const it of c.items) {
         prog.set(done, c.label);
         try {
-          if (c.k === 'orphanFull') await S.store.del('photofull', it.id);
-          else if (c.k === 'snapshot') await S.store.del('snapshots', it.id);
-          else if (c.k === 'orphanNote') await S.store.del('notes', it.id);
-          else if (c.k === 'orphanPhoto') await PhotoStore.remove([it]);
+          if (c.k === 'orphanFull') await delRetry('photofull', it.id);
+          else if (c.k === 'snapshot') await delRetry('snapshots', it.id);
+          else if (c.k === 'orphanNote') await delRetry('notes', it.id);
+          else if (c.k === 'orphanPhoto') { const rr = await PhotoStore.remove([it]); if (!rr.removed) throw new Error(rr.failed[0] ? rr.failed[0].why : '삭제 실패'); }
           else if (c.k === 'trash') await purgeProject(it.id);
           freed += c.docs / Math.max(1, c.items.length);
           gotBytes += c.bytes / Math.max(1, c.items.length);
@@ -807,8 +807,13 @@ function dupModal(groups) {
         <div><button class="btn sm ${j === 0 ? '' : 'dgr'}" data-dd="${p.id}" ${j === 0 ? 'disabled' : ''}>${j === 0 ? '유지' : '삭제'}</button></div></div>`).join('')}</div></div>`).join('')}</div>
     <div class="mf"><button class="btn" onclick="closeModal()">닫기</button></div>`, { wide: true });
   $$('[data-dd]').forEach(b => b.onclick = async () => {
-    await PhotoStore.remove([groups.flat().find(x => x.id === b.dataset.dd)].filter(Boolean));
+    const target = groups.flat().find(x => x.id === b.dataset.dd);
+    if (!target) return;
+    let r; try { r = await PhotoStore.remove([target]); }
+    catch (e) { return toast('삭제하지 못했습니다: ' + String((e && (e.message || e.code)) || e), 5000); }
+    if (!r.removed) return toast('삭제하지 못했습니다: ' + (r.failed[0] ? r.failed[0].why : ''), 5000);
     b.closest('div').parentElement.style.opacity = .3; b.disabled = true; b.textContent = '삭제됨';
+    S.photos = S.photos.filter(x => x.id !== target.id);
     toast('삭제했습니다');
   });
 }
