@@ -345,13 +345,16 @@ async function backup() {
   const [photos, notes] = await Promise.all([PhotoStore.listAll(), S.store.list('notes')]);
   const full = {};
   for (const ph of photos) { const f = await S.store.get('photofull', ph.id); if (f) full[ph.id] = f.data; }
+  const total = S.projects.reduce((a, p) => a + (p.photoCount || 0), 0);
   const blob = new Blob([JSON.stringify({
     format: 'mkt-archive', appVersion: APP_VERSION, schemaVersion: (S.meta && S.meta.schemaVersion) || SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     projects: S.projects, facilities: S.facilities, fields: S.fields,
     photos: photos.map(p => { const d = Object.assign({}, p); delete d._book; return d; }), notes, photofull: full
   })], { type: 'application/json' });
-  download(`시장아파트_백업_${today()}.json`, blob);
+  await download(`시장아파트_백업_${today()}.json`, blob);
+  await touchMeta({ lastBackupAt: new Date().toISOString(), photosAtBackup: total });
+  if (S.view === 'set') renderSettings();
 }
 /** 백업 복원. 어떤 경우에도 기존 데이터를 지우지 않는다.
  *  같은 ID가 이미 있으면 mode에 따라 건너뛰거나(기본) 덮어쓴다. */
@@ -401,6 +404,7 @@ async function renderSettings() {
   const photos = await S.store.list('photos');
   const batches = importBatches();
   const use = await storageUsage();
+  const due = backupDue();
   const totalBytes = photos.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0);
   const dup = {}; photos.forEach(p => { const k = (p.w || 0) + 'x' + (p.h || 0) + '|' + (p.thumb || '').slice(-64); (dup[k] = dup[k] || []).push(p); });
   const dups = Object.values(dup).filter(a => a.length > 1);
@@ -459,7 +463,10 @@ async function renderSettings() {
         <button class="btn sm" id="stTrash" ${S.trash.length ? '' : 'disabled'}>휴지통 열기</button></div>
       <p class="hint" style="margin-top:8px">「저장소 청소」는 쓰이지 않는 문서(주인 없는 원본, 사라진 프로젝트의 자료, 옛 스냅샷)를 찾아
       되찾을 용량을 보여주고, <b>고르신 것만</b> 지웁니다.</p></div>
-    <div class="card pad"><div class="sech"><h3>백업 · 복원</h3><div class="ln"></div></div>
+    <div class="card pad" ${due ? 'style="border-color:var(--warn)"' : ''}><div class="sech"><h3>백업 · 복원</h3><div class="ln"></div>
+        <span class="hint">${S.meta && S.meta.lastBackupAt ? esc(S.meta.lastBackupAt.slice(0, 10)) + ' (' + backupAge() + '일 전)' : '받은 적 없음'}</span></div>
+      ${due ? `<p style="margin:0 0 8px;font-size:13px;color:var(--warn)"><b>${esc(due.why)}.</b>
+        답사 사진은 다시 찍을 수 없습니다 — 지금 받아 두세요.</p>` : ''}
       <p class="hint">사진 원본까지 포함한 전체 백업입니다. 복원은 항상 병합 방식이며, 지금 저장된 기록을 지우지 않습니다.</p>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn" id="stBk">백업 내려받기</button>

@@ -478,13 +478,13 @@ async function ingestPhoto(file, pid, extra) {
 /** 여러 장을 차례로 올린다. 한 장이 실패해도 나머지는 계속 올리고, 무엇이 왜 실패했는지 남긴다. */
 async function uploadPhotos(files, p, cat) {
   const prog = progressStart(files.length, '사진 올리는 중');
-  const ok = [], fail = [];
+  const ok = [], fail = [], fileOf = new Map();
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     prog.set(i, `${f.name} · ${bytes(f.size || 0)}`);
     try {
       const ph = await ingestPhoto(f, p.id, { cat });
-      S.photos.push(ph); ok.push(ph);
+      S.photos.push(ph); ok.push(ph); fileOf.set(ph.id, f);
     } catch (err) {
       console.error('사진 실패', f.name, err);
       fail.push({ name: f.name, file: f, msg: String((err && (err.message || err.code)) || err) });
@@ -492,13 +492,34 @@ async function uploadPhotos(files, p, cat) {
     // 한 장마다 화면에 숨 쉴 틈을 준다 — 안 그러면 진행 표시가 멈춘 것처럼 보인다
     await new Promise(r => setTimeout(r, 0));
   }
-  prog.set(files.length, '');
+  /* 저장소를 다시 읽어 정말로 다 들어갔는지 확인한다.
+     화면에는 있는데 저장소에는 없는 상태를 그냥 넘기면, 새로고침한 뒤에야 알게 된다.
+     v1.8.0 의 사고가 딱 그렇게 며칠을 흘렀다. */
+  prog.set(files.length, '저장된 것을 확인하는 중');
+  let missing = [];
+  try {
+    const stored = new Set((await PhotoStore.list(p.id)).map(x => x.id));
+    missing = ok.filter(ph => !stored.has(ph.id));
+  } catch (e) { console.warn('확인 실패', e); }
   prog.done();
+  if (missing.length) {
+    const gone = new Set(missing.map(m => m.id));
+    S.photos = S.photos.filter(x => !gone.has(x.id));
+    for (const m of missing) {
+      const f = fileOf.get(m.id);
+      fail.push({ name: f ? f.name : m.id, file: f, msg: '저장된 뒤 다시 읽으니 없었습니다 (저장소 확인 실패)' });
+    }
+  }
   p.photoCount = S.photos.length;
+  p.photoMax = Math.max(p.photoMax || 0, S.photos.length);
   try { await saveProject(p); } catch (e) { console.error(e); }
   renderDetail();
-  if (!fail.length) { toast(`${ok.length}장 추가했습니다`); return; }
-  photoFailReport(ok.length, fail, p, cat);
+  if (!fail.length) {
+    toast(`${ok.length - missing.length}장 추가했습니다`);
+    maybeSuggestBackup(ok.length);
+    return;
+  }
+  photoFailReport(ok.length - missing.length, fail.filter(f => f.file), p, cat);
 }
 /** 실패한 사진을 숨기지 않는다. 무엇이 왜 안 됐는지 보여주고 다시 시도할 수 있게 한다. */
 async function photoFailReport(okN, fail, p, cat) {
@@ -540,8 +561,13 @@ async function openDetail(id) {
   const [photos, notes] = await Promise.all([PhotoStore.list(id), S.store.list('notes', ['pid', '==', id])]);
   S.photos = photos.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
   S.notes = notes.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  if ((p.photoCount || 0) !== S.photos.length || (p.noteCount || 0) !== S.notes.length) {
-    p.photoCount = S.photos.length; p.noteCount = S.notes.length; saveProject(p);
+  /* 예전에는 여기서 photoCount 를 저장소의 실제 수로 덮어썼다. 그래서 사진 메타가
+     사라졌을 때 «90장이었다»는 증거까지 함께 지워졌고, 사고를 한참 뒤에야 알아챘다.
+     이제 가장 많았을 때의 수(photoMax)를 따로 남긴다. 이 값은 줄지 않는다. */
+  const seen = Math.max(p.photoMax || 0, p.photoCount || 0, S.photos.length);
+  if ((p.photoCount || 0) !== S.photos.length || (p.noteCount || 0) !== S.notes.length || (p.photoMax || 0) !== seen) {
+    p.photoCount = S.photos.length; p.noteCount = S.notes.length; p.photoMax = seen;
+    saveProject(p);
   }
   renderDetail();
   MAP.draw();
@@ -577,6 +603,11 @@ function renderDetail() {
         ${S.photos.length ? `<button class="btn sm" id="galSel">${PSEL.on ? '선택 끝내기' : '선택'}</button>` : ''}
         <select id="upCat" style="width:auto;font-size:12px;padding:3px 6px">${PHOTO_CATS.map(c => `<option>${c}</option>`).join('')}</select>
         <label class="btn sm pri" style="margin:0">＋ 사진 추가<input type="file" id="upFile" accept="image/*" multiple hidden></label></div>
+      ${(p.photoMax || 0) > S.photos.length ? `<div class="lostwarn">
+        <b>기록에는 ${p.photoMax}장인데 ${S.photos.length}장만 남아 있습니다.</b>
+        <span>사진 원본은 대개 그대로 있고 목록 정보만 사라진 경우입니다. 되살릴 수 있는지 확인해 보세요.</span>
+        <button class="btn sm pri" id="lostGo">되살리기</button>
+        <button class="btn sm" id="lostOk">${S.photos.length}장이 맞습니다</button></div>` : ''}
       ${PSEL.on ? bulkBar() : ''}
       ${S.photos.length ? `<div class="gallery${PSEL.on ? ' picking' : ''}" id="gal">${S.photos.map(ph => photoCard(ph)).join('')}</div>`
         : '<p class="hint">건물 전체·입면·시장 내부·계단·간판 등 범주를 나눠 올려두면 나중에 비교와 발표자료 구성이 쉬워집니다.</p><div class="gallery" id="gal" hidden></div>'}
@@ -632,6 +663,14 @@ function renderDetail() {
     if (!files.length) return;
     await uploadPhotos(files, p, $('#upCat').value);
   };
+  const lg = $('#lostGo');
+  if (lg) {
+    lg.onclick = () => { go('set'); setTimeout(() => recoverPhotos(), 60); };
+    $('#lostOk').onclick = async () => {
+      // 연구자가 직접 지운 경우 — 기준선을 지금 수로 낮춘다
+      p.photoMax = S.photos.length; await saveProject(p); renderDetail();
+    };
+  }
   bindGallery();
 }
 /* ---------- 갤러리 다중 선택 ----------

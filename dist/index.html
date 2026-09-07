@@ -175,6 +175,10 @@ thead .stickycol{z-index:3}
 .ph .pick{position:absolute;top:5px;right:5px;width:19px;height:19px;border-radius:50%;border:1.5px solid #fff;
   background:rgba(0,0,0,.35);color:#fff;font-size:11px;line-height:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4)}
 .ph.selq .pick{background:var(--accent);border-color:#fff}
+.lostwarn{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 11px;margin-bottom:9px;
+  border:1px solid var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent);border-radius:var(--r);font-size:12px}
+.lostwarn b{color:var(--ink)}
+.lostwarn span{color:var(--ink2);flex:1;min-width:200px}
 .bulkbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:8px 10px;margin-bottom:9px;
   border:1px solid var(--accent);background:var(--accent-soft);border-radius:var(--r);font-size:12px}
 .bulkbar b{color:var(--accent-ink);white-space:nowrap}
@@ -490,7 +494,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0';
 const SCHEMA_VERSION = 3;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -981,6 +985,37 @@ function stripMeta(o) {
   const d = Object.assign({}, o);
   delete d.id; delete d._book;
   return d;
+}
+
+/* ---------- 백업 챙기기 ----------
+   저장소가 아무리 튼튼해도 백업 없는 아카이브는 하루아침에 사라질 수 있다.
+   답사 사진은 다시 찍을 수 없으므로, 마지막 백업 이후 사진이 많이 쌓이거나
+   시간이 오래 지나면 조용히 알려 준다. */
+const BACKUP_DAYS = 14, BACKUP_PHOTOS = 40;
+async function touchMeta(patch) {
+  S.meta = Object.assign({}, S.meta || {}, patch);
+  try { await putRetry('meta', 'app', S.meta); } catch (e) { console.warn('meta 저장 실패', e); }
+}
+function backupAge() {
+  const at = S.meta && S.meta.lastBackupAt;
+  if (!at) return null;
+  return Math.floor((Date.now() - new Date(at).getTime()) / 86400000);
+}
+function backupDue() {
+  const total = S.projects.reduce((a, p) => a + (p.photoCount || 0), 0);
+  if (!total) return null;
+  const since = total - ((S.meta && S.meta.photosAtBackup) || 0);
+  const age = backupAge();
+  if (age == null) return { why: '아직 백업을 한 번도 받지 않았습니다', total, since };
+  if (since >= BACKUP_PHOTOS) return { why: `마지막 백업 뒤 사진 ${since}장이 늘었습니다`, total, since, age };
+  if (age >= BACKUP_DAYS) return { why: `마지막 백업이 ${age}일 전입니다`, total, since, age };
+  return null;
+}
+/** 사진을 많이 올린 뒤 한 번 권한다 (귀찮게 하지 않도록 조건을 넉넉히 둔다) */
+function maybeSuggestBackup(justAdded) {
+  const due = backupDue();
+  if (!due || justAdded < 10) return;
+  toast(`${due.why} — 설정에서 백업을 받아 두세요`, 5200);
 }
 
 /* ---------- 저장 용량 ----------
@@ -2180,13 +2215,13 @@ async function ingestPhoto(file, pid, extra) {
 /** 여러 장을 차례로 올린다. 한 장이 실패해도 나머지는 계속 올리고, 무엇이 왜 실패했는지 남긴다. */
 async function uploadPhotos(files, p, cat) {
   const prog = progressStart(files.length, '사진 올리는 중');
-  const ok = [], fail = [];
+  const ok = [], fail = [], fileOf = new Map();
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     prog.set(i, `${f.name} · ${bytes(f.size || 0)}`);
     try {
       const ph = await ingestPhoto(f, p.id, { cat });
-      S.photos.push(ph); ok.push(ph);
+      S.photos.push(ph); ok.push(ph); fileOf.set(ph.id, f);
     } catch (err) {
       console.error('사진 실패', f.name, err);
       fail.push({ name: f.name, file: f, msg: String((err && (err.message || err.code)) || err) });
@@ -2194,13 +2229,34 @@ async function uploadPhotos(files, p, cat) {
     // 한 장마다 화면에 숨 쉴 틈을 준다 — 안 그러면 진행 표시가 멈춘 것처럼 보인다
     await new Promise(r => setTimeout(r, 0));
   }
-  prog.set(files.length, '');
+  /* 저장소를 다시 읽어 정말로 다 들어갔는지 확인한다.
+     화면에는 있는데 저장소에는 없는 상태를 그냥 넘기면, 새로고침한 뒤에야 알게 된다.
+     v1.8.0 의 사고가 딱 그렇게 며칠을 흘렀다. */
+  prog.set(files.length, '저장된 것을 확인하는 중');
+  let missing = [];
+  try {
+    const stored = new Set((await PhotoStore.list(p.id)).map(x => x.id));
+    missing = ok.filter(ph => !stored.has(ph.id));
+  } catch (e) { console.warn('확인 실패', e); }
   prog.done();
+  if (missing.length) {
+    const gone = new Set(missing.map(m => m.id));
+    S.photos = S.photos.filter(x => !gone.has(x.id));
+    for (const m of missing) {
+      const f = fileOf.get(m.id);
+      fail.push({ name: f ? f.name : m.id, file: f, msg: '저장된 뒤 다시 읽으니 없었습니다 (저장소 확인 실패)' });
+    }
+  }
   p.photoCount = S.photos.length;
+  p.photoMax = Math.max(p.photoMax || 0, S.photos.length);
   try { await saveProject(p); } catch (e) { console.error(e); }
   renderDetail();
-  if (!fail.length) { toast(`${ok.length}장 추가했습니다`); return; }
-  photoFailReport(ok.length, fail, p, cat);
+  if (!fail.length) {
+    toast(`${ok.length - missing.length}장 추가했습니다`);
+    maybeSuggestBackup(ok.length);
+    return;
+  }
+  photoFailReport(ok.length - missing.length, fail.filter(f => f.file), p, cat);
 }
 /** 실패한 사진을 숨기지 않는다. 무엇이 왜 안 됐는지 보여주고 다시 시도할 수 있게 한다. */
 async function photoFailReport(okN, fail, p, cat) {
@@ -2242,8 +2298,13 @@ async function openDetail(id) {
   const [photos, notes] = await Promise.all([PhotoStore.list(id), S.store.list('notes', ['pid', '==', id])]);
   S.photos = photos.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
   S.notes = notes.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  if ((p.photoCount || 0) !== S.photos.length || (p.noteCount || 0) !== S.notes.length) {
-    p.photoCount = S.photos.length; p.noteCount = S.notes.length; saveProject(p);
+  /* 예전에는 여기서 photoCount 를 저장소의 실제 수로 덮어썼다. 그래서 사진 메타가
+     사라졌을 때 «90장이었다»는 증거까지 함께 지워졌고, 사고를 한참 뒤에야 알아챘다.
+     이제 가장 많았을 때의 수(photoMax)를 따로 남긴다. 이 값은 줄지 않는다. */
+  const seen = Math.max(p.photoMax || 0, p.photoCount || 0, S.photos.length);
+  if ((p.photoCount || 0) !== S.photos.length || (p.noteCount || 0) !== S.notes.length || (p.photoMax || 0) !== seen) {
+    p.photoCount = S.photos.length; p.noteCount = S.notes.length; p.photoMax = seen;
+    saveProject(p);
   }
   renderDetail();
   MAP.draw();
@@ -2279,6 +2340,11 @@ function renderDetail() {
         ${S.photos.length ? `<button class="btn sm" id="galSel">${PSEL.on ? '선택 끝내기' : '선택'}</button>` : ''}
         <select id="upCat" style="width:auto;font-size:12px;padding:3px 6px">${PHOTO_CATS.map(c => `<option>${c}</option>`).join('')}</select>
         <label class="btn sm pri" style="margin:0">＋ 사진 추가<input type="file" id="upFile" accept="image/*" multiple hidden></label></div>
+      ${(p.photoMax || 0) > S.photos.length ? `<div class="lostwarn">
+        <b>기록에는 ${p.photoMax}장인데 ${S.photos.length}장만 남아 있습니다.</b>
+        <span>사진 원본은 대개 그대로 있고 목록 정보만 사라진 경우입니다. 되살릴 수 있는지 확인해 보세요.</span>
+        <button class="btn sm pri" id="lostGo">되살리기</button>
+        <button class="btn sm" id="lostOk">${S.photos.length}장이 맞습니다</button></div>` : ''}
       ${PSEL.on ? bulkBar() : ''}
       ${S.photos.length ? `<div class="gallery${PSEL.on ? ' picking' : ''}" id="gal">${S.photos.map(ph => photoCard(ph)).join('')}</div>`
         : '<p class="hint">건물 전체·입면·시장 내부·계단·간판 등 범주를 나눠 올려두면 나중에 비교와 발표자료 구성이 쉬워집니다.</p><div class="gallery" id="gal" hidden></div>'}
@@ -2334,6 +2400,14 @@ function renderDetail() {
     if (!files.length) return;
     await uploadPhotos(files, p, $('#upCat').value);
   };
+  const lg = $('#lostGo');
+  if (lg) {
+    lg.onclick = () => { go('set'); setTimeout(() => recoverPhotos(), 60); };
+    $('#lostOk').onclick = async () => {
+      // 연구자가 직접 지운 경우 — 기준선을 지금 수로 낮춘다
+      p.photoMax = S.photos.length; await saveProject(p); renderDetail();
+    };
+  }
   bindGallery();
 }
 /* ---------- 갤러리 다중 선택 ----------
@@ -4740,13 +4814,16 @@ async function backup() {
   const [photos, notes] = await Promise.all([PhotoStore.listAll(), S.store.list('notes')]);
   const full = {};
   for (const ph of photos) { const f = await S.store.get('photofull', ph.id); if (f) full[ph.id] = f.data; }
+  const total = S.projects.reduce((a, p) => a + (p.photoCount || 0), 0);
   const blob = new Blob([JSON.stringify({
     format: 'mkt-archive', appVersion: APP_VERSION, schemaVersion: (S.meta && S.meta.schemaVersion) || SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     projects: S.projects, facilities: S.facilities, fields: S.fields,
     photos: photos.map(p => { const d = Object.assign({}, p); delete d._book; return d; }), notes, photofull: full
   })], { type: 'application/json' });
-  download(`시장아파트_백업_${today()}.json`, blob);
+  await download(`시장아파트_백업_${today()}.json`, blob);
+  await touchMeta({ lastBackupAt: new Date().toISOString(), photosAtBackup: total });
+  if (S.view === 'set') renderSettings();
 }
 /** 백업 복원. 어떤 경우에도 기존 데이터를 지우지 않는다.
  *  같은 ID가 이미 있으면 mode에 따라 건너뛰거나(기본) 덮어쓴다. */
@@ -4796,6 +4873,7 @@ async function renderSettings() {
   const photos = await S.store.list('photos');
   const batches = importBatches();
   const use = await storageUsage();
+  const due = backupDue();
   const totalBytes = photos.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0);
   const dup = {}; photos.forEach(p => { const k = (p.w || 0) + 'x' + (p.h || 0) + '|' + (p.thumb || '').slice(-64); (dup[k] = dup[k] || []).push(p); });
   const dups = Object.values(dup).filter(a => a.length > 1);
@@ -4854,7 +4932,10 @@ async function renderSettings() {
         <button class="btn sm" id="stTrash" ${S.trash.length ? '' : 'disabled'}>휴지통 열기</button></div>
       <p class="hint" style="margin-top:8px">「저장소 청소」는 쓰이지 않는 문서(주인 없는 원본, 사라진 프로젝트의 자료, 옛 스냅샷)를 찾아
       되찾을 용량을 보여주고, <b>고르신 것만</b> 지웁니다.</p></div>
-    <div class="card pad"><div class="sech"><h3>백업 · 복원</h3><div class="ln"></div></div>
+    <div class="card pad" ${due ? 'style="border-color:var(--warn)"' : ''}><div class="sech"><h3>백업 · 복원</h3><div class="ln"></div>
+        <span class="hint">${S.meta && S.meta.lastBackupAt ? esc(S.meta.lastBackupAt.slice(0, 10)) + ' (' + backupAge() + '일 전)' : '받은 적 없음'}</span></div>
+      ${due ? `<p style="margin:0 0 8px;font-size:13px;color:var(--warn)"><b>${esc(due.why)}.</b>
+        답사 사진은 다시 찍을 수 없습니다 — 지금 받아 두세요.</p>` : ''}
       <p class="hint">사진 원본까지 포함한 전체 백업입니다. 복원은 항상 병합 방식이며, 지금 저장된 기록을 지우지 않습니다.</p>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn" id="stBk">백업 내려받기</button>

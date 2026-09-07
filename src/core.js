@@ -6,7 +6,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0';
 const SCHEMA_VERSION = 3;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -497,6 +497,37 @@ function stripMeta(o) {
   const d = Object.assign({}, o);
   delete d.id; delete d._book;
   return d;
+}
+
+/* ---------- 백업 챙기기 ----------
+   저장소가 아무리 튼튼해도 백업 없는 아카이브는 하루아침에 사라질 수 있다.
+   답사 사진은 다시 찍을 수 없으므로, 마지막 백업 이후 사진이 많이 쌓이거나
+   시간이 오래 지나면 조용히 알려 준다. */
+const BACKUP_DAYS = 14, BACKUP_PHOTOS = 40;
+async function touchMeta(patch) {
+  S.meta = Object.assign({}, S.meta || {}, patch);
+  try { await putRetry('meta', 'app', S.meta); } catch (e) { console.warn('meta 저장 실패', e); }
+}
+function backupAge() {
+  const at = S.meta && S.meta.lastBackupAt;
+  if (!at) return null;
+  return Math.floor((Date.now() - new Date(at).getTime()) / 86400000);
+}
+function backupDue() {
+  const total = S.projects.reduce((a, p) => a + (p.photoCount || 0), 0);
+  if (!total) return null;
+  const since = total - ((S.meta && S.meta.photosAtBackup) || 0);
+  const age = backupAge();
+  if (age == null) return { why: '아직 백업을 한 번도 받지 않았습니다', total, since };
+  if (since >= BACKUP_PHOTOS) return { why: `마지막 백업 뒤 사진 ${since}장이 늘었습니다`, total, since, age };
+  if (age >= BACKUP_DAYS) return { why: `마지막 백업이 ${age}일 전입니다`, total, since, age };
+  return null;
+}
+/** 사진을 많이 올린 뒤 한 번 권한다 (귀찮게 하지 않도록 조건을 넉넉히 둔다) */
+function maybeSuggestBackup(justAdded) {
+  const due = backupDue();
+  if (!due || justAdded < 10) return;
+  toast(`${due.why} — 설정에서 백업을 받아 두세요`, 5200);
 }
 
 /* ---------- 저장 용량 ----------
