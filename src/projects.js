@@ -854,7 +854,7 @@ async function photoModal(id) {
         <label class="fld"><span>연구 메모</span><textarea id="ph_memo" rows="3">${esc(ph.memo || '')}</textarea></label>
       </div></div></div>
     <div class="mf"><button class="btn dgr" id="ph_del">삭제</button><span class="spacer"></span>
-      <button class="btn" id="ph_elev">입면 보정에 사용</button><button class="btn pri" id="ph_ok">저장</button></div>`, { wide: true });
+      <button class="btn pri" id="ph_ok">저장</button></div>`, { wide: true });
   $('#ph_ok').onclick = async () => {
     Object.assign(ph, {
       cat: $('#ph_cat').value, caption: $('#ph_cap').value.trim(), date: $('#ph_date').value,
@@ -874,7 +874,6 @@ async function photoModal(id) {
     const p = S.projects.find(x => x.id === S.cur); if (p) { p.photoCount = S.photos.length; await saveProject(p); }
     closeModal(); renderDetail(); toast('삭제했습니다');
   };
-  $('#ph_elev').onclick = () => { closeModal(); go('elev'); loadElevPhoto(ph.id); };
 }
 function noteForm(n) {
   const isNew = !n;
@@ -905,4 +904,3 @@ $('#detDel').onclick = async () => {
   if (!await confirmBox('휴지통으로 이동', `<p><b>${esc(projName(p))}</b> 을(를) 휴지통으로 옮깁니다. 사진과 답사 기록은 지워지지 않고 그대로 남아, 복원하면 함께 돌아옵니다.</p>`, '휴지통으로 이동')) return;
   await deleteProject(p.id); go('list'); renderTable(); toast('휴지통으로 옮겼습니다 — 사진과 기록은 그대로 보관됩니다', 3600);
 };
-$('#detElev').onclick = () => { go('elev'); $('#elevPrj').value = S.cur; renderElevPicker(); };

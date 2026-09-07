@@ -217,20 +217,6 @@ thead .stickycol{z-index:3}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;z-index:90;opacity:0;transition:.22s;pointer-events:none;font-size:13px;max-width:86vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%)}
 
-/* ---------- elevation ---------- */
-.elevgrid{display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:14px;padding:14px;flex:1;min-height:0}
-#elevstage{position:relative;background:var(--surface2);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;display:grid;place-items:center;min-height:280px}
-#elevcv{max-width:100%;max-height:100%;display:block;touch-action:none}
-.handle{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:2px solid var(--signal);background:color-mix(in srgb,var(--signal) 22%,transparent);cursor:grab;touch-action:none}
-.handle b{position:absolute;inset:8px;border-radius:50%;background:var(--signal);display:block}
-.handle span{position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-family:var(--f-mono);font-size:10px;color:var(--signal);background:var(--surface);padding:0 3px;border-radius:3px}
-.sidepanel{overflow:auto;display:flex;flex-direction:column;gap:14px}
-.rng{display:flex;align-items:center;gap:8px}
-.rng input[type=range]{flex:1;accent-color:var(--accent)}
-.rng .v{font-family:var(--f-mono);font-size:11px;color:var(--muted);width:38px;text-align:right}
-.pickstrip{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
-.pickstrip .ph{width:96px;flex:none;aspect-ratio:4/3}
-
 /* ---------- analysis ---------- */
 .anagrid{display:grid;align-items:start;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;padding:14px}
 .bars{display:flex;flex-direction:column;gap:5px}
@@ -273,7 +259,7 @@ thead .stickycol{z-index:3}
   .tb{display:flex;flex-direction:column;align-items:center;gap:2px;background:transparent;border:0;padding:5px 2px;color:var(--muted);font-size:10px;cursor:pointer;border-radius:6px}
   .tb[aria-current="true"]{color:var(--accent);background:var(--accent-soft)}
   .tb .ic{width:19px;height:19px}
-  .detailgrid,.elevgrid,.anagrid{grid-template-columns:1fr}
+  .detailgrid,.anagrid{grid-template-columns:1fr}
   .bar{padding:8px 10px}
   #maptools{max-width:56vw}
 }

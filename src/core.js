@@ -6,7 +6,7 @@ const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 /* 앱 코드 버전과 데이터 스키마 버전은 별개로 관리한다.
    - APP_VERSION : 화면·기능이 바뀔 때마다 올린다. 데이터에는 영향을 주지 않는다.
    - SCHEMA_VERSION : 저장 구조가 바뀔 때만 올린다. MIGRATIONS에 대응 항목이 있어야 한다. */
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 const SCHEMA_VERSION = 3;
 
 /* 영구 고유 ID. 한 번 부여되면 앱이 몇 번 배포되든 바뀌지 않는다. */
@@ -181,7 +181,6 @@ const SIDO_OF = c => ({ '11': '서울특별시', '21': '부산광역시', '22': 
 const NAV = [
   { v: 'map', i: 'i-map', t: '지도' },
   { v: 'list', i: 'i-list', t: '프로젝트' },
-  { v: 'elev', i: 'i-elev', t: '입면' },
   { v: 'ana', i: 'i-ana', t: '분석' },
   { v: 'out', i: 'i-out', t: '출력' },
   { v: 'set', i: 'i-set', t: '설정' }
@@ -201,12 +200,11 @@ function go(v) {
   if (v === 'ana') renderAnalysis();
   if (v === 'out') renderOutput();
   if (v === 'set') renderSettings();
-  if (v === 'elev') renderElevPicker();
 }
 function updateCounts() {
   // 첫 안내는 데이터가 하나라도 생기면 사라진다 (프로젝트든 참조 지점이든)
   if (S.projects.length || S.facilities.length) { const h = $('#firsthint'); if (h) h.remove(); }
-  const c = { map: '', list: S.projects.length, elev: '', ana: '', out: S.sel.size || '', set: '' };
+  const c = { map: '', list: S.projects.length, ana: '', out: S.sel.size || '', set: '' };
   $$('[data-cnt]').forEach(e => e.textContent = c[e.dataset.cnt] || '');
   $('#mapstat').textContent = `프로젝트 ${S.projects.length} · 참조지점 ${S.facilities.length}`;
 }
@@ -497,6 +495,25 @@ function stripMeta(o) {
   const d = Object.assign({}, o);
   delete d.id; delete d._book;
   return d;
+}
+
+/* ---------- 파일 내보내기 ----------
+   계정 저장소가 주는 downloads 기능을 먼저 쓰고, 없거나 거절당하면 브라우저 내려받기로 넘어간다. */
+async function download(filename, data, mime) {
+  if (S.downloads) {
+    try { await S.downloads.save({ filename, data }); toast('저장했습니다'); return; }
+    catch (e) {
+      if (e && e.code === 'declined') return;
+      console.warn(e);
+    }
+  }
+  try {
+    const blob = data instanceof Blob ? data : new Blob([data], { type: mime || 'application/octet-stream' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast('내려받기를 시작했습니다');
+  } catch (e) { toast('이 환경에서는 파일 저장을 지원하지 않습니다'); }
 }
 
 /* ---------- 백업 챙기기 ----------

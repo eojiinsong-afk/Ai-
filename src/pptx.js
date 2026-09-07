@@ -268,7 +268,7 @@ const DECK_SECTIONS = [
   { k: 'selmap', label: '선택한 프로젝트의 위치', scope: 'once', on: 1 },
   { k: 'info', label: '프로젝트 기본 정보', scope: 'each', on: 1 },
   { k: 'photos', label: '시장아파트 사진', scope: 'each', on: 1 },
-  { k: 'elev', label: '입면 사진 · 보정 이미지', scope: 'each', on: 1 },
+  { k: 'elev', label: '입면 사진', scope: 'each', on: 1 },
   { k: 'notes', label: '답사 기록', scope: 'each', on: 1 },
   { k: 'arch', label: '건축적 특징', scope: 'each', on: 1 },
   { k: 'urban', label: '도시적 특징', scope: 'each', on: 0 },
@@ -437,12 +437,12 @@ async function composeDeck(ps, picked) {
       const ev = d.photos.filter(x => x.kind === 'elevation' || x.cat === '입면').slice(0, 2);
       if (ev.length) {
         const b = slideBuilder();
-        b.head(projName(p) + ' — 입면', '원근 보정 이미지 · 트레이싱 베이스');
+        b.head(projName(p) + ' — 입면', '입면으로 분류한 사진');
         const cw = (SW - M * 2 - 20 * (ev.length - 1)) / ev.length;
         for (let i = 0; i < ev.length; i++) {
           const x = M + i * (cw + 20);
           b.image(await photoData(ev[i]), x, 156, cw, 440, [ev[i].w, ev[i].h]);
-          b.text(x, 606, cw, 18, ev[i].memo || ev[i].caption || (ev[i].kind === 'elevation' ? '4점 원근 보정' : '입면 사진'), { size: 11, color: C.muted, align: 'ctr' });
+          b.text(x, 606, cw, 18, ev[i].caption || ev[i].memo || '입면 사진', { size: 11, color: C.muted, align: 'ctr' });
         }
         slides.push(b.done());
       }
