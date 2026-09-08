@@ -129,7 +129,7 @@ function renderAI() {
       const n = nearestFacilities(p);
       return {
         이름: projName(p), 시도: p.sido, 시군구: p.sgg, 주소: p.address, 답사일: p.surveyDate, 건축연도: p.builtYear,
-        시장층: p.marketFloors, 아파트층: p.aptFloors, 전체층: p.totalFloors, 주차장: p.parking ? '있음' : '없음',
+        지하층: p.basementFloors, 시장층: p.marketFloors, 아파트층: p.aptFloors, 지상전체층: p.totalFloors, 주차장: p.parking ? '있음' : '없음',
         결합유형: p.relation, 상태: p.status, 태그: (p.tags || []).join('/'),
         현재역m: n.station ? Math.round(n.station.d) : null, 과거역m: n.oldstation ? Math.round(n.oldstation.d) : null,
         터미널m: n.terminal ? Math.round(n.terminal.d) : null, 시장m: n.market ? Math.round(n.market.d) : null,
@@ -160,7 +160,7 @@ $('#btnCompare').onclick = async () => {
   const ps = S.projects.filter(p => S.sel.has(p.id));
   if (!ps.length) return;
   const photos = {};
-  for (const p of ps) photos[p.id] = (await S.store.list('photos', ['pid', '==', p.id])).slice(0, 4);
+  for (const p of ps) photos[p.id] = (await PhotoStore.list(p.id)).slice(0, 4);
   const fields = BASE_FIELDS.filter(f => !['tags', 'note', 'lat', 'lng'].includes(f.k))
     .concat(S.fields.map(f => ({ k: 'c_' + f.id, label: f.label, custom: f.id, type: f.type })));
   const val = (p, f) => { let v = fieldValue(p, f); if (f.type === 'bool') v = v ? '있음' : (v === false ? '없음' : ''); return Array.isArray(v) ? v.join(', ') : v; };
@@ -173,9 +173,10 @@ $('#btnCompare').onclick = async () => {
       <tr><td class="stickycol">과거역 거리</td>${ps.map(p => { const n = nearestFacilities(p); return `<td class="n">${fmtKm(n.oldstation && n.oldstation.d)}</td>`; }).join('')}</tr>
       <tr><td class="stickycol">터미널 거리</td>${ps.map(p => { const n = nearestFacilities(p); return `<td class="n">${fmtKm(n.terminal && n.terminal.d)}</td>`; }).join('')}</tr>
     </tbody></table></div></div>
-    <div class="mf"><button class="btn" id="cmpCsv">CSV로 내보내기</button><button class="btn pri" id="cmpRep">보고서 만들기</button></div>`, { wide: true });
+    <div class="mf"><button class="btn" id="cmpCsv">CSV로 내보내기</button><button class="btn" id="cmpPpt">PPT 만들기</button><button class="btn pri" id="cmpRep">보고서 만들기</button></div>`, { wide: true });
   $('#cmpCsv').onclick = () => exportCsv(ps);
   $('#cmpRep').onclick = () => { closeModal(); buildReport(ps); };
+  $('#cmpPpt').onclick = () => { closeModal(); pptxDialog(ps); };
 };
 
 /* ---------- CSV ---------- */
@@ -200,11 +201,20 @@ function exportCsv(list) {
 async function collect(ps) {
   const out = [];
   for (const p of ps) {
-    const photos = (await S.store.list('photos', ['pid', '==', p.id])).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+    const photos = await PhotoStore.list(p.id);
     const notes = (await S.store.list('notes', ['pid', '==', p.id])).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     out.push({ p, photos, notes, near: nearestFacilities(p) });
   }
   return out;
+}
+/** 사례별 위치 지도 이미지를 붙인다 (지도 생성이 실패해도 보고서는 그대로 나온다) */
+async function attachMaps(data, W, H) {
+  for (const d of data) {
+    if (d.p.lat == null) continue;
+    try { d.mapImg = await mapImage({ items: [d.p], all: S.projects, W: W || 560, H: H || 380 }); }
+    catch (e) { console.warn(e); }
+  }
+  return data;
 }
 function infoTable(p, near) {
   const rows = [
@@ -212,7 +222,7 @@ function infoTable(p, near) {
     ['소재지', [p.sido, p.sgg, p.address].filter(Boolean).join(' ')],
     ['좌표', p.lat != null ? p.lat.toFixed(5) + ', ' + p.lng.toFixed(5) : ''],
     ['답사일', p.surveyDate], ['건축연도', p.builtYear], ['리모델링·증축', p.remodel],
-    ['층수 (시장 / 아파트 / 전체)', [p.marketFloors, p.aptFloors, p.totalFloors].map(v => v == null ? '?' : v).join(' / ')],
+    ['층 구성', floorText(p)],
     ['주차장', (p.parking ? '있음' : '없음') + (p.parkingType ? ' · ' + p.parkingType : '')],
     ['시장–주거 관계', p.relation], ['현재 상태', p.status],
     ['인접 철도역', (p.nearStation || '') + (near.station ? ` (${fmtKm(near.station.d)})` : '')],
@@ -225,20 +235,31 @@ function infoTable(p, near) {
 async function buildReport(list) {
   const ps = list || target();
   toast('보고서를 만드는 중…');
-  const data = await collect(ps);
+  const data = await attachMaps(await collect(ps));
   const root = $('#printroot');
+  let distImg = '', locImg = '';
+  try {
+    distImg = await mapImage({ all: S.projects, items: ps, whole: true, W: 620, H: 470 });
+    if (ps.some(p => p.lat != null)) locImg = await mapImage({ all: S.projects, items: ps, labels: true, W: 620, H: 400 });
+  } catch (e) { console.warn('지도 이미지 생략', e); }
   root.innerHTML = `<div style="padding-bottom:20px">
       <p class="mono" style="font-size:11px;letter-spacing:.1em">MARKET–HOUSING COMPLEX / FIELD SURVEY</p>
       <h1>시장아파트 답사 보고서</h1>
       <p style="font-size:12px;color:#444">${ps.length}개 사례 · 작성일 ${today()}</p>
+      ${distImg ? `<h2>분포</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <figure style="margin:0"><img src="${distImg}" style="width:100%;border:1px solid #ccc"><figcaption style="font-size:9px;color:#555">전국 분포 — 네모가 이 보고서의 사례</figcaption></figure>
+        ${locImg ? `<figure style="margin:0"><img src="${locImg}" style="width:100%;border:1px solid #ccc"><figcaption style="font-size:9px;color:#555">사례 위치</figcaption></figure>` : ''}
+      </div>` : ''}
       <table style="margin-top:12px"><tr><th>사례</th><th>소재지</th><th>답사일</th><th>층수</th><th>현재역</th><th>과거역</th></tr>
       ${data.map(d => `<tr><td>${esc(projName(d.p))}</td><td>${esc([d.p.sido, d.p.sgg].filter(Boolean).join(' '))}</td><td>${esc(d.p.surveyDate || '')}</td>
-        <td>${d.p.marketFloors || '?'}+${d.p.aptFloors || '?'}</td><td>${fmtKm(d.near.station && d.near.station.d)}</td><td>${fmtKm(d.near.oldstation && d.near.oldstation.d)}</td></tr>`).join('')}</table>
+        <td>${esc(floorShort(d.p))}</td><td>${fmtKm(d.near.station && d.near.station.d)}</td><td>${fmtKm(d.near.oldstation && d.near.oldstation.d)}</td></tr>`).join('')}</table>
     </div>` +
     data.map(d => `<div class="prj">
       <h1>${esc(projName(d.p))}</h1>
       <p style="font-size:12px;color:#444">${esc([d.p.sido, d.p.sgg, d.p.marketName].filter(Boolean).join(' · '))}</p>
       <h2>기본 정보</h2>${infoTable(d.p, d.near)}
+      ${d.mapImg ? `<h2>위치</h2><img src="${d.mapImg}" style="width:58%;border:1px solid #ccc">
+        <p style="font-size:9px;color:#555;margin:2px 0 0">반경 약 2km · 사각형이 대상 건물, 원·삼각형·마름모가 역·터미널·시장</p>` : ''}
       ${d.photos.length ? `<h2>현장 사진</h2><div class="pgal">${d.photos.slice(0, 9).map(ph => `<figure><img src="${ph.thumb}" alt=""><figcaption>${esc(ph.cat)}${ph.caption ? ' — ' + esc(ph.caption) : ''}</figcaption></figure>`).join('')}</div>` : ''}
       ${d.notes.length ? `<h2>답사 기록</h2>${d.notes.map(n => `<div style="margin-bottom:8px"><b>${esc(n.title || '무제')}</b> <span style="font-size:10px;color:#666">${esc(n.date || '')} ${esc(n.kind || '')}</span>
         <div style="font-size:11px;white-space:pre-wrap">${esc(n.body || '')}</div></div>`).join('')}` : ''}
@@ -249,7 +270,7 @@ async function buildReport(list) {
 async function buildSlides(list) {
   const ps = list || target();
   toast('발표자료를 만드는 중…');
-  const data = await collect(ps);
+  const data = await attachMaps(await collect(ps), 520, 360);
   const S16 = 'width:100%;aspect-ratio:16/9;border:1px solid #ccc;padding:22px;margin-bottom:10px;display:flex;flex-direction:column;overflow:hidden';
   const root = $('#printroot');
   const bySido = {}; ps.forEach(p => { const k = p.sido || '미상'; bySido[k] = (bySido[k] || 0) + 1; });
@@ -284,7 +305,7 @@ async function buildSlides(list) {
   setTimeout(() => window.print(), 350);
 }
 $('#btnReport').onclick = () => buildReport(S.projects.filter(p => S.sel.has(p.id)));
-$('#btnSlides').onclick = () => buildSlides(S.projects.filter(p => S.sel.has(p.id)));
+$('#btnSlides').onclick = () => pptxDialog(S.projects.filter(p => S.sel.has(p.id)));
 $('#detReport').onclick = () => buildReport(S.projects.filter(p => p.id === S.cur));
 
 /* ---------- 출력 화면 ---------- */
@@ -302,8 +323,11 @@ function renderOutput() {
         <p class="hint">사례별 기본정보·사진·답사 기록을 A4 문서로 배치합니다. 인쇄 대화상자에서 <b>PDF로 저장</b>을 선택하세요.</p>
         <button class="btn pri" style="margin-top:10px" id="oRep">보고서 만들기 (${n}건)</button></div>
       <div class="card pad"><div class="sech"><h3>세미나 발표자료</h3><div class="ln"></div></div>
-        <p class="hint">표지 · 연구 개요 · 사례별 정보와 사진 · 답사 기록 · 유형 가설 순의 16:9 슬라이드입니다. PDF로 저장해 발표에 쓰거나 대화창에 올려 PPT로 변환하세요.</p>
-        <button class="btn pri" style="margin-top:10px" id="oSlide">발표자료 만들기 (${n}건)</button></div>
+        <p class="hint">표지 · 연구 개요 · 전국 분포 지도 · 사례별 정보와 사진 · 입면 · 답사 기록 · 교통시설 · 비교 · 유형 가설.
+        넣을 슬라이드를 직접 고를 수 있고, <b>파워포인트에서 그대로 편집되는 .pptx</b> 파일로 나옵니다.</p>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn pri" id="oPptx">PPT 만들기 (${n}건)</button>
+          <button class="btn" id="oSlide">PDF 슬라이드</button></div></div>
       <div class="card pad"><div class="sech"><h3>선택</h3><div class="ln"></div></div>
         <p class="hint">프로젝트 화면에서 체크한 항목만 출력 대상이 됩니다. 선택이 없으면 전체가 대상입니다.</p>
         <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" onclick="go('list')">프로젝트에서 선택</button>
@@ -312,20 +336,54 @@ function renderOutput() {
   $('#oCsv').onclick = () => exportCsv();
   $('#oRep').onclick = () => buildReport();
   $('#oSlide').onclick = () => buildSlides();
+  $('#oPptx').onclick = () => pptxDialog(target());
   $('#oJson').onclick = () => backup();
   $('#oClear').onclick = () => { S.sel.clear(); renderOutput(); renderTable(); MAP.draw(); };
 }
 async function backup() {
-  toast('백업을 만드는 중…');
-  const [photos, notes] = await Promise.all([S.store.list('photos'), S.store.list('notes')]);
+  const prog = progressStart(1, '백업 만드는 중');
+  const [photos, notes] = await Promise.all([PhotoStore.listAll(), S.store.list('notes')]);
   const full = {};
-  for (const ph of photos) { const f = await S.store.get('photofull', ph.id); if (f) full[ph.id] = f.data; }
+  const noFull = [];
+  for (let i = 0; i < photos.length; i++) {
+    const ph = photos[i];
+    if (i % 10 === 0) { prog.set(0, `사진 ${i} / ${photos.length}`); await new Promise(r => setTimeout(r, 0)); }
+    const f = await S.store.get('photofull', ph.id);
+    if (f && f.data) full[ph.id] = f.data; else noFull.push(ph);
+  }
+  const total = S.projects.reduce((a, p) => a + (p.photoCount || 0), 0);
+  prog.set(0, '파일로 묶는 중');
   const blob = new Blob([JSON.stringify({
     format: 'mkt-archive', appVersion: APP_VERSION, schemaVersion: (S.meta && S.meta.schemaVersion) || SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
-    projects: S.projects, facilities: S.facilities, fields: S.fields, photos, notes, photofull: full
+    projects: S.projects, facilities: S.facilities, fields: S.fields,
+    photos: photos.map(p => { const d = Object.assign({}, p); delete d._book; return d; }), notes, photofull: full
   })], { type: 'application/json' });
-  download(`시장아파트_백업_${today()}.json`, blob);
+  prog.done();
+  await download(`시장아파트_백업_${today()}.json`, blob);
+  await touchMeta({ lastBackupAt: new Date().toISOString(), photosAtBackup: total });
+  if (S.view === 'set') renderSettings();
+  /* 백업은 «받았다»가 아니라 «무엇이 들어갔다»를 알아야 믿을 수 있다.
+     받아본 적 없는 백업은 백업이 아니다. */
+  openModal(`<div class="mh"><h3>백업을 받았습니다</h3><button class="x">×</button></div>
+    <div class="mb">
+      <p>이 파일 하나에 아카이브 전체가 들어 있습니다. 앱이나 저장소에 무슨 일이 생겨도
+      <b>설정 → 복원</b>에 이 파일을 넣으면 그대로 돌아옵니다.</p>
+      <div class="statrow" style="margin:14px 0">
+        <div class="stat"><b>${S.projects.length}</b><span>프로젝트</span></div>
+        <div class="stat"><b>${photos.length}</b><span>사진</span></div>
+        <div class="stat"><b>${Object.keys(full).length}</b><span>사진 원본</span></div>
+        <div class="stat"><b>${notes.length}</b><span>답사 기록</span></div>
+        <div class="stat"><b>${S.facilities.length}</b><span>참조 지점</span></div>
+        <div class="stat"><b>${bytes(blob.size)}</b><span>파일 크기</span></div>
+      </div>
+      ${noFull.length ? `<p style="font-size:13px;color:var(--warn);margin:0 0 8px">
+        <b>사진 ${noFull.length}장은 원본이 없어 축소본만 담겼습니다.</b>
+        예전에 업로드가 끊겼을 때 생긴 것일 수 있습니다 — 설정 → 정리에서 확인해 보세요.</p>` : ''}
+      <p class="hint">받은 파일을 <b>클라우드나 외장 디스크에도</b> 한 벌 더 두세요.
+      컴퓨터가 고장 나면 그 사본이 마지막 남은 것입니다.</p>
+    </div>
+    <div class="mf"><button class="btn pri" onclick="closeModal()">닫기</button></div>`);
 }
 /** 백업 복원. 어떤 경우에도 기존 데이터를 지우지 않는다.
  *  같은 ID가 이미 있으면 mode에 따라 건너뛰거나(기본) 덮어쓴다. */
@@ -356,11 +414,14 @@ async function restore(file) {
   for (const f of (d.fields || [])) await put('fields', f.id, f, S.fields.some(x => x.id === f.id));
   const curNotes = new Set((await S.store.list('notes')).map(x => x.id));
   for (const n of (d.notes || [])) await put('notes', n.id, n, curNotes.has(n.id));
-  const curPhotos = new Set((await S.store.list('photos')).map(x => x.id));
+  const curPhotos = new Set((await PhotoStore.listAll()).map(x => x.id));
   for (const ph of (d.photos || [])) {
     const ex = curPhotos.has(ph.id);
-    await put('photos', ph.id, ph, ex);
-    if (!(ex && keep) && d.photofull && d.photofull[ph.id]) await S.store.put('photofull', ph.id, { data: d.photofull[ph.id] });
+    if (ex && keep) { skipped++; continue; }
+    if (d.photofull && d.photofull[ph.id]) await putRetry('photofull', ph.id, { data: d.photofull[ph.id] });
+    if (ex) await PhotoStore.update([ph]);
+    else await PhotoStore.add(ph.pid, ph.id, ph);
+    added++;
   }
   await loadAll(); await runMigrations(); MAP.draw(); updateCounts(); renderTable();
   toast(`복원 완료 · ${added}건 반영${skipped ? `, ${skipped}건은 기존 데이터 유지` : ''}`, 4200);
@@ -370,6 +431,9 @@ async function restore(file) {
 const FIELD_TYPES = { text: '텍스트', number: '숫자', date: '날짜', bool: '예/아니오', select: '선택형', multi: '다중 선택', long: '긴 텍스트' };
 async function renderSettings() {
   const photos = await S.store.list('photos');
+  const batches = importBatches();
+  const use = await storageUsage();
+  const due = backupDue();
   const totalBytes = photos.reduce((a, p) => a + (p.size || 0) + (p.thumb ? p.thumb.length : 0), 0);
   const dup = {}; photos.forEach(p => { const k = (p.w || 0) + 'x' + (p.h || 0) + '|' + (p.thumb || '').slice(-64); (dup[k] = dup[k] || []).push(p); });
   const dups = Object.values(dup).filter(a => a.length > 1);
@@ -387,23 +451,51 @@ async function renderSettings() {
         ${['시장 형태', '아파트 진입 방식', '상부 주거동 형태', '건물 배치', '대지 형태', '도로 접면', '광장 유무', '아케이드 유무', '건물 구조', '공실 여부'].map(s => `<button class="chip" data-quick="${esc(s)}">＋ ${esc(s)}</button>`).join('')}
       </div>
     </div>
-    <div class="card pad"><div class="sech"><h3>참조 지점</h3><div class="ln"></div><button class="btn sm" id="stFac">＋ 추가</button></div>
+    <div class="card pad"><div class="sech"><h3>참조 지점</h3><div class="ln"></div>
+        <button class="btn sm" id="stImp">↑ 가져오기</button><button class="btn sm" id="stFac">＋ 추가</button></div>
       ${Object.entries(FAC_KINDS).filter(([k]) => k !== 'apt').map(([k, v]) => `<div class="dist"><span>${v.label}</span><span class="d">${S.facilities.filter(f => f.kind === k).length}</span></div>`).join('')}
-      <p class="hint" style="margin-top:8px">과거 철도역은 위치와 함께 <b>연도·출처</b>를 메모에 남겨두면 나중에 논문 각주로 쓸 수 있습니다.</p></div>
-    <div class="card pad"><div class="sech"><h3>저장 공간</h3><div class="ln"></div></div>
-      <div class="statrow"><div class="stat"><b>${photos.length}</b><span>사진</span></div>
-        <div class="stat"><b>${bytes(totalBytes)}</b><span>이미지 용량</span></div>
-        <div class="stat"><b>${S.projects.length}</b><span>프로젝트</span></div></div>
+      <p class="hint" style="margin-top:8px">공공데이터포털의 CSV·Shapefile 을 그대로 올릴 수 있습니다. 과거 철도역은 위치와 함께 <b>연도·출처</b>를 메모에 남겨두면 나중에 논문 각주로 쓸 수 있습니다.</p></div>
+    <div class="card pad" style="grid-column:1/-1"><div class="sech"><h3>가져온 데이터</h3><div class="ln"></div>
+        <button class="btn sm pri" id="stImp2">↑ 공간 데이터 가져오기</button></div>
+      ${batches.length ? `<table class="grid" style="width:100%"><thead><tr><th>원본 파일</th><th>좌표계</th><th>종류</th><th>건수</th><th>가져온 때</th><th></th></tr></thead><tbody>
+        ${batches.map(b => `<tr><td>${esc(b.file)}</td><td class="hint">${esc(b.crs || '—')}</td><td>${esc(Array.from(b.kinds).join(', '))}</td>
+          <td class="n">${b.n}</td><td class="n">${esc((b.at || '').slice(0, 16).replace('T', ' '))}</td>
+          <td><button class="btn sm dgr" data-ub="${esc(b.batch)}">되돌리기</button></td></tr>`).join('')}</tbody></table>`
+      : '<p class="hint">CSV · GeoJSON · Shapefile(.shp+.dbf) 또는 이들을 담은 ZIP 을 올리면 역·터미널·시장·철도 노선으로 들어옵니다. 좌표계는 .prj 에서 읽거나 직접 고를 수 있고, 구 좌표계(Bessel)는 데이텀 변환까지 합니다.</p>'}
+      <p class="hint" style="margin-top:8px">한 묶음을 되돌리면 그 파일로 들여온 항목만 지워집니다. 직접 입력한 지점은 그대로 남습니다.</p></div>
+    <div class="card pad"><div class="sech"><h3>저장 공간</h3><div class="ln"></div>
+        <span class="hint">문서 ${use.docs.toLocaleString()} / ${use.cap.toLocaleString()}</span></div>
+      <div class="statrow"><div class="stat"><b>${photos.length}</b><span>저장된 사진</span></div>
+        <div class="stat"><b>${use.photosLeft.toLocaleString()}</b><span>더 넣을 수 있는 사진</span></div>
+        <div class="stat"><b>${bytes(totalBytes)}</b><span>이미지 용량</span></div></div>
+      <div class="pbar" style="height:6px;border-radius:3px;background:var(--surface3);margin:12px 0 6px;overflow:hidden">
+        <i style="display:block;height:100%;border-radius:3px;width:${Math.min(100, use.docs / use.cap * 100).toFixed(1)}%;
+          background:${use.docs / use.cap > 0.85 ? 'var(--signal)' : use.docs / use.cap > 0.6 ? 'var(--warn)' : 'var(--accent)'}"></i></div>
+      <p class="hint" style="margin:0">아티팩트 한 개의 데이터베이스는 문서 <b>5,000개</b>까지 담습니다.
+      지금 이 아카이브는 사진 1장에 문서 <b>${use.perPhoto}개</b>를 쓰고 있어(원본 1개 + 묶음 몫),
+      <b>약 ${use.photosLeft.toLocaleString()}장</b>을 더 넣을 수 있습니다.
+      ${use.docs / use.cap > 0.85 ? '<b style="color:var(--signal)">한도에 가까워졌습니다 — 백업을 내려받고 오래된 원본을 정리하세요.</b>' : ''}</p>
+      ${use.packed ? `<div style="margin-top:10px;padding:9px 11px;border:1px solid var(--signal);background:var(--signal-soft);border-radius:var(--r)">
+        <p class="hint" style="margin:0 0 8px">묶음에 담긴 사진 <b>${use.packed}장</b>이 남아 있습니다.
+        묶어 담는 방식은 사진을 잃게 만들어 되돌렸습니다 — 이 사진들을 한 장씩 저장하는 방식으로 풀어 두는 것이 안전합니다.</p>
+        <button class="btn sm pri" id="stPack">묶음 풀기</button></div>` : ''}
       <div style="margin-top:10px">${bars(S.projects.map(p => [projName(p), p.photoCount || 0]).sort((a, b) => b[1] - a[1]).slice(0, 8), '장')}</div>
-      <p class="hint" style="margin-top:8px">${S.store && S.store.name === 'db' ? '사진은 계정 저장소에 저장되어 다른 기기에서도 열립니다. 사진 1장은 약 150–230KB로 자동 압축됩니다.' : '이 브라우저에만 저장됩니다. 정기적으로 JSON 백업을 내려받으세요.'}</p></div>
+      <p class="hint" style="margin-top:8px">${S.store && S.store.name === 'db' ? '사진은 계정 저장소에 저장되어 다른 기기에서도 열립니다. 문서 하나는 256KB까지라 사진 1장은 약 150–220KB로 자동 압축됩니다.' : '이 브라우저에만 저장됩니다. 정기적으로 JSON 백업을 내려받으세요.'}</p></div>
     <div class="card pad"><div class="sech"><h3>정리</h3><div class="ln"></div></div>
       <div class="dist"><span>중복 의심 사진</span><span class="d">${dups.reduce((a, g) => a + g.length - 1, 0)}</span></div>
       <div class="dist"><span>저해상도 사진 (900px 미만)</span><span class="d">${lowres.length}</span></div>
       <div class="dist"><span>휴지통</span><span class="d">${S.trash.length}</span></div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn sm pri" id="stClean">저장소 청소</button>
+        <button class="btn sm" id="stRecover">사라진 사진 되살리기</button>
         <button class="btn sm" id="stDup" ${dups.length ? '' : 'disabled'}>중복 사진 검토</button>
-        <button class="btn sm" id="stTrash" ${S.trash.length ? '' : 'disabled'}>휴지통 열기</button></div></div>
-    <div class="card pad"><div class="sech"><h3>백업 · 복원</h3><div class="ln"></div></div>
+        <button class="btn sm" id="stTrash" ${S.trash.length ? '' : 'disabled'}>휴지통 열기</button></div>
+      <p class="hint" style="margin-top:8px">「저장소 청소」는 쓰이지 않는 문서(주인 없는 원본, 사라진 프로젝트의 자료, 옛 스냅샷)를 찾아
+      되찾을 용량을 보여주고, <b>고르신 것만</b> 지웁니다.</p></div>
+    <div class="card pad" ${due ? 'style="border-color:var(--warn)"' : ''}><div class="sech"><h3>백업 · 복원</h3><div class="ln"></div>
+        <span class="hint">${S.meta && S.meta.lastBackupAt ? esc(S.meta.lastBackupAt.slice(0, 10)) + ' (' + backupAge() + '일 전)' : '받은 적 없음'}</span></div>
+      ${due ? `<p style="margin:0 0 8px;font-size:13px;color:var(--warn)"><b>${esc(due.why)}.</b>
+        답사 사진은 다시 찍을 수 없습니다 — 지금 받아 두세요.</p>` : ''}
       <p class="hint">사진 원본까지 포함한 전체 백업입니다. 복원은 항상 병합 방식이며, 지금 저장된 기록을 지우지 않습니다.</p>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn" id="stBk">백업 내려받기</button>
@@ -438,15 +530,287 @@ async function renderSettings() {
     renderSettings(); renderTable();
   });
   $('#stFac').onclick = () => facilityForm();
+  $('#stImp').onclick = () => importDialog();
+  $('#stImp2').onclick = () => importDialog();
+  $$('[data-ub]').forEach(b => b.onclick = () => deleteBatch(b.dataset.ub));
   $('#stBk').onclick = () => backup();
   $('#stRs').onchange = async e => { try { await restore(e.target.files[0]); renderSettings(); } catch (err) { toast('복원 실패: ' + err.message); } };
   $('#stTrash').onclick = () => trashModal();
   $('#stDup').onclick = () => dupModal(dups);
+  $('#stClean').onclick = () => cleanupModal();
+  $('#stRecover').onclick = () => recoverPhotos();
   $('#stCheck').onclick = () => integrityCheck();
+  const pk = $('#stPack'); if (pk) pk.onclick = () => repackPhotos();
 }
+/* ---------- 저장소 청소 ----------
+   쓰이지 않는 문서를 찾아 되찾는다. 조사는 읽기만 하고, 지우는 것은
+   사용자가 항목을 골라 확인한 뒤에만 일어난다(데이터 보존 원칙 5절).
+
+   가장 크게 낭비되는 것은 «주인 없는 원본»이다. 사진을 올릴 때 원본을 먼저 쓰고
+   메타를 나중에 쓰는데, 그 사이에 저장이 끊기면 원본만 남는다. 메타가 없으면
+   앱은 그 사진을 영원히 보여줄 수 없으면서 문서 1개와 약 200KB를 계속 쓴다.
+   (v1.5.0부터는 메타 저장이 실패하면 원본을 되돌리지만, 그전에 생긴 것은 남아 있다.) */
+/* 주인 없는 원본을 찾으려면 photofull 을 통째로 읽어야 하는데, 원본은 장당 200KB라
+   수천 장이면 브라우저가 감당하지 못한다. 그래서 사진이 많으면 이 항목만 따로,
+   사용자가 원할 때 살펴본다. 나머지 조사는 가볍다. */
+const HEAVY_SCAN_AT = 600;
+async function cleanupScan(scanOriginals) {
+  const [photos, notes, snaps] = await Promise.all([
+    PhotoStore.listAll(), S.store.list('notes'), S.store.list('snapshots')
+  ]);
+  let fulls = [];
+  if (scanOriginals) {
+    // 데이터는 버리고 id·크기만 남긴다 — 배열이 오래 살아 있지 않게
+    fulls = (await S.store.list('photofull')).map(f => ({ id: f.id, size: f.data ? f.data.length : 0 }));
+  }
+  const photoIds = new Set(photos.map(p => p.id));
+  const known = new Set(S.projects.map(p => p.id).concat(S.trash.map(p => p.id)));
+  const orphanFull = fulls.filter(f => !photoIds.has(f.id));
+  const orphanPhoto = photos.filter(p => !p.pid || !known.has(p.pid));
+  const orphanNote = notes.filter(n => !n.pid || !known.has(n.pid));
+  const trashPhotos = photos.filter(p => p.pid && S.trash.some(t => t.id === p.pid));
+  return [
+    {
+      k: 'orphanFull', on: true, label: '주인 없는 원본 이미지',
+      why: '메타가 없어 앱에서 볼 수 없는 원본입니다. 예전에 업로드가 중간에 끊겼을 때 남습니다.',
+      n: orphanFull.length, docs: orphanFull.length,
+      bytes: orphanFull.reduce((a, f) => a + f.size, 0), items: orphanFull
+    },
+    {
+      k: 'snapshot', on: false, label: '옛 마이그레이션 스냅샷',
+      why: '저장 구조를 바꾸기 직전에 남긴 안전 사본입니다. 지금은 구조가 정상이라 지워도 되지만, 되돌릴 길 하나가 사라집니다.',
+      n: snaps.length, docs: snaps.length,
+      bytes: snaps.reduce((a, x) => a + (x.payload ? x.payload.length : 0), 0), items: snaps
+    },
+    {
+      k: 'orphanNote', on: false, label: '사라진 프로젝트의 답사 기록',
+      why: '소속 프로젝트가 휴지통에도 없습니다. 백업을 복원하면 다시 이어질 수 있으니 신중히 고르세요.',
+      n: orphanNote.length, docs: orphanNote.length,
+      bytes: orphanNote.reduce((a, n2) => a + (n2.body || '').length, 0), items: orphanNote
+    },
+    {
+      k: 'orphanPhoto', on: false, label: '사라진 프로젝트의 사진',
+      why: '소속 프로젝트가 휴지통에도 없습니다. 원본까지 함께 지워집니다.',
+      n: orphanPhoto.length, docs: orphanPhoto.length * 2,
+      bytes: orphanPhoto.reduce((a, p) => a + (p.size || 0), 0), items: orphanPhoto
+    },
+    {
+      k: 'trash', on: false, label: '휴지통 비우기',
+      why: `휴지통의 프로젝트 ${S.trash.length}건과 거기 딸린 사진 ${trashPhotos.length}장을 영구히 지웁니다.`,
+      n: S.trash.length, docs: S.trash.length + trashPhotos.length * 2,
+      bytes: trashPhotos.reduce((a, p) => a + (p.size || 0), 0), items: S.trash
+    }
+  ].filter(c => c.n > 0);
+}
+async function cleanupModal(scanOriginals) {
+  const use = await storageUsage();
+  const heavy = scanOriginals == null ? use.photos <= HEAVY_SCAN_AT : scanOriginals;
+  toast(heavy ? '저장소를 살펴보는 중… (원본까지 확인합니다)' : '저장소를 살펴보는 중…', heavy ? 6000 : 2600);
+  const cats = await cleanupScan(heavy);
+  if (!cats.length) {
+    openModal(`<div class="mh"><h3>저장소 청소</h3><button class="x">×</button></div>
+      <div class="mb"><p>지울 것이 없습니다. 저장된 문서가 모두 쓰이고 있습니다.</p>
+      <p class="hint">문서 ${use.docs.toLocaleString()} / ${use.cap.toLocaleString()} · 사진 ${use.photos.toLocaleString()}장
+      ${heavy ? '' : '<br>«주인 없는 원본»은 아직 살펴보지 않았습니다.'}</p></div>
+      <div class="mf">${heavy ? '' : '<button class="btn" id="clHeavy2">원본까지 살펴보기</button>'}
+        <button class="btn pri" onclick="closeModal()">닫기</button></div>`);
+    const h2 = $('#clHeavy2'); if (h2) h2.onclick = () => { closeModal(); cleanupModal(true); };
+    return;
+  }
+  const row = c => `<tr><td><label class="lyr" style="padding:0"><input type="checkbox" data-cl="${c.k}" ${c.on ? 'checked' : ''}>
+      <span>${esc(c.label)}</span></label><div class="hint" style="margin-left:24px">${esc(c.why)}</div></td>
+    <td class="n">${c.n}</td><td class="n">${c.docs}</td><td class="n">${bytes(c.bytes)}</td></tr>`;
+  openModal(`<div class="mh"><h3>저장소 청소</h3><button class="x">×</button></div>
+    <div class="mb">
+      <p class="hint" style="margin:0 0 10px">지울 항목을 고르세요. 고르지 않은 것은 그대로 둡니다.
+      기본으로 켜 둔 것은 <b>어떤 경우에도 다시 쓸 수 없는 문서</b>뿐입니다.</p>
+      ${heavy ? '' : `<p class="hint" style="margin:0 0 10px;color:var(--warn)">사진이 ${use.photos.toLocaleString()}장이라
+        «주인 없는 원본»은 아직 살펴보지 않았습니다 — 원본을 모두 읽어야 해서 시간과 메모리를 많이 씁니다.
+        <button class="btn sm" id="clHeavy" style="margin-left:6px">원본까지 살펴보기</button></p>`}
+      <table class="grid" style="width:100%"><thead><tr>
+        <th style="cursor:default">항목</th><th style="cursor:default">개수</th>
+        <th style="cursor:default">문서</th><th style="cursor:default">용량</th></tr></thead>
+        <tbody>${cats.map(row).join('')}</tbody></table>
+      <div class="statrow" style="margin-top:14px">
+        <div class="stat"><b id="clDocs">0</b><span>되찾는 문서</span></div>
+        <div class="stat"><b id="clBytes">0</b><span>되찾는 용량</span></div>
+        <div class="stat"><b id="clPhotos">0</b><span>더 넣을 수 있는 사진</span></div>
+      </div>
+      <p class="hint" style="margin-top:10px">되돌릴 수 없습니다. 걱정되면 먼저 백업을 받아 두세요.</p>
+    </div>
+    <div class="mf"><button class="btn" id="clBk">먼저 백업 받기</button><span class="spacer"></span>
+      <button class="btn" onclick="closeModal()">취소</button>
+      <button class="btn dgr" id="clGo">고른 항목 지우기</button></div>`, { wide: true });
+  const picked = () => cats.filter(c => { const el = $(`[data-cl="${c.k}"]`); return el && el.checked; });
+  const tally = () => {
+    const p = picked();
+    const docs = p.reduce((a, c) => a + c.docs, 0);
+    $('#clDocs').textContent = docs.toLocaleString();
+    $('#clBytes').textContent = bytes(p.reduce((a, c) => a + c.bytes, 0));
+    $('#clPhotos').textContent = '+' + Math.floor(docs / use.perPhoto).toLocaleString();
+    $('#clGo').disabled = !docs;
+  };
+  $$('#modalbox [data-cl]').forEach(el => el.onchange = tally);
+  tally();
+  $('#clBk').onclick = () => backup();
+  const hv = $('#clHeavy'); if (hv) hv.onclick = () => { closeModal(); cleanupModal(true); };
+  $('#clGo').onclick = async () => {
+    const p = picked();
+    if (!p.length) return;
+    if (!await confirmBox('저장소 청소',
+      `<p>${p.map(c => `<b>${esc(c.label)}</b> ${c.n}개`).join(', ')} 를 영구히 지웁니다.</p>
+       <p class="hint">문서 ${p.reduce((a, c) => a + c.docs, 0)}개를 되찾습니다. 되돌릴 수 없습니다.</p>`, '지우기')) return;
+    closeModal();
+    const total = p.reduce((a, c) => a + c.items.length, 0);
+    const prog = progressStart(total, '저장소 청소 중');
+    let done = 0, freed = 0, gotBytes = 0, failed = 0;
+    for (const c of p) {
+      for (const it of c.items) {
+        prog.set(done, c.label);
+        try {
+          if (c.k === 'orphanFull') await delRetry('photofull', it.id);
+          else if (c.k === 'snapshot') await delRetry('snapshots', it.id);
+          else if (c.k === 'orphanNote') await delRetry('notes', it.id);
+          else if (c.k === 'orphanPhoto') { const rr = await PhotoStore.remove([it]); if (!rr.removed) throw new Error(rr.failed[0] ? rr.failed[0].why : '삭제 실패'); }
+          else if (c.k === 'trash') await purgeProject(it.id);
+          freed += c.docs / Math.max(1, c.items.length);
+          gotBytes += c.bytes / Math.max(1, c.items.length);
+        } catch (e) { failed++; console.error('청소 실패', c.k, it.id, e); }
+        done++;
+        if (done % 15 === 0) await new Promise(r => setTimeout(r, 0));
+      }
+    }
+    prog.done();
+    await loadAll();
+    const after = await storageUsage();
+    updateCounts(); MAP.draw(); renderTable(); renderSettings();
+    const gotDocs = Math.round(freed);
+    openModal(`<div class="mh"><h3>청소 완료</h3><button class="x">×</button></div>
+      <div class="mb"><p>문서 <b class="mono">${gotDocs.toLocaleString()}</b>개, <b class="mono">${bytes(gotBytes)}</b> 를 되찾았습니다.</p>
+        <div class="statrow" style="margin:12px 0">
+          <div class="stat"><b>${after.docs.toLocaleString()} / ${after.cap.toLocaleString()}</b><span>지금 문서</span></div>
+          <div class="stat"><b>${after.photos.toLocaleString()}</b><span>사진</span></div>
+          <div class="stat"><b>+${Math.floor(gotDocs / after.perPhoto).toLocaleString()}</b><span>더 넣을 수 있게 된 사진</span></div>
+        </div>
+        ${failed ? `<p class="hint" style="color:var(--warn)">${failed}개는 지우지 못했습니다. 다시 시도해 보세요.</p>` : ''}</div>
+      <div class="mf"><button class="btn pri" onclick="closeModal()">닫기</button></div>`);
+  };
+}
+
+/* ---------- 묶음 풀기 ----------
+   v1.8.0 의 «묶어 담기» 는 공유 문서를 읽고 고쳐 되쓰는 방식이라 사진 메타를 잃게 했다.
+   되돌렸고, 아직 묶음에 남아 있는 사진을 한 장씩 저장하는 방식으로 풀어 준다.
+   새 문서를 쓰고 다시 읽어 확인한 뒤에만 묶음에서 뺀다. */
+async function repackPhotos() {
+  const books = await S.store.list('photobook');
+  const total = books.reduce((a, b) => a + Object.keys(b.items || {}).length, 0);
+  if (!total) return toast('묶음에 남은 사진이 없습니다');
+  if (!await confirmBox('묶음 풀기',
+    `<p>묶음에 담긴 <b class="mono">${total}</b>장을 한 장씩 저장하는 방식으로 풉니다.
+     사진과 화질은 그대로입니다.</p>
+     <p class="hint">새 문서를 쓰고 다시 읽어 확인한 뒤에만 묶음에서 뺍니다. 확인에 실패하면 묶음에 그대로 둡니다.</p>`,
+    '풀기')) return;
+  const prog = progressStart(total, '묶음 푸는 중');
+  let moved = 0, failed = 0, n = 0;
+  for (const b of books) {
+    const items = Object.entries(b.items || {});
+    for (const [id, meta] of items) {
+      prog.set(n++, meta.cat || '');
+      try {
+        await putRetry('photos', id, Object.assign({}, meta, { pid: meta.pid || b.pid }));
+        const back = await S.store.get('photos', id);
+        if (!back || (meta.thumb && back.thumb !== meta.thumb)) { failed++; continue; }
+        delete b.items[id];
+        moved++;
+      } catch (e) { failed++; console.error('묶음 풀기 실패', id, e); }
+    }
+    try {
+      if (Object.keys(b.items).length) await putRetry('photobook', b.id, { pid: b.pid, n: b.n, items: b.items });
+      else await delRetry('photobook', b.id);
+    } catch (e) { console.error(e); }
+  }
+  prog.done();
+  if (S.cur) await openDetail(S.cur);
+  renderSettings();
+  toast(`${moved}장을 풀었습니다${failed ? ` · ${failed}장 실패` : ''}`, 4200);
+}
+
+/* ---------- 사라진 사진 되살리기 ----------
+   원본(photofull)은 남아 있는데 목록 정보가 사라진 사진을 찾아, 원본에서 축소본을
+   다시 만들어 목록에 되돌린다. 원본이 곧 사진이므로 사진 자체는 잃지 않았다.
+   다만 어느 프로젝트의 사진이었는지·촬영 설명·분류는 목록 정보에 있었으므로
+   복구할 수 없다. 그래서 어디로 되살릴지는 연구자가 고른다. */
+async function recoverPhotos() {
+  toast('원본을 살펴보는 중… 시간이 걸립니다', 8000);
+  let fulls;
+  try { fulls = await S.store.list('photofull'); }
+  catch (e) { return toast('원본을 읽지 못했습니다: ' + String((e && e.message) || e), 5000); }
+  const known = new Set((await PhotoStore.listAll()).map(p => p.id));
+  const lost = fulls.filter(f => !known.has(f.id) && f.data && f.data.length > 2000);
+  if (!lost.length) return toast('되살릴 사진이 없습니다 — 원본과 목록이 모두 맞습니다');
+  const opts = S.projects.map(p => `<option value="${p.id}">${esc(projName(p))}</option>`).join('');
+  const where = await new Promise(res => {
+    openModal(`<div class="mh"><h3>사라진 사진 되살리기</h3><button class="x">×</button></div>
+      <div class="mb">
+        <p>목록에서 사라졌지만 <b>원본이 남아 있는 사진 <span class="mono">${lost.length}</span>장</b>을 찾았습니다.
+        원본에서 축소본을 다시 만들어 되살립니다.</p>
+        <p class="hint">어느 프로젝트의 사진이었는지와 분류·설명은 사라진 목록 정보에 있던 것이라 되살릴 수 없습니다.
+        한곳에 모아 되살린 뒤, 갤러리에서 「선택」으로 골라 프로젝트를 옮기시면 됩니다.</p>
+        <label class="fld" style="margin-top:12px"><span>어디로 되살릴까요</span>
+          <select id="rcTo"><option value="__new">새 프로젝트 «되살린 사진» 을 만들어 모으기</option>${opts}</select></label>
+      </div>
+      <div class="mf"><button class="btn" data-r="">취소</button><button class="btn pri" data-r="go">${lost.length}장 되살리기</button></div>`);
+    $$('#modalbox [data-r]').forEach(b => b.onclick = () => { const v = b.dataset.r ? $('#rcTo').value : ''; closeModal(); res(v); });
+  });
+  if (!where) return;
+  let pid = where;
+  if (where === '__new') {
+    const p = {
+      id: uid(), name: '되살린 사진', marketName: '', aptName: '', sido: '', sgg: '', address: '',
+      lat: null, lng: null, surveyDate: today(), remodel: '미확인', relation: '미분류', status: '미확인',
+      parking: false, tags: ['복구'], custom: {}, photoCount: 0, noteCount: 0,
+      note: '목록 정보가 사라져 원본에서 되살린 사진입니다. 갤러리에서 선택해 원래 프로젝트로 옮기세요.'
+    };
+    await saveProject(p);
+    pid = p.id;
+  }
+  const prog = progressStart(lost.length, '사진 되살리는 중');
+  let ok = 0, bad = 0;
+  for (let i = 0; i < lost.length; i++) {
+    const f = lost[i];
+    prog.set(i, '');
+    try {
+      const img = await new Promise((res, rej) => {
+        const im = new Image();
+        im.onload = () => res(im); im.onerror = () => rej(new Error('이미지를 읽지 못했습니다'));
+        im.src = f.data;
+      });
+      const thumb = encodeWithin(img, [300, 220, 160], THUMB_MAX);
+      if (!thumb) throw new Error('축소본을 만들지 못했습니다');
+      await PhotoStore.add(pid, f.id, {
+        pid, cat: '기타', kind: 'photo', caption: '', date: '', place: '', memo: '되살린 사진 — 분류를 확인해 주세요',
+        tags: ['복구'], w: img.width, h: img.height, sharp: 0, size: f.data.length,
+        createdAt: new Date().toISOString(), thumb
+      });
+      ok++;
+    } catch (e) { bad++; console.error('되살리기 실패', f.id, e); }
+    if (i % 5 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+  prog.done();
+  const p = S.projects.find(x => x.id === pid);
+  if (p) { p.photoCount = (await PhotoStore.list(pid)).length; await saveProject(p); }
+  await loadAll(); updateCounts(); renderTable(); renderSettings();
+  openModal(`<div class="mh"><h3>되살리기 완료</h3><button class="x">×</button></div>
+    <div class="mb"><p><b class="mono">${ok}</b>장을 되살렸습니다${bad ? `, ${bad}장은 실패했습니다` : ''}.</p>
+      <p class="hint">«${esc(p ? projName(p) : '')}» 에 모여 있습니다. 갤러리에서 「선택」으로 고른 뒤
+      «프로젝트 옮기기» 로 원래 프로젝트에 나눠 주세요.</p></div>
+    <div class="mf"><button class="btn pri" id="rcOpen">그 프로젝트 열기</button></div>`);
+  $('#rcOpen').onclick = () => { closeModal(); openDetail(pid); };
+}
+
 /** 데이터 무결성 점검 — 읽기 전용. 어떤 것도 자동으로 고치거나 지우지 않는다. */
 async function integrityCheck() {
-  const [photos, notes, fulls] = await Promise.all([S.store.list('photos'), S.store.list('notes'), S.store.list('photofull')]);
+  const [photos, notes, fulls] = await Promise.all([PhotoStore.listAll(), S.store.list('notes'), S.store.list('photofull')]);
   const live = new Set(S.projects.map(p => p.id));
   const trashed = new Set(S.trash.map(p => p.id));
   const known = id => live.has(id) || trashed.has(id);
@@ -525,8 +889,13 @@ function dupModal(groups) {
         <div><button class="btn sm ${j === 0 ? '' : 'dgr'}" data-dd="${p.id}" ${j === 0 ? 'disabled' : ''}>${j === 0 ? '유지' : '삭제'}</button></div></div>`).join('')}</div></div>`).join('')}</div>
     <div class="mf"><button class="btn" onclick="closeModal()">닫기</button></div>`, { wide: true });
   $$('[data-dd]').forEach(b => b.onclick = async () => {
-    await S.store.del('photos', b.dataset.dd); await S.store.del('photofull', b.dataset.dd);
+    const target = groups.flat().find(x => x.id === b.dataset.dd);
+    if (!target) return;
+    let r; try { r = await PhotoStore.remove([target]); }
+    catch (e) { return toast('삭제하지 못했습니다: ' + String((e && (e.message || e.code)) || e), 5000); }
+    if (!r.removed) return toast('삭제하지 못했습니다: ' + (r.failed[0] ? r.failed[0].why : ''), 5000);
     b.closest('div').parentElement.style.opacity = .3; b.disabled = true; b.textContent = '삭제됨';
+    S.photos = S.photos.filter(x => x.id !== target.id);
     toast('삭제했습니다');
   });
 }
