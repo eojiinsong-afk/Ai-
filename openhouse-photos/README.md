@@ -40,18 +40,35 @@ npm test     # 권한 규칙 자동 검사 (남의 사진 삭제 불가, 링크�
 npm run dev  # 개발용 (관리자 비밀번호 admin1234, 파일 저장 시 재시작)
 ```
 
-## 배포할 때
+## 배포 (Railway)
 
-사진이 서버 디스크(`DATA_DIR`)에 저장되므로 **디스크가 유지되는 곳**에 올려야 합니다.
+사진이 서버 디스크에 저장되므로 **볼륨(저장 공간)을 꼭 붙여야** 합니다. 붙이지 않으면 재배포 때 사진이 모두 사라지고, 관리자 화면에 빨간 경고가 뜹니다.
 
-- Railway / Fly.io / Render: 볼륨(Persistent Disk)을 붙이고 `DATA_DIR`을 그 경로로 지정
-- 사무실 PC·NAS·VPS: `npm start` 후 Cloudflare Tunnel 등으로 HTTPS 연결
-- **반드시 HTTPS**로 서비스하세요. 소장님 링크와 로그인 쿠키를 보호합니다.
-- 백업은 `DATA_DIR` 폴더(`app.db` + `uploads/`)를 통째로 복사하면 됩니다.
+1. **가입** — [railway.com](https://railway.com) 에서 GitHub 계정으로 로그인. 실제 운영하려면 Hobby 요금제가 필요합니다(요금은 Railway 요금 페이지 확인).
+2. **프로젝트 만들기** — `New Project` → `Deploy from GitHub repo` → 이 저장소 선택.
+   (처음이면 Railway에 저장소 접근 권한을 주라는 화면이 나옵니다.)
+3. **폴더·브랜치 지정** — 만들어진 서비스를 클릭 → `Settings`
+   - `Root Directory` : `/openhouse-photos`
+   - `Branch` : 이 앱이 들어 있는 브랜치 (main에 합쳤다면 `main`)
+   - 그러면 `Dockerfile` 을 찾아 자동으로 빌드합니다.
+4. **환경변수** — `Variables` 탭에서 추가
+   - `ADMIN_PASSWORD` = 관리자 비밀번호 (길고 어렵게)
+   - `JOIN_CODE` = 현장에서 참가자에게 알려줄 코드 (선택)
+5. **볼륨 붙이기** — 프로젝트 화면 빈 곳을 우클릭(또는 `⌘K`) → `Volume` → 이 서비스에 연결, Mount path `/data`.
+   경로는 앱이 자동으로 알아냅니다.
+6. **주소 만들기** — `Settings` → `Networking` → `Generate Domain`. `https://○○○.up.railway.app` 주소가 생깁니다. HTTPS는 자동.
+7. **확인** — 주소로 들어가 관리자 로그인 → 빨간 경고가 없으면 끝. 건축물을 추가하고 휴대폰으로 사진 한 장 올려보세요.
+
+이후 브랜치에 코드를 푸시하면 자동으로 다시 배포되고, 사진은 볼륨에 그대로 남습니다.
+
+**백업** — 볼륨 안의 `app.db` 와 `uploads/` 가 전부입니다. 행사가 끝나면 관리자 화면에서 건축물별 `전체 다운로드` 로 ZIP을 받아두는 것이 가장 간단합니다.
+
+**다른 곳에 올릴 때** — `Dockerfile` 이 있으므로 Fly.io, Render, 개인 서버 어디서든 돌아갑니다. 저장 공간을 붙이고 `DATA_DIR` 을 그 경로로, `ADMIN_PASSWORD` 를 지정하면 됩니다. 반드시 HTTPS로 서비스하세요.
 
 ## 구조
 
 ```
+Dockerfile       배포용 이미지
 server.js        API · 권한 검사 · 업로드 · 파일 제공 (Node 내장 SQLite 사용)
 lib/zip.js       전체 다운로드용 ZIP 스트리밍 (4GB 넘으면 ZIP64)
 public/

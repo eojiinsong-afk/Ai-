@@ -3,6 +3,7 @@ import { $, esc, api, toast, fmtDate, photoTile, lightbox } from '/common.js';
 const app = $('#app');
 let me = null;
 let joinCodeRequired = false;
+let storageWarning = false;
 
 const mediaSrc = (ph, kind) => `/media/${ph.id}/${kind}`;
 const isAdmin = () => me?.role === 'admin';
@@ -11,7 +12,7 @@ const shareUrl = (t) => `${location.origin}/s/${t}`;
 // ───────────── 부팅 · 라우팅 ─────────────
 async function boot() {
   const r = await api('/api/me');
-  me = r.user; joinCodeRequired = r.join_code_required;
+  me = r.user; joinCodeRequired = r.join_code_required; storageWarning = r.storage_warning;
   $('#top').hidden = !me;
   if (!me) return renderAuth();
   $('#who').innerHTML = `${esc(me.name)}${isAdmin() ? '<span class="badge">관리자</span>' : ''}`;
@@ -97,6 +98,7 @@ const renderProjects = guard(async () => {
         <div class="grow"><h1>건축물</h1><div class="meta">${projects.length}곳 · 사진을 올릴 건축물을 고르세요</div></div>
         ${isAdmin() ? '<div class="actions"><button class="btn primary" id="addProject">+ 건축물 추가</button></div>' : ''}
       </div>
+      ${storageWarning ? `<div class="share-note warn"><b>⚠ 사진 저장소(볼륨)가 연결되지 않았습니다.</b> 지금 올린 사진은 다음 배포 때 모두 사라집니다. Railway에서 볼륨을 붙인 뒤 사용하세요.</div>` : ''}
       ${isAdmin() ? `<div class="share-note">각 건축물의 <b>소장님 링크</b>를 복사해 건축가께 보내세요. 링크를 받은 분은 로그인 없이 <b>그 건축물 사진만</b> 보고 내려받을 수 있습니다. 링크가 새어나갔다면 <b>재발급</b>하면 이전 링크는 바로 막힙니다.</div>` : ''}
       ${projects.length ? `<div class="grid-projects">${projects.map(projectCard).join('')}</div>`
         : `<div class="empty-state">${isAdmin() ? '아직 건축물이 없습니다. 오른쪽 위에서 추가하세요.' : '아직 등록된 건축물이 없습니다.'}</div>`}

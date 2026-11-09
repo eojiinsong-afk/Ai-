@@ -15,7 +15,10 @@ import { streamZip } from './lib/zip.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
-const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT, 'data'));
+// Railway 에 볼륨을 붙이면 RAILWAY_VOLUME_MOUNT_PATH 가 자동으로 잡힌다
+const DATA_DIR = path.resolve(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(ROOT, 'data'));
+// 클라우드에서 볼륨 없이 돌면 재배포할 때 사진이 전부 사라진다 → 관리자 화면에 경고
+const STORAGE_EPHEMERAL = !!process.env.RAILWAY_ENVIRONMENT && !process.env.DATA_DIR && !process.env.RAILWAY_VOLUME_MOUNT_PATH;
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const JOIN_CODE = process.env.JOIN_CODE || ''; // 비워두면 누구나 가입 가능
@@ -367,6 +370,7 @@ async function route(req, res) {
     return json(res, 200, {
       user: session ? { role: session.role, name: session.role === 'admin' ? '관리자' : session.name, id: session.user_id } : null,
       join_code_required: !!JOIN_CODE,
+      storage_warning: session?.role === 'admin' && STORAGE_EPHEMERAL,
     });
   }
   if (p === '/api/register' && m === 'POST') {
@@ -514,4 +518,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 server.requestTimeout = 10 * 60e3; // 느린 휴대폰 업로드 고려
-server.listen(PORT, () => console.log(`오픈하우스 사진 공유 · http://localhost:${PORT}`));
+server.listen(PORT, () => {
+  console.log(`오픈하우스 사진 공유 · http://localhost:${PORT} · 저장 위치 ${DATA_DIR}`);
+  if (STORAGE_EPHEMERAL) console.warn('⚠ 볼륨이 연결되지 않았습니다. 재배포하면 사진이 사라집니다. README의 배포 안내를 확인하세요.');
+});
+// 배포 플랫폼이 컨테이너를 내릴 때 DB를 깔끔하게 닫는다
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => { server.close(); db.close(); process.exit(0); });
+}

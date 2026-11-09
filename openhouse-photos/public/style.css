@@ -143,3 +143,4 @@ table.users th { font-weight: 600; color: var(--ink-2); font-size: 12px; }
 table.users tr:last-child td { border-bottom: 0; }
 
 .share-note { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; color: var(--ink-2); font-size: 14px; margin-bottom: 20px; }
+.share-note.warn { border-color: var(--danger); color: var(--danger); }
