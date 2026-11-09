@@ -1,0 +1,14 @@
+{
+  "name": "openhouse-photos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "오픈하우스서울 참가자 사진 공유 — 참가자 업로드, 소장님 전용 링크, 관리자 전체 관리",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "dev": "ADMIN_PASSWORD=admin1234 node --disable-warning=ExperimentalWarning --watch server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "license": "UNLICENSED"
+}

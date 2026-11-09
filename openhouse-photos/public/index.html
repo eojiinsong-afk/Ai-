@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>오픈하우스 사진함</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='%23d6402b'/></svg>">
+</head>
+<body>
+  <header class="top" id="top" hidden>
+    <div class="wrap">
+      <a class="brand" href="#/"><span class="dot"></span>오픈하우스 사진함</a>
+      <span class="spacer"></span>
+      <a class="btn ghost sm" href="#/users" id="usersLink" hidden>참가자</a>
+      <span class="who" id="who"></span>
+      <button class="btn ghost sm" id="logout">로그아웃</button>
+    </div>
+  </header>
+  <main id="app"></main>
+
+  <dialog id="projectDialog">
+    <form method="dialog" id="projectForm">
+      <h2 id="projectDialogTitle">건축물 추가</h2>
+      <div class="field"><label for="pf-name">건축물 이름 *</label><input id="pf-name" name="name" required maxlength="100"></div>
+      <div class="field"><label for="pf-arch">건축가 / 사무소</label><input id="pf-arch" name="architect" maxlength="100"></div>
+      <div class="field"><label for="pf-date">투어 날짜</label><input id="pf-date" name="visit_date" type="date"></div>
+      <div class="field"><label for="pf-desc">설명</label><textarea id="pf-desc" name="description" rows="3" maxlength="1000"></textarea></div>
+      <p class="err" id="pf-err"></p>
+      <div class="row"><button class="btn" value="cancel" formnovalidate>취소</button><button class="btn primary" value="ok">저장</button></div>
+    </form>
+  </dialog>
+
+  <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*" multiple hidden>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
