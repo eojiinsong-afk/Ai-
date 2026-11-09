@@ -30,6 +30,7 @@ export function fmtDate(ts) {
 }
 
 export function fmtSize(n) {
+  if (n >= 1073741824) return `${(n / 1073741824).toFixed(1)}GB`;
   return n > 1048576 ? `${(n / 1048576).toFixed(1)}MB` : `${Math.round(n / 1024)}KB`;
 }
 
