@@ -1,4 +1,4 @@
-import { $, esc, api, toast, fmtDate, photoTile, lightbox } from '/common.js';
+import { $, esc, api, toast, fmtDate, fmtSize, photoTile, lightbox } from '/common.js';
 
 const app = $('#app');
 let me = null;
@@ -91,11 +91,12 @@ function renderAuth() {
 
 // ───────────── 프로젝트 목록 ─────────────
 const renderProjects = guard(async () => {
-  const { projects } = await api('/api/projects');
+  const { projects, storage } = await api('/api/projects');
+  const storageLine = storage ? ` · 사진 ${storage.photos.toLocaleString()}장 · ${fmtSize(storage.bytes)} 사용${storage.free_bytes != null ? ` · 남은 공간 ${fmtSize(storage.free_bytes)}` : ''}` : '';
   app.innerHTML = `
     <div class="wrap">
       <div class="page-head">
-        <div class="grow"><h1>건축물</h1><div class="meta">${projects.length}곳 · 사진을 올릴 건축물을 고르세요</div></div>
+        <div class="grow"><h1>건축물</h1><div class="meta">${projects.length}곳${isAdmin() ? storageLine : ' · 사진을 올릴 건축물을 고르세요'}</div></div>
         ${isAdmin() ? '<div class="actions"><button class="btn primary" id="addProject">+ 건축물 추가</button></div>' : ''}
       </div>
       ${storageWarning ? `<div class="share-note warn"><b>⚠ 사진 저장소(볼륨)가 연결되지 않았습니다.</b> 지금 올린 사진은 다음 배포 때 모두 사라집니다. Railway에서 볼륨을 붙인 뒤 사용하세요.</div>` : ''}
@@ -170,9 +171,10 @@ function editProject(p) {
 // ───────────── 프로젝트 상세 (사진) ─────────────
 let filterMine = false;
 const renderProject = guard(async (id) => {
-  const { project: p, photos } = await api(`/api/projects/${id}`);
+  const { project: p, photos, limit_per_user: limit } = await api(`/api/projects/${id}`);
   const list = filterMine && !isAdmin() ? photos.filter((x) => x.mine) : photos;
   const myCount = photos.filter((x) => x.mine).length;
+  const left = limit && !isAdmin() ? Math.max(0, limit - myCount) : Infinity;
   app.innerHTML = `
     <div class="wrap">
       <a class="back" href="#/">← 전체 건축물</a>
@@ -181,10 +183,11 @@ const renderProject = guard(async (id) => {
           <div class="meta">${[p.architect, p.visit_date].filter(Boolean).map(esc).join(' · ')}${p.architect || p.visit_date ? ' · ' : ''}사진 ${photos.length}장</div></div>
         <div class="actions">
           ${photos.length ? `<a class="btn" href="/api/projects/${p.id}/download.zip">전체 다운로드</a>` : ''}
-          ${isAdmin() ? `<button class="btn" id="copyShare">소장님 링크 복사</button>` : `<button class="btn primary" id="upload">+ 사진 올리기</button>`}
+          ${isAdmin() ? `<button class="btn" id="copyShare">소장님 링크 복사</button>` : `<button class="btn primary" id="upload" ${left === 0 ? 'disabled' : ''}>+ 사진 올리기${limit ? ` (${myCount}/${limit})` : ''}</button>`}
         </div>
       </div>
       ${p.description ? `<p class="desc">${esc(p.description)}</p>` : ''}
+      ${limit && !isAdmin() ? `<p class="small muted" style="margin:-8px 0 16px">한 사람당 <b>${limit}장</b>까지 올릴 수 있어요. 가장 마음에 드는 사진을 골라주세요.${left === 0 ? ' 다른 사진으로 바꾸려면 기존 사진을 지워주세요.' : ''}</p>` : ''}
       ${!isAdmin() && photos.length ? `<div class="filters">
         <button class="chip" aria-pressed="${!filterMine}" data-f="all">전체 ${photos.length}</button>
         <button class="chip" aria-pressed="${filterMine}" data-f="mine">내 사진 ${myCount}</button></div>` : ''}
@@ -193,7 +196,7 @@ const renderProject = guard(async (id) => {
     </div>`;
 
   $('#copyShare')?.addEventListener('click', () => copyText(shareUrl(p.share_token)));
-  $('#upload')?.addEventListener('click', () => pickFiles(p.id));
+  $('#upload')?.addEventListener('click', () => pickFiles(p.id, left));
   app.querySelectorAll('[data-f]').forEach((c) => (c.onclick = () => { filterMine = c.dataset.f === 'mine'; renderProject(id); }));
   app.querySelector('.grid-photos')?.addEventListener('click', guard(async (e) => {
     const tile = e.target.closest('.ph'); if (!tile) return;
@@ -211,10 +214,14 @@ const renderProject = guard(async (id) => {
 });
 
 // ───────────── 업로드 ─────────────
-function pickFiles(projectId) {
+function pickFiles(projectId, left = Infinity) {
   const input = $('#fileInput');
   input.value = '';
-  input.onchange = () => input.files.length && uploadFiles(projectId, [...input.files]);
+  input.onchange = () => {
+    if (!input.files.length) return;
+    if (input.files.length > left) return alert(`${left}장만 더 올릴 수 있어요. ${input.files.length}장을 고르셨으니 ${left}장 이하로 다시 골라주세요.`);
+    uploadFiles(projectId, [...input.files]);
+  };
   input.click();
 }
 

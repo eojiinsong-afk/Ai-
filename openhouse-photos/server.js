@@ -7,7 +7,7 @@
 import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
-import { mkdirSync, createReadStream, existsSync, statSync } from 'node:fs';
+import { mkdirSync, createReadStream, existsSync, statSync, statfsSync } from 'node:fs';
 import { writeFile, unlink, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,6 +23,9 @@ const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const JOIN_CODE = process.env.JOIN_CODE || ''; // 비워두면 누구나 가입 가능
 const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB || 40);
+// 건축물 하나에 참가자 1명이 올릴 수 있는 사진 수. 0 이면 제한 없음.
+// 200개 프로그램 × 20명 × 5장 × 약 6MB ≈ 120GB (모두가 꽉 채워 올리는 최악의 경우)
+const MAX_PHOTOS_PER_USER = Number(process.env.MAX_PHOTOS_PER_USER ?? 5);
 const SESSION_DAYS = 60;
 
 if (!ADMIN_PASSWORD) {
@@ -103,6 +106,8 @@ const q = {
   insertPhoto: db.prepare(`INSERT INTO photos (project_id, user_id, file, thumb, mime, original_name, size, caption, created_at)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
   deletePhoto: db.prepare('DELETE FROM photos WHERE id = ?'),
+  countMine: db.prepare('SELECT COUNT(*) AS n FROM photos WHERE project_id = ? AND user_id = ?'),
+  storage: db.prepare('SELECT COUNT(*) AS photos, COALESCE(SUM(size), 0) AS bytes FROM photos'),
   users: db.prepare(`SELECT u.id, u.name, u.created_at, COUNT(ph.id) AS photo_count
                      FROM users u LEFT JOIN photos ph ON ph.user_id = u.id GROUP BY u.id ORDER BY u.name`),
 };
@@ -273,6 +278,9 @@ async function sendZip(res, project) {
 async function handleUpload(req, session, projectId) {
   if (session.role !== 'participant') throw new HttpError(403, '참가자 계정으로 올려주세요');
   if (!q.project.get(projectId)) throw new HttpError(404, '프로젝트가 없습니다');
+  if (MAX_PHOTOS_PER_USER && q.countMine.get(projectId, session.user_id).n >= MAX_PHOTOS_PER_USER) {
+    throw new HttpError(409, `이 건축물에는 한 사람당 ${MAX_PHOTOS_PER_USER}장까지 올릴 수 있어요. 다른 사진으로 바꾸려면 기존 사진을 지워주세요`);
+  }
   const len = Number(req.headers['content-length']);
   if (!len) throw new HttpError(411, '파일 크기를 알 수 없습니다');
   if (len > (MAX_UPLOAD_MB + 2) * 1024 * 1024) throw new HttpError(413, `사진 한 장은 ${MAX_UPLOAD_MB}MB 이하여야 합니다`);
@@ -411,7 +419,14 @@ async function route(req, res) {
   // ── 프로젝트 ──
   if (p === '/api/projects' && m === 'GET') {
     requireAuth(session);
-    return json(res, 200, { projects: q.projects.all().map((x) => projectOut(x, session)) });
+    const out = { projects: q.projects.all().map((x) => projectOut(x, session)) };
+    if (session.role === 'admin') {
+      const st = q.storage.get();
+      let free = null;
+      try { const fs = statfsSync(DATA_DIR); free = fs.bavail * fs.bsize; } catch {}
+      out.storage = { photos: st.photos, bytes: st.bytes, free_bytes: free };
+    }
+    return json(res, 200, out);
   }
   if (p === '/api/projects' && m === 'POST') {
     requireAdmin(session);
@@ -427,7 +442,11 @@ async function route(req, res) {
     if (m === 'GET') {
       requireAuth(session);
       if (!project) throw new HttpError(404, '프로젝트가 없습니다');
-      return json(res, 200, { project: projectOut(project, session), photos: q.photos.all(id).map((ph) => photoOut(ph, session)) });
+      return json(res, 200, {
+        project: projectOut(project, session),
+        photos: q.photos.all(id).map((ph) => photoOut(ph, session)),
+        limit_per_user: MAX_PHOTOS_PER_USER || null,
+      });
     }
     requireAdmin(session);
     if (!project) throw new HttpError(404, '프로젝트가 없습니다');

@@ -33,6 +33,7 @@ http://localhost:3000 에서 열립니다.
 | `PORT` | 포트 | `3000` |
 | `DATA_DIR` | DB와 사진이 저장될 폴더 | `./data` |
 | `MAX_UPLOAD_MB` | 사진 1장 최대 크기 | `40` |
+| `MAX_PHOTOS_PER_USER` | 건축물 하나에 1인당 올릴 수 있는 사진 수 (`0` = 제한 없음) | `5` |
 | `COOKIE_SECURE` | HTTPS 프록시 뒤에서 `1` (보통 `X-Forwarded-Proto`로 자동 감지) | — |
 
 ```bash
@@ -40,7 +41,14 @@ npm test     # 권한 규칙 자동 검사 (남의 사진 삭제 불가, 링크�
 npm run dev  # 개발용 (관리자 비밀번호 admin1234, 파일 저장 시 재시작)
 ```
 
-## 배포 (Railway)
+## 배포 (무료) — Oracle Cloud
+
+**[deploy/ORACLE.md](deploy/ORACLE.md)** 를 따라 하세요. Oracle 무료 서버(저장 공간 200GB) + DuckDNS 무료 주소 + 자동 HTTPS.
+서버에서 `deploy/oracle-setup.sh` 하나만 실행하면 설치되고, 같은 명령으로 업데이트됩니다.
+
+200개 프로그램 × 20명 × 1인당 5장 × 약 6MB ≈ 최대 120GB 로, 모두가 꽉 채워 올려도 들어갑니다.
+
+## 배포 (유료) — Railway
 
 사진이 서버 디스크에 저장되므로 **볼륨(저장 공간)을 꼭 붙여야** 합니다. 붙이지 않으면 재배포 때 사진이 모두 사라지고, 관리자 화면에 빨간 경고가 뜹니다.
 
@@ -68,7 +76,8 @@ npm run dev  # 개발용 (관리자 비밀번호 admin1234, 파일 저장 시 �
 ## 구조
 
 ```
-Dockerfile       배포용 이미지
+Dockerfile       배포용 이미지 (Railway 등)
+deploy/          Oracle 서버 설치 스크립트와 안내서
 server.js        API · 권한 검사 · 업로드 · 파일 제공 (Node 내장 SQLite 사용)
 lib/zip.js       전체 다운로드용 ZIP 스트리밍 (4GB 넘으면 ZIP64)
 public/
@@ -85,6 +94,7 @@ test/            권한 시나리오 테스트
 ## 다음에 해볼 만한 것
 
 - 관리자 계정에서도 사진 업로드
+- 관리자 화면에서 1인당 장수 바꾸기 (지금은 환경변수)
 - 사진 캡션 입력 UI (서버는 `caption` 필드를 이미 받음)
 - 소장님 링크에 만료일 설정
 - 사진 저장소를 S3/R2 같은 오브젝트 스토리지로 교체

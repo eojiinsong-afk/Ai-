@@ -35,7 +35,7 @@ const upload = (c, pid, name = 'a.jpg') => {
 before(async () => {
   server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'server.js'], {
     cwd: path.resolve(import.meta.dirname, '..'),
-    env: { ...process.env, PORT, DATA_DIR: dataDir, ADMIN_PASSWORD: 'adminpw', JOIN_CODE: 'OHS' },
+    env: { ...process.env, PORT, DATA_DIR: dataDir, ADMIN_PASSWORD: 'adminpw', JOIN_CODE: 'OHS', MAX_PHOTOS_PER_USER: '2' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   await new Promise((res) => server.stdout.on('data', (d) => d.toString().includes('http') && res()));
@@ -69,13 +69,22 @@ test('권한 시나리오 전체', async () => {
   const b1 = (await (await upload(bob, p1)).json()).id;
   const b2 = (await (await upload(bob, p2)).json()).id;
   assert.ok(a1 && b1 && b2);
+  // 1인당 장수 제한 (테스트에선 2장): bob 은 p1 에 1장 → 1장 더 가능, 그다음은 거절
+  const b3 = (await (await upload(bob, p1)).json()).id;
+  const over = await upload(bob, p1);
+  assert.equal(over.status, 409);
+  assert.equal((await bob(`/api/photos/${b3}`, { method: 'DELETE' })).status, 200);
+  assert.equal((await upload(bob, p1)).status, 200, '지우면 다시 올릴 수 있다');
+  const adminStorage = (await (await admin('/api/projects')).json()).storage;
+  assert.ok(adminStorage.photos >= 4 && adminStorage.free_bytes > 0);
+  assert.equal((await (await alice('/api/projects')).json()).storage, undefined, '참가자에겐 저장 공간 정보 없음');
   const bad = new FormData(); bad.append('file', new Blob(['<script>']), 'x.jpg');
   assert.equal((await alice(`/api/projects/${p1}/photos`, { method: 'POST', form: bad })).status, 415);
 
   // 참가자는 모든 사진을 본다
   const view = await (await alice(`/api/projects/${p1}`)).json();
-  assert.equal(view.photos.length, 2);
-  assert.deepEqual(view.photos.map((x) => [x.uploader, x.mine]).sort(), [['alice', true], ['bob', false]]);
+  assert.equal(view.photos.length, 3);
+  assert.deepEqual(view.photos.map((x) => [x.uploader, x.mine]).sort(), [['alice', true], ['bob', false], ['bob', false]]);
   assert.equal((await alice(`/media/${b2}/orig`)).status, 200);
 
   // 남의 사진은 못 지운다, 내 사진은 지운다
@@ -91,7 +100,8 @@ test('권한 시나리오 전체', async () => {
   const t1 = adminList.projects.find((p) => p.id === p1).share_token;
   const share = await (await stranger(`/api/share/${t1}`)).json();
   assert.equal(share.project.name, '건축물 A');
-  assert.deepEqual(share.photos.map((x) => x.id), [b1]);
+  assert.equal(share.photos.length, 2);
+  assert.ok(share.photos.every((x) => x.uploader === 'bob') && share.photos.some((x) => x.id === b1));
   assert.equal((await stranger(`/s/${t1}/media/${b1}/orig`)).status, 200);
   assert.equal((await stranger(`/s/${t1}/media/${b2}/orig`)).status, 404, 'B 사진은 A 링크로 못 봄');
   assert.equal((await stranger(`/media/${b1}/orig`)).status, 401, '링크 없이 원본 접근 불가');
