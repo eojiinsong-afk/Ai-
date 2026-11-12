@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>답사맵</title>
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <b>답사맵</b>
+    <span class="sub">사진 → 답사지 → 건물 → 요소</span>
+  </div>
+  <div class="top-actions">
+    <label class="btn primary" for="fileInput">사진 넣기</label>
+    <input id="fileInput" type="file" accept="image/*,.heic,.heif" multiple hidden>
+    <button class="btn" id="exportBtn" type="button">내보내기</button>
+    <button class="btn ghost" id="settingsBtn" type="button">설정</button>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- 왼쪽: 답사지 목록 -->
+  <aside class="side" id="side">
+    <div class="side-head">
+      <h2>답사지</h2>
+      <span class="muted" id="photoTotal">사진 0장</span>
+    </div>
+    <div id="importStatus" class="import-status" hidden></div>
+    <ol id="siteList" class="site-list"></ol>
+    <div id="emptyHint" class="empty">
+      <p><b>사진을 폴더째 끌어다 놓으세요.</b></p>
+      <p>촬영 시각과 GPS로 답사지를 자동으로 나눕니다. 아이폰 HEIC 사진도 됩니다.</p>
+      <p class="muted">메신저로 받은 사진은 위치 정보가 지워져 있어요. 원본을 옮겨 주세요.</p>
+    </div>
+  </aside>
+
+  <!-- 가운데: 지도 -->
+  <section class="map-wrap">
+    <div id="map"></div>
+    <div class="map-tools">
+      <button class="btn small" id="pickBtn" type="button" aria-pressed="false">건물 고르기</button>
+      <span id="mapHint" class="map-hint" hidden>지도에서 다녀온 건물을 클릭하세요 · Esc 취소</span>
+    </div>
+    <div class="map-legend" id="baseInfo"></div>
+  </section>
+
+  <!-- 오른쪽: 건물 보드 -->
+  <aside class="board" id="board">
+    <div id="boardEmpty" class="empty">
+      <p><b>건물을 고르면 여기에 사진이 모입니다.</b></p>
+      <p>① 왼쪽에서 답사지를 누르고<br>② <b>건물 고르기</b>로 지도에서 건물을 클릭하세요.</p>
+    </div>
+    <div id="boardBody" hidden>
+      <div class="board-head">
+        <input id="bName" class="title-input" aria-label="건물 이름">
+        <p class="muted" id="bMeta"></p>
+        <div class="row gap">
+          <button class="btn small" id="addNearBtn" type="button">근처 사진 다시 모으기</button>
+          <button class="btn small ghost danger" id="delBuildingBtn" type="button">건물 삭제</button>
+        </div>
+      </div>
+      <nav class="tabs" id="tabs" role="tablist"></nav>
+      <div class="grid" id="grid"></div>
+
+      <div class="viewer" id="viewer" hidden>
+        <div class="viewer-img"><img id="vImg" alt=""></div>
+        <div class="viewer-side">
+          <p class="muted" id="vMeta"></p>
+          <div class="chips" id="vChips"></div>
+          <textarea id="vNote" rows="2" placeholder="한 줄 메모 · 예: 2층 주거 진입 계단, 시장 통로와 분리"></textarea>
+          <div class="row gap wrap">
+            <button class="btn small" id="moveBtn" type="button" aria-pressed="false">지도에서 위치 옮기기</button>
+            <label class="heading">방향 <input id="vHeading" type="range" min="0" max="359" step="1"> <output id="vHeadingOut"></output></label>
+          </div>
+          <div class="row gap wrap">
+            <button class="btn small ghost" id="resetPosBtn" type="button">원래 위치로</button>
+            <button class="btn small ghost danger" id="removeShotBtn" type="button">이 건물에서 빼기</button>
+          </div>
+          <p class="keys muted">← → 사진 이동 · 숫자키 요소 지정 · 0 지우기</p>
+        </div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<div class="drop" id="drop" hidden><p>여기에 놓으면 사진을 읽습니다</p></div>
+
+<dialog id="settings">
+  <form method="dialog" class="dlg">
+    <h2>설정</h2>
+    <label>브이월드 인증키
+      <input id="sKey" autocomplete="off" placeholder="비워 두면 OpenStreetMap 지도와 수동 건물 선택으로 동작">
+    </label>
+    <p class="muted small">키를 발급할 때 이 페이지 주소(예: http://localhost:8000)를 서비스 URL로 등록해야 합니다.</p>
+    <label>건물 데이터 레이어
+      <input id="sLayer" placeholder="LT_C_SPBD">
+    </label>
+    <label>건축요소 (쉼표로 구분, 순서대로 숫자키 1, 2, 3…)
+      <input id="sElements" placeholder="입구, 시장, 아파트">
+    </label>
+    <label>건물 주변 사진 모으는 반경 (m)
+      <input id="sRadius" type="number" min="10" max="300" step="5">
+    </label>
+    <label>답사지를 나누는 기준: 사진 사이 시간 간격 (분)
+      <input id="sGap" type="number" min="5" max="240" step="5">
+    </label>
+    <div class="row gap end">
+      <button class="btn ghost" value="cancel">닫기</button>
+      <button class="btn primary" id="sSave" value="save">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="exportDlg">
+  <form method="dialog" class="dlg">
+    <h2>내보내기</h2>
+    <button class="btn wide" type="button" data-export="geojson">GeoJSON · 건물과 촬영 지점 (GIS·아카이브용)</button>
+    <button class="btn wide" type="button" data-export="csv">CSV · 사진 목록 (엑셀용)</button>
+    <button class="btn wide" type="button" data-export="backup">JSON 백업 · 전체 기록 (사진 파일 제외)</button>
+    <label class="btn wide ghost" for="restoreInput">JSON 백업 불러오기 (병합)</label>
+    <input id="restoreInput" type="file" accept=".json,application/json" hidden>
+    <p class="muted small">사진 원본은 내보내지 않습니다. 원본은 휴대폰·사진 폴더에 그대로 두세요.</p>
+    <div class="row end"><button class="btn ghost" value="close">닫기</button></div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/exifr.umd.js"></script>
+<script src="store.js"></script>
+<script src="vworld.js"></script>
+<script src="photos.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
