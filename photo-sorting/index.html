@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one night-sky stage. Photos gather as a spiral galaxy in the middle, then rays carry them out to planets; each planet opens a card that lists its photos. Single dark look by design. */
+/* Layout: one night-sky stage. A site's photos gather as a spiral galaxy, Claude looks at each one, then rays carry them out to one planet per architectural element; each planet opens a card listing its photos. Uncertain photos come back as question cards. Single dark look by design. */
 :root {
   color-scheme: dark;
   --space: #070A14;
@@ -16,6 +16,7 @@
   --ink-3: #6E7898;
   --core: #FFE7B8;
   --accent: #8FA8FF;
+  --ask: #FFD27A;
   --display: 'Space Grotesk', 'Noto Sans KR', system-ui, sans-serif;
   --sans: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
@@ -24,26 +25,28 @@
 [hidden] { display: none !important; }
 html, body { min-height: 100%; }
 body { background: var(--space); color: var(--ink); font: 14px/1.5 var(--sans); overflow-x: hidden; }
-button { font: inherit; color: inherit; }
+button, input, select { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* top bar */
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--space); }
-.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap;
   padding-block: 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
   background: linear-gradient(var(--space) 60%, rgba(7,10,20,0)); }
-.brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 14px; min-width: 0; flex-wrap: wrap; }
 .brand h1 { margin: 0; font: 700 20px/1 var(--display); letter-spacing: -.01em; }
-.brand p { margin: 0; color: var(--ink-3); font-size: 12.5px; }
+.site { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.site select, .site input { background: var(--panel-solid); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; font-size: 13px; min-width: 0; }
+.site input { width: 170px; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .btn { border: 1px solid var(--line); background: rgba(20,27,48,.7); border-radius: 999px; padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; transition: border-color .15s, background .15s; }
 .btn:hover { border-color: rgba(160,180,255,.45); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #0A0F22; font-weight: 700; }
 .btn.primary:hover { background: #A9BCFF; }
+.btn.ask { border-color: rgba(255,210,122,.5); color: var(--ask); }
 .btn.warn { color: #FFB4B4; }
+.btn.small { padding: 4px 10px; font-size: 12px; }
 .btn[disabled] { opacity: .4; cursor: default; }
-.gap-select { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
-.gap-select select { font: inherit; background: var(--panel-solid); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; }
 
 /* stage */
 .stage { position: relative; width: 100%; min-height: calc(100vh - 64px); }
@@ -53,12 +56,14 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .star { position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 6px; overflow: hidden; will-change: transform;
   box-shadow: 0 0 0 1.5px var(--c, rgba(255,255,255,.7)), 0 0 14px 2px var(--g, rgba(160,180,255,.35)); background: #1A2240; transition: box-shadow .5s; }
 .star img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.star.scan { box-shadow: 0 0 0 2px var(--core), 0 0 22px 6px rgba(255,210,140,.7); }
 
-.core { position: absolute; transform: translate(-50%, -50%); text-align: center; pointer-events: none; width: 260px; }
+.core { position: absolute; transform: translate(-50%, -50%); text-align: center; pointer-events: none; width: 280px; }
 .core .num { font: 700 44px/1 var(--display); color: var(--core); text-shadow: 0 0 24px rgba(255,210,140,.55); font-variant-numeric: tabular-nums; }
 .core .label { margin-top: 6px; color: var(--ink-2); font-size: 13px; }
+.core .site-name { margin-top: 2px; color: var(--ink-3); font-size: 12px; }
 
-.intro { position: absolute; transform: translate(-50%, 0); width: min(440px, calc(100% - 32px)); text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+.intro { position: absolute; transform: translate(-50%, 0); width: min(460px, calc(100% - 32px)); text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center; }
 .intro h2 { margin: 0; font: 700 26px/1.25 var(--display); letter-spacing: -.01em; text-wrap: balance; }
 .intro p { margin: 0; color: var(--ink-2); text-wrap: balance; }
 .intro .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
@@ -78,22 +83,35 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .card-head { padding: 10px 12px 8px; display: flex; flex-direction: column; gap: 2px; }
 .card-title { display: flex; align-items: center; gap: 8px; }
 .card-title .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--g); flex: none; }
-.card-title input { flex: 1; min-width: 0; background: transparent; border: 1px solid transparent; border-radius: 6px; color: var(--ink); font: 700 15px/1.3 var(--sans); padding: 2px 4px; margin-left: -4px; }
-.card-title input:hover, .card-title input:focus { border-color: var(--line); background: rgba(255,255,255,.04); outline: none; }
+.card-title b { flex: 1; min-width: 0; font-size: 15px; }
 .card-title .count { font: 500 12px var(--mono); color: var(--ink-2); flex: none; }
-.card-meta { font: 400 11.5px/1.45 var(--mono); color: var(--ink-3); }
-.card-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
-.card-tags span { font-size: 11px; padding: 0 7px; border-radius: 999px; background: rgba(255,255,255,.07); color: var(--ink-2); }
+.card-meta { font-size: 11.5px; color: var(--ink-3); }
 .thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 0 10px 10px; overflow-y: auto; max-height: 172px; }
 .thumb { position: relative; aspect-ratio: 1; border-radius: 5px; overflow: hidden; border: 0; padding: 0; cursor: pointer; background: #1A2240; opacity: 0; transform: translateY(6px); transition: opacity .3s, transform .3s; }
 .card.on .thumb { opacity: 1; transform: none; }
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .thumb:hover img { filter: brightness(1.15); }
-.thumb .tag { position: absolute; left: 2px; bottom: 2px; font-size: 9.5px; font-weight: 700; padding: 0 4px; border-radius: 3px; background: rgba(7,10,20,.85); color: var(--ink); }
+.thumb .q { position: absolute; right: 2px; top: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--ask); color: #2A1C00; font: 700 10px/15px var(--sans); text-align: center; }
+.thumb .me { position: absolute; left: 2px; bottom: 2px; width: 7px; height: 7px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(7,10,20,.8); }
+
+/* question sheet */
+.ask-sheet { position: fixed; z-index: 45; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(560px, calc(100vw - 32px));
+  background: var(--panel-solid); border: 1px solid rgba(255,210,122,.35); border-radius: 18px; box-shadow: 0 16px 50px rgba(0,0,0,.55);
+  display: grid; grid-template-columns: 168px 1fr; gap: 16px; padding: 14px; animation: rise .35s cubic-bezier(.2,1.2,.4,1); }
+@keyframes rise { from { transform: translate(-50%, 24px); opacity: 0; } }
+.ask-img { width: 168px; height: 168px; border-radius: 10px; overflow: hidden; background: #1A2240; cursor: zoom-in; border: 0; padding: 0; }
+.ask-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ask-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ask-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ask-top .n { font: 500 12px var(--mono); color: var(--ask); }
+.ask-q { margin: 0; font: 700 17px/1.35 var(--sans); }
+.ask-guess { margin: 0; font-size: 12.5px; color: var(--ink-2); }
+.ask-guess b { color: var(--ask); font-weight: 700; }
+.ask-foot { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
 
 /* lightbox */
 .lb { position: fixed; inset: 0; z-index: 50; background: rgba(4,6,12,.86); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-  display: grid; grid-template-columns: 1fr 300px; gap: 0; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  display: grid; grid-template-columns: 1fr 300px; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
 .lb-img { display: flex; align-items: center; justify-content: center; padding: 24px; min-width: 0; min-height: 0; position: relative; }
 .lb-img img { max-width: 100%; max-height: calc(100vh - 48px); object-fit: contain; border-radius: 6px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
 .lb-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: rgba(18,24,42,.8); cursor: pointer; font-size: 18px; }
@@ -101,28 +119,34 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .lb-side { background: var(--panel-solid); border-left: 1px solid var(--line); padding: 20px 18px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; padding-right: max(18px, env(safe-area-inset-right, 0px)); }
 .lb-side h3 { margin: 0; font-size: 15px; word-break: break-all; }
 .lb-close { align-self: flex-end; }
+.ai-box { background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font-size: 12.5px; color: var(--ink-2); }
+.ai-box b { color: var(--ink); }
 dl.meta { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12.5px; }
 dl.meta dt { color: var(--ink-3); }
 dl.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--ink); word-break: break-all; }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--ink-3); }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 13px; color: var(--ink); }
+.chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 5px 13px; cursor: pointer; font-size: 13.5px; color: var(--ink); }
 .chip .k { font: 500 10.5px var(--mono); color: var(--ink-3); margin-right: 4px; }
+.chip.guess { border-color: rgba(255,210,122,.6); }
 .chip.on { background: var(--accent); border-color: var(--accent); color: #0A0F22; font-weight: 700; }
 .chip.on .k { color: #2A3570; }
 .add-el { display: flex; gap: 6px; }
-.add-el input, .field select { flex: 1; min-width: 0; font: inherit; font-size: 13px; background: var(--space-2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; }
+.add-el input { flex: 1; min-width: 0; font-size: 13px; background: var(--space-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; }
 .hint { font-size: 11.5px; color: var(--ink-3); }
 
-.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 60; background: var(--panel-solid); border: 1px solid var(--line);
+.toast { position: fixed; left: 50%; top: calc(72px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 60; background: var(--panel-solid); border: 1px solid var(--line);
   padding: 9px 16px; border-radius: 999px; font-size: 13px; max-width: calc(100vw - 32px); box-shadow: 0 6px 24px rgba(0,0,0,.4); }
 .drop { position: fixed; inset: 0; z-index: 40; border: 2px dashed var(--accent); background: rgba(143,168,255,.08); display: flex; align-items: center; justify-content: center; pointer-events: none; }
 .drop p { font: 700 18px var(--display); background: var(--panel-solid); padding: 12px 22px; border-radius: 999px; border: 1px solid var(--line); }
 
 @media (max-width: 760px) {
-  .brand p { display: none; }
   .bar { position: relative; top: 0; background: var(--space); }
   .btn { padding: 6px 11px; }
+  .site input { width: 130px; }
+  .ask-sheet { grid-template-columns: 96px 1fr; gap: 12px; }
+  .ask-img { width: 96px; height: 96px; }
+  .ask-q { font-size: 15px; }
   .lb { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; overflow-y: auto; }
   .lb-img { padding: 12px; }
   .lb-img img { max-height: 52vh; }
@@ -130,26 +154,24 @@ dl.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--
 }
 @media (prefers-reduced-motion: reduce) {
   .card, .thumb, .node { transition: none; }
+  .ask-sheet { animation: none; }
 }
 </style>
 
 <header class="bar" id="bar">
   <div class="brand">
     <h1>Photo Sorting</h1>
-    <p>답사 사진을 촬영 시각과 위치로 장소별로 나눕니다</p>
+    <div class="site" id="siteBox" hidden>
+      <select id="siteSel" aria-label="답사 고르기"></select>
+      <input id="siteName" aria-label="답사 장소 이름" maxlength="40">
+    </div>
   </div>
   <div class="actions">
-    <label class="gap-select" for="gapSel">나누는 기준
-      <select id="gapSel">
-        <option value="15">15분 간격</option>
-        <option value="30" selected>30분 간격</option>
-        <option value="60">1시간 간격</option>
-        <option value="120">2시간 간격</option>
-      </select>
-    </label>
-    <button class="btn" id="replayBtn" type="button" disabled>다시 분류하기</button>
+    <button class="btn ask" id="askBtn" type="button" hidden>질문 0</button>
+    <button class="btn" id="replayBtn" type="button" disabled>다시 보기</button>
     <button class="btn" id="zipBtn" type="button" disabled>ZIP 저장</button>
-    <button class="btn warn" id="clearBtn" type="button" hidden>모두 지우기</button>
+    <button class="btn" id="newSiteBtn" type="button" hidden>새 답사</button>
+    <button class="btn warn" id="clearBtn" type="button" hidden>이 답사 지우기</button>
     <label class="btn primary" for="fileIn">사진 올리기</label>
     <input id="fileIn" type="file" accept="image/*,.heic,.heif" multiple hidden>
   </div>
@@ -160,17 +182,28 @@ dl.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--
   <svg id="rays" aria-hidden="true"></svg>
   <div id="planets"></div>
   <div class="fx" id="fx"></div>
-  <div class="core" id="core" hidden><div class="num" id="coreNum">0</div><div class="label" id="coreLabel"></div></div>
+  <div class="core" id="core" hidden><div class="num" id="coreNum">0</div><div class="label" id="coreLabel"></div><div class="site-name" id="coreSite"></div></div>
   <div class="intro" id="intro">
-    <h2>사진을 놓으면 은하수로 모였다가, 장소별 행성으로 흩어집니다</h2>
-    <p>촬영 시각과 GPS를 읽어 같은 장소에서 찍은 사진끼리 묶습니다. 한 번에 40장 정도가 적당하고, 가로 2000px보다 큰 사진은 2000px로 줄여서 보관합니다.</p>
+    <h2>한 장소의 답사 사진을 놓으면, 건축요소별 행성으로 나뉩니다</h2>
+    <p>사진이 은하수로 모이면 Claude가 한 장씩 보고 입구·창·계단으로 나눕니다. 애매한 사진은 질문으로 물어봅니다. 가로 2000px보다 큰 사진은 2000px로 줄여 보관합니다.</p>
     <div class="row">
       <label class="btn primary" for="fileIn">사진 올리기</label>
       <button class="btn" id="demoBtn" type="button">예시로 보기</button>
     </div>
-    <p class="fine">사진은 이 브라우저 안에서만 처리되고 어디에도 올라가지 않습니다. 아이폰 HEIC도 됩니다.</p>
+    <p class="fine">사진 파일은 이 브라우저에 저장됩니다. 분류할 때만 작게 줄인 사진을 Claude에게 보여 주며, 처음 한 번 허용을 묻습니다.</p>
   </div>
 </main>
+
+<section class="ask-sheet" id="ask" hidden aria-live="polite" aria-label="분류 질문">
+  <button class="ask-img" id="askImgBtn" type="button" aria-label="크게 보기"><img id="askImg" alt=""></button>
+  <div class="ask-body">
+    <div class="ask-top"><span class="n" id="askN"></span><button class="btn small" id="askClose" type="button">나중에</button></div>
+    <p class="ask-q">이 사진은 어떤 건축요소인가요?</p>
+    <p class="ask-guess" id="askGuess"></p>
+    <div class="chips" id="askChips"></div>
+    <div class="ask-foot"><button class="btn small" id="askSkip" type="button">건너뛰기</button></div>
+  </div>
+</section>
 
 <div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="사진 보기">
   <div class="lb-img">
@@ -181,14 +214,12 @@ dl.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--
   <aside class="lb-side">
     <button class="btn lb-close" id="lbClose" type="button">닫기 · Esc</button>
     <h3 id="lbName"></h3>
-    <dl class="meta" id="lbMeta"></dl>
+    <div class="ai-box" id="lbAi" hidden></div>
     <div class="field">건축요소 <span class="hint">숫자키로도 지정</span>
       <div class="chips" id="lbChips"></div>
       <form class="add-el" id="addElForm"><input id="addElInput" placeholder="요소 추가 (예: 지붕)" maxlength="12"><button class="btn" type="submit">추가</button></form>
     </div>
-    <label class="field" for="lbMove">장소 옮기기
-      <select id="lbMove"></select>
-    </label>
+    <dl class="meta" id="lbMeta"></dl>
     <p class="hint">← → 사진 넘기기</p>
   </aside>
 </div>
@@ -202,19 +233,22 @@ dl.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--
 'use strict';
 
 // ─────────── 설정 ───────────
-const MAX_W = 2000;                 // 저장 이미지 가로 최대 px
-const THUMB = 220;                  // 애니메이션·목록용 작은 이미지
-const DIST_M = 300;                 // 이만큼 떨어지면 다른 장소
+const MAX_W = 2000;          // 저장 이미지 가로 최대 px
+const THUMB = 220;           // 애니메이션·목록용
+const AI_SIDE = 768;         // Claude에게 보여 줄 크기
+const SURE = 0.6;            // 이보다 확신이 낮으면 질문으로
+const DEFAULT_ELEMENTS = ['입구', '창', '계단'];
+const OTHER = '기타', NONE = '미분류';
 const PALETTE = [
   ['#8FA8FF', 'rgba(143,168,255,.55)'], ['#FFB86B', 'rgba(255,184,107,.55)'], ['#6FE3B4', 'rgba(111,227,180,.5)'],
   ['#E39BFF', 'rgba(227,155,255,.5)'], ['#FF8FA3', 'rgba(255,143,163,.5)'], ['#6FD6F0', 'rgba(111,214,240,.5)'],
   ['#F2E27A', 'rgba(242,226,122,.45)'], ['#B7A6FF', 'rgba(183,166,255,.5)']
 ];
-const DEFAULT_ELEMENTS = ['입구', '창', '계단'];
+const GREY = ['#9AA3BD', 'rgba(154,163,189,.4)'], DIM = ['#5E6784', 'rgba(94,103,132,.35)'];
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ─────────── 상태 ───────────
-const S = { photos: new Map(), planets: new Map(), elements: [...DEFAULT_ELEMENTS], gapMin: 30, busy: false, lbId: null };
+const S = { photos: new Map(), sites: new Map(), siteId: null, elements: [...DEFAULT_ELEMENTS], busy: false, lbId: null, askQueue: [], askId: null };
 const $ = id => document.getElementById(id);
 const stage = $('stage'), fx = $('fx'), raysSvg = $('rays'), planetsEl = $('planets');
 const urls = new Map();
@@ -224,6 +258,7 @@ const fullUrl = p => p.blob ? objUrl('f' + p.id, p.blob) : thumbUrl(p);
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const sleep = ms => new Promise(r => setTimeout(r, reduceMotion ? 0 : ms));
 const pad = n => String(n).padStart(2, '0');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function toast(msg, ms = 2800) {
   const t = $('toast'); t.textContent = msg; t.hidden = false;
@@ -237,8 +272,8 @@ const DB = (() => {
     if (dbp) return dbp;
     dbp = new Promise((res, rej) => {
       try {
-        const r = indexedDB.open('photo-sorting', 1);
-        r.onupgradeneeded = () => { for (const s of ['photos', 'planets', 'settings']) if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s); };
+        const r = indexedDB.open('photo-sorting', 2);
+        r.onupgradeneeded = () => { for (const s of ['photos', 'planets', 'settings', 'sites']) if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s); };
         r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
       } catch (e) { rej(e); }
     });
@@ -256,16 +291,15 @@ const DB = (() => {
   return {
     put: (s, k, v) => run(s, 'readwrite', o => o.put(v, k)),
     del: (s, k) => run(s, 'readwrite', o => o.delete(k)),
-    clear: s => run(s, 'readwrite', o => o.clear()),
     get: (s, k) => run(s, 'readonly', o => o.get(k)),
     all: s => run(s, 'readonly', o => o.getAll())
   };
 })();
-const savePhoto = p => { const { demo, ...rest } = p; return p.demo ? null : DB.put('photos', p.id, rest); };
-const savePlanet = pl => (pl.demo ? null : DB.put('planets', pl.id, pl));
-const saveSettings = () => DB.put('settings', 'main', { elements: S.elements, gapMin: S.gapMin });
+const savePhoto = p => (p.demo ? null : DB.put('photos', p.id, p));
+const saveSite = s => (s.demo ? null : DB.put('sites', s.id, s));
+const saveSettings = () => DB.put('settings', 'main', { elements: S.elements, siteId: S.siteId });
 
-// ─────────── 사진 읽기: EXIF + 2000px로 줄이기 ───────────
+// ─────────── 사진 읽기: EXIF + 2000px ───────────
 let heicLoading = null;
 function loadHeic() {
   if (window.heic2any) return Promise.resolve();
@@ -293,7 +327,6 @@ async function readMeta(file) {
     camera: [m?.Make, m?.Model].filter(Boolean).join(' ') || null
   };
 }
-
 async function decode(file) {
   try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
   catch (e) {
@@ -310,90 +343,118 @@ function toJpeg(bmp, maxW, maxH, q) {
   c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
   return new Promise(r => c.toBlob(b => r({ blob: b, w: c.width, h: c.height }), 'image/jpeg', q));
 }
-async function processFile(file) {
+async function processFile(file, siteId) {
   const meta = await readMeta(file);
   const bmp = await decode(file);
   const full = await toJpeg(bmp, MAX_W, null, 0.86);
   const th = await toJpeg(bmp, THUMB, THUMB, 0.8);
-  const origW = bmp.width, origH = bmp.height;
+  const ai = await toJpeg(bmp, AI_SIDE, AI_SIDE, 0.8);
+  const origW = bmp.width;
   bmp.close?.();
-  return { id: uid(), name: file.name, sig: `${file.name}|${file.size}|${file.lastModified}`, origSize: file.size, origW, origH,
-    w: full.w, h: full.h, size: full.blob.size, blob: full.blob, thumb: th.blob, ...meta, planetId: null, element: null, pinned: false };
+  return { id: uid(), siteId, name: file.name, sig: `${file.name}|${file.size}|${file.lastModified}`, origSize: file.size, origW,
+    w: full.w, h: full.h, size: full.blob.size, blob: full.blob, thumb: th.blob, ai: ai.blob, ...meta,
+    element: null, by: null, aiElement: null, aiConf: null, aiNote: null, ask: false };
 }
 
-// ─────────── 분류: 시간 간격 + 거리 ───────────
-function dist([a, b], [c, d]) {
-  const R = 6371000, r = Math.PI / 180, x = (c - a) * r * Math.cos((b + d) / 2 * r), y = (d - b) * r;
-  return Math.hypot(x, y) * R;
+// ─────────── 건축요소 분류: Claude가 보고, 애매하면 질문 ───────────
+let samplerP = null;
+function sampler() {
+  if (!samplerP) samplerP = (async () => {
+    if (!window.claude?.use) return null;
+    const s = await window.claude.use('sample').catch(() => null);
+    if (!s) return null;
+    const lim = await s.limits().catch(() => null);
+    return lim?.images ? { s, max: Math.max(1, Math.min(8, lim.images.maxCount || 1)) } : null;
+  })();
+  return samplerP;
 }
-function center(list) {
+let aiOff = null; // 사용 불가 사유가 생기면 이번 화면에서는 다시 묻지 않는다
+async function classify(list, onProgress) {
+  const sm = await sampler();
+  if (!sm || aiOff) { for (const p of list) markAsk(p); return { used: false, reason: aiOff || 'unavailable' }; }
+  const cats = [...S.elements, OTHER];
+  let done = 0;
+  for (let i = 0; i < list.length; i += sm.max) {
+    const batch = list.slice(i, i + sm.max);
+    const prompt = `건축물 답사에서 찍은 사진 ${batch.length}장입니다. 사진 순서대로 1부터 ${batch.length}까지 번호를 매깁니다.
+각 사진이 주로 보여 주는 건축요소를 다음 중 정확히 하나로 고르세요: ${cats.join(', ')}.
+- 사진의 중심 대상으로 판단합니다. 건물 전경처럼 어느 요소도 중심이 아니면 "${OTHER}".
+- confidence는 0부터 1 사이 숫자로, 확실하지 않으면 낮게 주세요.
+- note는 사진에 보이는 것을 한국어 20자 이내로.
+JSON 배열만 답하세요. 예: [{"n":1,"element":"${cats[0]}","confidence":0.82,"note":"주출입구 캐노피"}]`;
+    try {
+      const out = await sm.s.json(prompt, { images: batch.map(p => p.ai || p.thumb), modelTier: 'quick' });
+      const arr = Array.isArray(out) ? out : [];
+      batch.forEach((p, k) => {
+        const r = arr.find(x => Number(x?.n) === k + 1) || arr[k];
+        const el = typeof r?.element === 'string' ? r.element.trim() : '';
+        const conf = Math.max(0, Math.min(1, Number(r?.confidence) || 0));
+        p.aiElement = cats.includes(el) ? el : null; p.aiConf = conf; p.aiNote = typeof r?.note === 'string' ? r.note.slice(0, 40) : null;
+        if (p.aiElement && conf >= SURE) { p.element = p.aiElement; p.by = 'ai'; p.ask = false; }
+        else markAsk(p);
+      });
+    } catch (e) {
+      console.warn('분류 실패', e);
+      for (const p of batch) markAsk(p);
+      if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed', 'images_unavailable'].includes(e?.code)) aiOff = e.code;
+      if (e?.code === 'rate_limited') aiOff = 'rate_limited';
+      if (aiOff) { for (const p of list.slice(i + sm.max)) markAsk(p); return { used: done > 0, reason: aiOff }; }
+    }
+    done += batch.length; onProgress?.(done);
+  }
+  return { used: true };
+}
+function markAsk(p) { if (p.by !== 'user') { p.element = p.element && p.by ? p.element : null; p.ask = true; } }
+
+// ─────────── 행성 = 이 답사의 건축요소 ───────────
+const sitePhotos = () => [...S.photos.values()].filter(p => p.siteId === S.siteId).sort((a, b) => a.takenAt.localeCompare(b.takenAt));
+const keyOf = p => p.element || NONE;
+function planetList() {
+  const counts = new Map();
+  for (const p of sitePhotos()) counts.set(keyOf(p), (counts.get(keyOf(p)) || 0) + 1);
+  const order = [...S.elements, ...[...counts.keys()].filter(k => !S.elements.includes(k) && k !== OTHER && k !== NONE), OTHER, NONE];
+  return order.filter(k => counts.get(k)).map(k => ({ id: k, name: k, color: colorOf(k) }));
+}
+function colorOf(k) {
+  if (k === OTHER) return GREY;
+  if (k === NONE) return DIM;
+  const i = S.elements.indexOf(k);
+  return PALETTE[(i < 0 ? S.elements.length + [...k].reduce((s, c) => s + c.charCodeAt(0), 0) : i) % PALETTE.length];
+}
+const photosOf = k => sitePhotos().filter(p => keyOf(p) === k);
+
+// ─────────── 답사(장소) ───────────
+function newSite(demo) {
+  const s = { id: uid(), name: '', createdAt: new Date().toISOString(), demo: !!demo };
+  S.sites.set(s.id, s); S.siteId = s.id; return s;
+}
+function refreshSite(s) {
+  const list = [...S.photos.values()].filter(p => p.siteId === s.id).sort((a, b) => a.takenAt.localeCompare(b.takenAt));
+  s.start = list[0]?.takenAt || null; s.end = list.at(-1)?.takenAt || null;
   const g = list.filter(p => p.gps);
-  if (!g.length) return null;
-  return [g.reduce((s, p) => s + p.gps[0], 0) / g.length, g.reduce((s, p) => s + p.gps[1], 0) / g.length].map(v => +v.toFixed(6));
-}
-function cluster(list, gapMin) {
-  const sorted = [...list].sort((a, b) => a.takenAt.localeCompare(b.takenAt));
-  const groups = []; let cur = null, lastT = 0, lastG = null;
-  for (const p of sorted) {
-    const t = new Date(p.takenAt).getTime();
-    const far = p.gps && lastG && dist(p.gps, lastG) > DIST_M;
-    if (!cur || t - lastT > gapMin * 60000 || far) { cur = []; groups.push(cur); }
-    cur.push(p); lastT = t; if (p.gps) lastG = p.gps;
-  }
-  return groups;
-}
-function refreshPlanet(pl) {
-  const list = photosOf(pl.id);
-  pl.start = list[0]?.takenAt || null; pl.end = list.at(-1)?.takenAt || null; pl.center = center(list);
-}
-const photosOf = id => [...S.photos.values()].filter(p => p.planetId === id).sort((a, b) => a.takenAt.localeCompare(b.takenAt));
-function nextColor() {
-  const used = new Set([...S.planets.values()].map(p => p.color));
-  for (let i = 0; i < 64; i++) if (!used.has(i % PALETTE.length) || i >= PALETTE.length) return i % PALETTE.length;
-  return 0;
-}
-function newPlanet(demo) {
-  const n = S.planets.size + 1;
-  const pl = { id: uid(), name: `장소 ${n}`, color: nextColor(), createdAt: new Date().toISOString(), demo: !!demo };
-  S.planets.set(pl.id, pl); return pl;
-}
-// 새로 들어온 사진만 묶고, 같은 날 가까운 기존 장소가 있으면 그쪽에 합친다
-function assignNew(list) {
-  for (const g of cluster(list, S.gapMin)) {
-    const c = center(g), day = g[0].takenAt.slice(0, 10);
-    let pl = [...S.planets.values()].find(x => x.start?.slice(0, 10) === day && x.center && c && dist(x.center, c) < DIST_M);
-    if (!pl) pl = newPlanet(g[0].demo);
-    for (const p of g) p.planetId = pl.id;
-    refreshPlanet(pl);
+  s.center = g.length ? [+(g.reduce((a, p) => a + p.gps[0], 0) / g.length).toFixed(6), +(g.reduce((a, p) => a + p.gps[1], 0) / g.length).toFixed(6)] : null;
+  s.count = list.length;
+  if (!s.name && s.start) {
+    const base = `${+s.start.slice(5, 7)}/${+s.start.slice(8, 10)} 답사`, names = new Set([...S.sites.values()].filter(x => x.id !== s.id).map(x => x.name));
+    let n = 1, nm = base; while (names.has(nm)) nm = `${base} ${++n}`; s.name = nm;
   }
 }
-// 기준을 바꿔 전체를 다시 묶는다. 직접 옮긴 사진은 그대로 두고, 장소 이름은 가장 많이 겹치는 묶음이 이어받는다.
-function reclusterAll() {
-  const old = new Map(S.planets);
-  const free = [...S.photos.values()].filter(p => !p.pinned);
-  const groups = cluster(free, S.gapMin);
-  const keep = new Set([...S.photos.values()].filter(p => p.pinned).map(p => p.planetId));
-  S.planets = new Map([...old].filter(([id]) => keep.has(id)));
-  const taken = new Set(S.planets.keys());
-  for (const g of groups) {
-    const votes = new Map();
-    for (const p of g) if (p.planetId && old.has(p.planetId)) votes.set(p.planetId, (votes.get(p.planetId) || 0) + 1);
-    const best = [...votes].sort((a, b) => b[1] - a[1]).find(([id]) => !taken.has(id));
-    let pl = best ? old.get(best[0]) : null;
-    if (pl) { S.planets.set(pl.id, pl); taken.add(pl.id); } else pl = newPlanet(g[0].demo);
-    for (const p of g) p.planetId = pl.id;
-  }
-  for (const pl of S.planets.values()) refreshPlanet(pl);
-  for (const id of old.keys()) if (!S.planets.has(id)) DB.del('planets', id);
+function renderSiteBar() {
+  const sites = [...S.sites.values()].filter(s => s.count).sort((a, b) => (b.start || '').localeCompare(a.start || ''));
+  const cur = S.sites.get(S.siteId);
+  $('siteBox').hidden = !cur || !cur.count;
+  $('siteSel').hidden = sites.length < 2;
+  $('siteSel').innerHTML = sites.map(s => `<option value="${s.id}" ${s.id === S.siteId ? 'selected' : ''}>${esc(s.name)} · ${s.count}장</option>`).join('');
+  if (cur && document.activeElement !== $('siteName')) $('siteName').value = cur.name || '';
 }
 
-// ─────────── 하늘: 별과 은하수 먼지 (canvas) ───────────
+// ─────────── 하늘 (canvas) ───────────
 const sky = $('sky'), ctx = sky.getContext('2d');
 let W = 0, H = 0, DPR = 1, galaxy = { x: 0, y: 0, r: 200 }, spin = 0.05, glow = 0.35;
 const stars = Array.from({ length: 220 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.2 + .2, p: Math.random() * 6.28, s: .5 + Math.random() * 1.5 }));
 const dust = Array.from({ length: 520 }, (_, i) => {
-  const arm = i % 2, u = Math.pow(Math.random(), .7);
-  return { arm, u, off: (Math.random() - .5) * .55 * (1.1 - u), hue: Math.random() < .25 ? 38 : 222 + Math.random() * 40, a: .25 + Math.random() * .55, r: Math.random() * 1.4 + .3 };
+  const u = Math.pow(Math.random(), .7);
+  return { arm: i % 2, u, off: (Math.random() - .5) * .55 * (1.1 - u), hue: Math.random() < .25 ? 38 : 222 + Math.random() * 40, a: .25 + Math.random() * .55, r: Math.random() * 1.4 + .3 };
 });
 function sizeSky() {
   DPR = Math.min(2, devicePixelRatio || 1);
@@ -404,22 +465,19 @@ function sizeSky() {
 let skyAngle = 0;
 function drawSky(t, dt) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  ctx.clearRect(0, 0, W, H);
   const bg = ctx.createRadialGradient(galaxy.x, galaxy.y, 0, galaxy.x, galaxy.y, Math.max(W, H) * .7);
   bg.addColorStop(0, '#111A36'); bg.addColorStop(1, '#070A14');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
   for (const s of stars) {
-    const a = .35 + .35 * Math.sin(t / 1000 * s.s + s.p);
-    ctx.fillStyle = `rgba(220,228,255,${a})`;
+    ctx.fillStyle = `rgba(220,228,255,${.35 + .35 * Math.sin(t / 1000 * s.s + s.p)})`;
     ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, 6.283); ctx.fill();
   }
   skyAngle += spin * dt / 1000;
   const R = galaxy.r * 1.25;
   for (const d of dust) {
     const ang = skyAngle * (1.6 - d.u) + d.arm * Math.PI + d.u * 4.2 + d.off;
-    const x = galaxy.x + Math.cos(ang) * d.u * R, y = galaxy.y + Math.sin(ang) * d.u * R * .58;
     ctx.fillStyle = `hsla(${d.hue},90%,78%,${d.a * glow})`;
-    ctx.beginPath(); ctx.arc(x, y, d.r, 0, 6.283); ctx.fill();
+    ctx.beginPath(); ctx.arc(galaxy.x + Math.cos(ang) * d.u * R, galaxy.y + Math.sin(ang) * d.u * R * .58, d.r, 0, 6.283); ctx.fill();
   }
   const core = ctx.createRadialGradient(galaxy.x, galaxy.y, 0, galaxy.x, galaxy.y, galaxy.r * .55);
   core.addColorStop(0, `rgba(255,231,184,${.55 * glow + .1})`); core.addColorStop(.35, `rgba(255,190,140,${.18 * glow})`); core.addColorStop(1, 'rgba(255,190,140,0)');
@@ -427,40 +485,26 @@ function drawSky(t, dt) {
 }
 
 // ─────────── 날아다니는 사진 ───────────
-const items = new Map(); // id → {el, x, y, mode, ...}
+const items = new Map();
 function makeItem(p, x, y) {
   let it = items.get(p.id);
   if (!it) {
-    const el = document.createElement('div');
-    el.className = 'star';
+    const el = document.createElement('div'); el.className = 'star';
     const img = new Image(); img.alt = ''; img.src = thumbUrl(p); el.appendChild(img);
     fx.appendChild(el);
-    it = { el, x, y, s: 1, mode: 'idle' };
-    items.set(p.id, it);
+    it = { el, x, y, s: 1, mode: 'idle' }; items.set(p.id, it);
   }
-  it.x = x; it.y = y; place(it);
-  return it;
+  it.x = x; it.y = y; place(it); return it;
 }
 function place(it) { it.el.style.transform = `translate(${it.x - 15}px, ${it.y - 15}px) scale(${it.s})`; }
-function orbitOf(it) {
-  it.u = it.u ?? (.28 + Math.random() * .72);
-  it.a = it.a ?? Math.random() * 6.283;
-  it.w = (0.55 + Math.random() * .25) / Math.sqrt(it.u);
-}
-function orbitPos(it) {
-  const r = it.u * galaxy.r;
-  return [galaxy.x + Math.cos(it.a) * r, galaxy.y + Math.sin(it.a) * r * .58];
-}
+function orbitOf(it) { it.u = it.u ?? (.28 + Math.random() * .72); it.a = it.a ?? Math.random() * 6.283; it.w = (0.55 + Math.random() * .25) / Math.sqrt(it.u); }
+function orbitPos(it) { const r = it.u * galaxy.r; return [galaxy.x + Math.cos(it.a) * r, galaxy.y + Math.sin(it.a) * r * .58]; }
 function flyTo(it, x, y, dur, delay = 0, curve = 0) {
-  return new Promise(res => {
-    it.mode = 'fly'; it.from = [it.x, it.y]; it.to = [x, y]; it.t0 = performance.now() + delay; it.dur = reduceMotion ? 1 : dur; it.curve = curve; it.done = res;
-  });
+  return new Promise(res => { it.mode = 'fly'; it.from = [it.x, it.y]; it.to = [x, y]; it.t0 = performance.now() + delay; it.dur = reduceMotion ? 1 : dur; it.curve = curve; it.done = res; });
 }
 function toOrbit(it, dur, delay = 0) {
   orbitOf(it);
-  return new Promise(res => {
-    it.mode = 'join'; it.from = [it.x, it.y]; it.t0 = performance.now() + delay; it.dur = reduceMotion ? 1 : dur; it.done = () => { it.mode = 'orbit'; res(); };
-  });
+  return new Promise(res => { it.mode = 'join'; it.from = [it.x, it.y]; it.t0 = performance.now() + delay; it.dur = reduceMotion ? 1 : dur; it.done = () => { it.mode = 'orbit'; res(); }; });
 }
 const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 function stepItems(now, dt) {
@@ -470,24 +514,18 @@ function stepItems(now, dt) {
     else if (it.mode === 'join' || it.mode === 'fly') {
       const k = Math.max(0, Math.min(1, (now - it.t0) / it.dur)), e = ease(k);
       const to = it.mode === 'join' ? orbitPos(it) : it.to;
-      const mx = (it.from[0] + to[0]) / 2, my = (it.from[1] + to[1]) / 2;
       const nx = -(to[1] - it.from[1]), ny = to[0] - it.from[0];
-      const bend = (it.curve || .18) * Math.sin(Math.PI * e);
-      it.x = it.from[0] + (to[0] - it.from[0]) * e + nx * bend * .5 * (it.mode === 'join' ? 1 : 0) + (it.mode === 'fly' ? nx * it.curve * Math.sin(Math.PI * e) : 0);
-      it.y = it.from[1] + (to[1] - it.from[1]) * e + ny * bend * .5 * (it.mode === 'join' ? 1 : 0) + (it.mode === 'fly' ? ny * it.curve * Math.sin(Math.PI * e) : 0);
+      const bend = (it.mode === 'join' ? .09 : it.curve) * Math.sin(Math.PI * e);
+      it.x = it.from[0] + (to[0] - it.from[0]) * e + nx * bend;
+      it.y = it.from[1] + (to[1] - it.from[1]) * e + ny * bend;
       if (k >= 1) { const d = it.done; it.done = null; if (it.mode === 'fly') it.mode = 'idle'; d?.(); }
     } else continue;
     place(it);
   }
 }
 function clearItems() { for (const it of items.values()) it.el.remove(); items.clear(); }
-
 let last = performance.now();
-function frame(now) {
-  const dt = Math.min(64, now - last); last = now;
-  drawSky(now, dt); stepItems(now, dt);
-  requestAnimationFrame(frame);
-}
+function frame(now) { const dt = Math.min(64, now - last); last = now; drawSky(now, dt); stepItems(now, dt); requestAnimationFrame(frame); }
 
 // ─────────── 행성 배치 ───────────
 function layoutFor(n) {
@@ -498,71 +536,56 @@ function layoutFor(n) {
     const perSide = Math.ceil(n / 2);
     const h = Math.max(view, perSide * (cardH + gap) + 48);
     const cx = w / 2, cy = h / 2;
-    const side = [];
-    for (let i = 0; i < n; i++) side.push(i % 2 === 0 ? 'left' : 'right');
-    const slots = { right: side.filter(s => s === 'right').length, left: side.filter(s => s === 'left').length };
-    const idx = { right: 0, left: 0 };
-    const out = side.map(sd => {
+    const side = Array.from({ length: n }, (_, i) => i % 2 === 0 ? 'left' : 'right');
+    const slots = { right: side.filter(s => s === 'right').length, left: side.filter(s => s === 'left').length }, idx = { right: 0, left: 0 };
+    const cards = side.map(sd => {
       const k = slots[sd], j = idx[sd]++;
       const top = cy - (k * (cardH + gap) - gap) / 2 + j * (cardH + gap);
       const left = sd === 'right' ? w - cardW - 28 : 28;
-      const node = [sd === 'right' ? left - 26 : left + cardW + 26, top + cardH / 2];
-      return { left, top, node };
+      return { left, top, node: [sd === 'right' ? left - 26 : left + cardW + 26, top + cardH / 2] };
     });
-    const avail = (w - 2 * (cardW + 80)) / 2;
-    return { h, cx, cy, r: Math.max(110, Math.min(avail, cy - 40, 320)), cardW, cards: out };
+    return { h, cx, cy, r: Math.max(110, Math.min((w - 2 * (cardW + 80)) / 2, cy - 40, 320)), cardW, cards };
   }
-  // 좁은 화면 또는 행성이 많을 때: 은하수는 위, 카드는 아래 격자
-  const cols = Math.max(1, Math.floor((w - 32 + gap) / (cardW + gap)));
-  const rows = Math.ceil(n / cols);
-  const topArea = 300;
+  const cols = Math.max(1, Math.floor((w - 32 + gap) / (cardW + gap))), rows = Math.ceil(n / cols), topArea = 300;
   const gridW = cols * cardW + (cols - 1) * gap, x0 = (w - gridW) / 2;
   const cards = Array.from({ length: n }, (_, i) => {
-    const c = i % cols, r = Math.floor(i / cols);
-    const left = x0 + c * (cardW + gap), top = topArea + r * (cardH + 34 + gap) + 34;
+    const left = x0 + (i % cols) * (cardW + gap), top = topArea + Math.floor(i / cols) * (cardH + 34 + gap) + 34;
     return { left, top, node: [left + cardW / 2, top - 16] };
   });
   return { h: Math.max(view, topArea + rows * (cardH + 34 + gap) + 40), cx: w / 2, cy: 150, r: Math.min(w / 2 - 24, 130), cardW, cards };
 }
 function setStageHeight(h) { stage.style.height = h + 'px'; sizeSky(); }
 
-// ─────────── 카드 그리기 ───────────
-const orderedPlanets = () => [...S.planets.values()].filter(pl => photosOf(pl.id).length).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-const fmt = iso => iso ? `${iso.slice(5, 7)}/${iso.slice(8, 10)} ${iso.slice(11, 16)}` : '';
-
+// ─────────── 카드 ───────────
 function cardHTML(pl) {
   const list = photosOf(pl.id);
-  const tags = {};
-  for (const p of list) if (p.element) tags[p.element] = (tags[p.element] || 0) + 1;
-  const where = pl.center ? `${pl.center[1].toFixed(4)}, ${pl.center[0].toFixed(4)}` : '위치 정보 없음';
+  const asks = list.filter(p => p.ask).length, mine = list.filter(p => p.by === 'user').length, ai = list.filter(p => p.by === 'ai').length;
+  const meta = pl.id === NONE ? '아직 분류하지 않은 사진' : [ai ? `Claude ${ai}` : '', mine ? `직접 ${mine}` : '', asks ? `확인 필요 ${asks}` : ''].filter(Boolean).join(' · ');
   return `<div class="card-head">
-      <div class="card-title"><span class="dot"></span><input aria-label="장소 이름" data-rename="${pl.id}" value="${esc(pl.name)}"><span class="count">${list.length}장</span></div>
-      <div class="card-meta">${fmt(pl.start)}–${(pl.end || '').slice(11, 16)}<br>${where}</div>
-      ${Object.keys(tags).length ? `<div class="card-tags">${Object.entries(tags).map(([k, v]) => `<span>${esc(k)} ${v}</span>`).join('')}</div>` : ''}
+      <div class="card-title"><span class="dot"></span><b>${esc(pl.name)}</b><span class="count">${list.length}장</span></div>
+      <div class="card-meta">${meta}</div>
     </div>
-    <div class="thumbs">${list.map((p, i) => `<button type="button" class="thumb" data-photo="${p.id}" style="transition-delay:${Math.min(i * 25, 600)}ms" aria-label="${esc(p.name)}"><img alt="" src="${thumbUrl(p)}">${p.element ? `<span class="tag">${esc(p.element)}</span>` : ''}</button>`).join('')}</div>`;
+    <div class="thumbs">${list.map((p, i) => `<button type="button" class="thumb" data-photo="${p.id}" style="transition-delay:${Math.min(i * 25, 600)}ms" aria-label="${esc(p.name)}${p.ask ? ' (확인 필요)' : ''}"><img alt="" src="${thumbUrl(p)}">${p.ask ? '<span class="q">?</span>' : ''}${p.by === 'user' ? '<span class="me" title="직접 고름"></span>' : ''}</button>`).join('')}</div>`;
 }
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
 let layout = null;
 function renderPlanets(opts = {}) {
-  const list = orderedPlanets();
+  const list = planetList();
   planetsEl.innerHTML = ''; raysSvg.innerHTML = '';
-  $('intro').hidden = S.photos.size > 0 || S.busy;
-  updateButtons();
+  $('intro').hidden = sitePhotos().length > 0 || S.busy;
+  renderSiteBar(); updateButtons();
   if (!list.length) { layout = null; setStageHeight(Math.max(560, innerHeight - $('bar').offsetHeight)); centerGalaxy(); if (!S.busy) setCore(null); return; }
   layout = layoutFor(list.length);
   setStageHeight(layout.h);
   galaxy = { x: layout.cx, y: layout.cy, r: layout.r };
-  if (!S.busy) setCore(list.length, `곳 · ${[...S.photos.values()].filter(p => p.planetId).length}장`);
+  if (!S.busy) setCore(list.filter(p => p.id !== NONE).length, `가지 요소 · ${sitePhotos().length}장`);
   list.forEach((pl, i) => {
-    const L = layout.cards[i], [c, g] = PALETTE[pl.color % PALETTE.length];
+    const L = layout.cards[i], [c, g] = pl.color;
     const ray = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     ray.setAttribute('x1', layout.cx); ray.setAttribute('y1', layout.cy); ray.setAttribute('x2', L.node[0]); ray.setAttribute('y2', L.node[1]);
     ray.setAttribute('stroke', c); ray.setAttribute('stroke-opacity', '.45'); ray.setAttribute('stroke-width', '1.2');
     const len = Math.hypot(L.node[0] - layout.cx, L.node[1] - layout.cy);
     ray.style.strokeDasharray = len; ray.style.strokeDashoffset = opts.animate ? len : 0;
-    ray.dataset.planet = pl.id; raysSvg.appendChild(ray);
+    raysSvg.appendChild(ray);
     const node = document.createElement('div');
     node.className = 'node' + (opts.animate ? '' : ' on'); node.style.left = L.node[0] + 'px'; node.style.top = L.node[1] + 'px';
     node.style.setProperty('--c', c); node.style.setProperty('--g', g); node.dataset.node = pl.id;
@@ -581,148 +604,147 @@ function centerGalaxy() {
   const intro = $('intro'); intro.style.left = (w / 2) + 'px'; intro.style.top = (galaxy.y + galaxy.r * .62 + 24) + 'px';
 }
 function updateButtons() {
-  const has = S.photos.size > 0;
-  $('replayBtn').disabled = !has || S.busy; $('zipBtn').disabled = !has || S.busy || [...S.photos.values()].every(p => p.demo);
-  $('clearBtn').hidden = !has; $('clearBtn').disabled = S.busy; $('fileIn').disabled = S.busy; $('gapSel').disabled = S.busy;
+  const n = sitePhotos().length, real = sitePhotos().some(p => !p.demo);
+  const asks = sitePhotos().filter(p => p.ask).length;
+  $('replayBtn').disabled = !n || S.busy; $('zipBtn').disabled = !real || S.busy;
+  $('clearBtn').hidden = !n; $('clearBtn').disabled = S.busy; $('fileIn').disabled = S.busy;
+  $('newSiteBtn').hidden = !n; $('newSiteBtn').disabled = S.busy;
+  $('askBtn').hidden = !asks || S.busy || !$('ask').hidden; $('askBtn').textContent = `질문 ${asks}`;
+  $('siteSel').disabled = S.busy;
 }
 function setCore(num, label) {
   const c = $('core'); c.hidden = num == null;
   c.style.left = galaxy.x + 'px'; c.style.top = galaxy.y + 'px';
-  if (num != null) { $('coreNum').textContent = num; $('coreLabel').textContent = label; }
+  if (num != null) { $('coreNum').textContent = num; $('coreLabel').textContent = label; $('coreSite').textContent = S.sites.get(S.siteId)?.name || ''; }
 }
 
-// ─────────── 전체 연출: 모으기 → 소용돌이 → 선 → 행성 ───────────
-// 1) 지금 카드에 있는 사진들을 은하수로 되돌린다
+// ─────────── 연출 ───────────
 async function gatherExisting() {
-  const st = stage.getBoundingClientRect();
-  const thumbs = [...planetsEl.querySelectorAll('.thumb')];
-  const pending = [];
-  thumbs.forEach((b, i) => {
+  const st = stage.getBoundingClientRect(), pending = [];
+  [...planetsEl.querySelectorAll('.thumb')].forEach((b, i) => {
     const p = S.photos.get(b.dataset.photo); if (!p) return;
     const r = b.getBoundingClientRect();
-    const it = makeItem(p, r.left - st.left + r.width / 2, r.top - st.top + r.height / 2);
-    pending.push(toOrbit(it, 900, Math.min(i * 18, 500)));
+    pending.push(toOrbit(makeItem(p, r.left - st.left + r.width / 2, r.top - st.top + r.height / 2), 900, Math.min(i * 18, 500)));
   });
   planetsEl.querySelectorAll('.card, .node').forEach(el => el.classList.remove('on'));
   raysSvg.querySelectorAll('line').forEach(l => { l.style.transition = 'stroke-dashoffset .5s'; l.style.strokeDashoffset = l.style.strokeDasharray; });
   await Promise.all(pending);
   planetsEl.innerHTML = ''; raysSvg.innerHTML = '';
 }
-
-// 2) 소용돌이를 빠르게 돌리며 색을 입히고, 3) 선을 뻗어 행성으로 보낸다
 async function sortShow() {
-  const list = orderedPlanets();
+  const list = planetList();
   renderPlanets({ animate: true });
-  // 행성 자리가 정해지면 은하수 중심이 옮겨질 수 있으므로 궤도 사진을 새 중심으로
-  setCore(S.photos.size, '장소를 찾는 중');
+  setCore(sitePhotos().length, '건축요소별로 나누는 중');
   spin = .3; glow = .9;
-  await sleep(900);
-  // 같은 장소끼리 같은 색으로 물든다
+  await sleep(700);
   for (const pl of list) {
-    const [c, g] = PALETTE[pl.color % PALETTE.length];
-    for (const p of photosOf(pl.id)) { const it = items.get(p.id); if (it) { it.el.style.setProperty('--c', c); it.el.style.setProperty('--g', g); } }
+    const [c, g] = pl.color;
+    for (const p of photosOf(pl.id)) { const it = items.get(p.id); if (it) { it.el.classList.remove('scan'); it.el.style.setProperty('--c', c); it.el.style.setProperty('--g', g); } }
     await sleep(160);
   }
-  setCore(list.length, list.length === 1 ? '한 곳에서 찍은 사진' : `곳으로 나눴습니다`);
+  const named = list.filter(p => p.id !== NONE).length;
+  setCore(named || list.length, named ? '가지 요소로 나눴습니다' : '직접 분류할 사진');
   spin = .12; glow = .55;
   await sleep(500);
-  // 선이 뻗는다
   const rays = [...raysSvg.querySelectorAll('line')];
   rays.forEach((l, i) => { l.style.transition = `stroke-dashoffset .7s cubic-bezier(.3,.8,.3,1) ${i * 120}ms`; l.style.strokeDashoffset = 0; });
   planetsEl.querySelectorAll('.node').forEach((n, i) => setTimeout(() => n.classList.add('on'), reduceMotion ? 0 : 500 + i * 120));
   await sleep(700 + rays.length * 120);
-  // 사진이 선을 타고 날아간다
   const flights = [];
   list.forEach((pl, i) => {
-    const L = layout.cards[i], node = planetsEl.querySelector(`[data-node="${pl.id}"]`);
+    const L = layout.cards[i], node = planetsEl.querySelector(`[data-node="${CSS.escape(pl.id)}"]`);
     photosOf(pl.id).forEach((p, j) => {
       const it = items.get(p.id) || makeItem(p, galaxy.x, galaxy.y);
       it.mode = 'idle';
-      const delay = i * 140 + j * 55;
-      flights.push(flyTo(it, L.node[0], L.node[1], 850, delay, (Math.random() - .5) * .25).then(() => {
+      flights.push(flyTo(it, L.node[0], L.node[1], 850, i * 140 + j * 55, (Math.random() - .5) * .25).then(() => {
         it.el.remove(); items.delete(p.id);
         node?.classList.remove('pulse'); void node?.offsetWidth; node?.classList.add('pulse');
       }));
     });
   });
   await Promise.all(flights);
-  // 카드가 펼쳐진다
-  const cards = [...planetsEl.querySelectorAll('.card')];
-  for (const c of cards) { c.classList.add('on'); await sleep(110); }
+  for (const c of planetsEl.querySelectorAll('.card')) { c.classList.add('on'); await sleep(110); }
   spin = .05; glow = .35;
 }
-
-async function runSort(kind) {
+async function replay() {
   if (S.busy) return;
-  S.busy = true; updateButtons(); $('intro').hidden = true;
-  try {
-    if (planetsEl.childElementCount) await gatherExisting();
-    if (kind === 'recluster') reclusterAll();
-    await sortShow();
-  } finally { S.busy = false; clearItems(); renderPlanets(); }
+  S.busy = true; closeAsk(); updateButtons();
+  try { if (planetsEl.childElementCount) await gatherExisting(); await sortShow(); }
+  finally { S.busy = false; clearItems(); renderPlanets(); }
 }
 
-// ─────────── 사진 올리기 ───────────
-async function ingest(files) {
-  if (S.busy) { toast('분류가 끝난 뒤에 올려 주세요'); return; }
-  files = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
-  if (!files.length) { toast('사진 파일이 없습니다'); return; }
-  // 예시 사진이 있으면 먼저 치운다
-  if ([...S.photos.values()].some(p => p.demo)) dropDemo();
-  const seen = new Set([...S.photos.values()].map(p => p.sig));
-  const todo = files.filter(f => !seen.has(`${f.name}|${f.size}|${f.lastModified}`));
-  if (!todo.length) { toast('이미 올린 사진입니다'); return; }
-  S.busy = true; updateButtons(); $('intro').hidden = true;
-  if (planetsEl.childElementCount) await gatherExisting(); else { renderPlanetsShell(); }
-  spin = .18; glow = .7;
-  let done = 0, failed = 0, heic = 0, bigger = 0, saved = 0;
-  setCore(`0/${todo.length}`, '사진을 읽는 중');
-  const added = [], queue = [...todo];
-  async function worker() {
-    while (queue.length) {
-      const f = queue.shift();
-      try {
-        if (isHeic(f)) heic++;
-        const p = await processFile(f);
-        if (p.origW > MAX_W) { bigger++; saved += Math.max(0, p.origSize - p.size); }
-        S.photos.set(p.id, p); added.push(p);
-        await savePhoto(p);
-        // 화면 가장자리에서 날아 들어온다
-        const edge = Math.random() * 4 | 0, w = stage.clientWidth, h = stage.clientHeight;
-        const sx = edge === 0 ? -40 : edge === 1 ? w + 40 : Math.random() * w;
-        const sy = edge === 2 ? -40 : edge === 3 ? Math.min(h, innerHeight) + 40 : Math.random() * Math.min(h, innerHeight);
-        toOrbit(makeItem(p, sx, sy), 1100);
-      } catch (e) { console.warn('읽기 실패', f.name, e); failed++; }
-      done++; setCore(`${done}/${todo.length}`, heic ? 'HEIC를 JPG로 바꾸는 중' : '사진을 읽는 중');
-    }
+// ─────────── 사진 올리기 → 읽기 → Claude 판단 → 행성 ───────────
+async function ingest(files, demoList) {
+  if (S.busy) { toast('지금 분류가 끝나면 올려 주세요'); return; }
+  let todo = [];
+  if (!demoList) {
+    files = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
+    if (!files.length) { toast('사진 파일이 없습니다'); return; }
+    if ([...S.photos.values()].some(p => p.demo)) dropDemo();
+    const seen = new Set([...S.photos.values()].map(p => p.sig));
+    todo = files.filter(f => !seen.has(`${f.name}|${f.size}|${f.lastModified}`));
+    if (!todo.length) { toast('이미 올린 사진입니다'); return; }
   }
+  // 한 번 올리기 = 한 장소의 답사. 지금 답사에 사진이 있으면 새 답사로 시작한다.
+  const cur = S.sites.get(S.siteId);
+  if (!cur || (!demoList && sitePhotos().length) || (demoList && !cur.demo)) newSite(!!demoList);
+  const site = S.sites.get(S.siteId);
+  S.busy = true; closeAsk(); updateButtons(); $('intro').hidden = true;
+  if (planetsEl.childElementCount) await gatherExisting(); else { const L = layoutFor(4); setStageHeight(L.h); galaxy = { x: L.cx, y: L.cy, r: L.r }; }
+  spin = .18; glow = .7;
+  const total = demoList ? demoList.length : todo.length;
+  let done = 0, failed = 0, heic = 0, bigger = 0, saved = 0;
+  setCore(`0/${total}`, '사진을 읽는 중');
+  const added = [];
+  const enter = p => {
+    const w = stage.clientWidth, h = Math.min(stage.clientHeight, innerHeight), a = Math.random() * 6.283;
+    toOrbit(makeItem(p, w / 2 + Math.cos(a) * w * .7, h / 2 + Math.sin(a) * h * .7), 1100);
+  };
   try {
-    await Promise.all([worker(), worker()]);
-    await sleep(700);
-    assignNew(added);
-    for (const pl of S.planets.values()) savePlanet(pl);
+    if (demoList) {
+      for (const p of demoList) { p.siteId = site.id; S.photos.set(p.id, p); added.push(p); enter(p); done++; setCore(`${done}/${total}`, '예시 사진을 읽는 중'); await sleep(70); }
+    } else {
+      const queue = [...todo];
+      const worker = async () => {
+        while (queue.length) {
+          const f = queue.shift();
+          try {
+            if (isHeic(f)) heic++;
+            const p = await processFile(f, site.id);
+            if (p.origW > MAX_W) { bigger++; saved += Math.max(0, p.origSize - p.size); }
+            S.photos.set(p.id, p); added.push(p); savePhoto(p); enter(p);
+          } catch (e) { console.warn('읽기 실패', f.name, e); failed++; }
+          done++; setCore(`${done}/${total}`, heic ? 'HEIC를 JPG로 바꾸는 중' : '사진을 읽는 중');
+        }
+      };
+      await Promise.all([worker(), worker()]);
+    }
+    refreshSite(site); saveSite(site); renderSiteBar();
+    await sleep(500);
+    // Claude가 사진을 본다: 보고 있는 사진이 빛난다
+    setCore(`0/${added.length}`, '건축요소를 살펴보는 중');
+    spin = .22;
+    let scanTimer = setInterval(() => {
+      for (const it of items.values()) it.el.classList.remove('scan');
+      const arr = [...items.values()]; for (let k = 0; k < 3 && arr.length; k++) arr[Math.random() * arr.length | 0].el.classList.add('scan');
+    }, 380);
+    let res;
+    try {
+      res = demoList ? await demoClassify(added, n => setCore(`${n}/${added.length}`, '건축요소를 살펴보는 중'))
+                     : await classify(added, n => setCore(`${n}/${added.length}`, '건축요소를 살펴보는 중'));
+    } finally { clearInterval(scanTimer); }
     for (const p of added) savePhoto(p);
-    S.busy = false;
-    await runSortAfterIngest();
-  } finally { S.busy = false; updateButtons(); }
-  const noGps = added.filter(p => !p.gps).length;
-  const msg = [`${added.length}장을 ${new Set(added.map(p => p.planetId)).size}곳으로 나눴습니다`];
-  if (bigger) msg.push(`${bigger}장은 가로 ${MAX_W}px로 줄임 (${(saved / 1048576).toFixed(1)}MB 절약)`);
-  if (noGps) msg.push(`위치 없는 사진 ${noGps}장은 시간으로만 묶음`);
-  if (failed) msg.push(`읽지 못한 사진 ${failed}장`);
-  toast(msg.join(' · '), 6000);
+    await sortShow();
+    S.busy = false; clearItems(); renderPlanets();
+    const asks = added.filter(p => p.ask).length;
+    const msg = [`${added.length}장을 정리했습니다`];
+    if (bigger) msg.push(`${bigger}장은 가로 ${MAX_W}px로 줄임 (${(saved / 1048576).toFixed(1)}MB 절약)`);
+    if (!res.used) msg.push(res.reason === 'not_granted' ? 'Claude 사용을 허용하지 않아 직접 분류합니다' : res.reason === 'rate_limited' ? 'Claude 사용량이 많아 나머지는 직접 분류합니다' : '이 화면에서는 Claude가 사진을 볼 수 없어 직접 분류합니다');
+    if (failed) msg.push(`읽지 못한 사진 ${failed}장`);
+    toast(msg.join(' · '), 5000);
+    if (asks) openAsk();
+  } finally { S.busy = false; clearItems(); updateButtons(); }
 }
-function renderPlanetsShell() {
-  // 카드가 없을 때도 은하수 위치를 정해 둔다
-  const n = new Set([...S.photos.values()].map(p => p.planetId)).size || 3;
-  const L = layoutFor(Math.max(n, 3));
-  setStageHeight(L.h); galaxy = { x: L.cx, y: L.cy, r: L.r };
-}
-async function runSortAfterIngest() {
-  S.busy = true; updateButtons();
-  try { await sortShow(); } finally { S.busy = false; clearItems(); renderPlanets(); }
-}
-
 $('fileIn').addEventListener('change', e => { const f = [...e.target.files]; e.target.value = ''; ingest(f); });
 async function filesFromDrop(dt) {
   const entries = [...(dt.items || [])].map(i => i.webkitGetAsEntry?.()).filter(Boolean);
@@ -741,95 +763,135 @@ addEventListener('dragleave', () => { if (--dragN <= 0) { dragN = 0; $('drop').h
 addEventListener('dragover', e => e.preventDefault());
 addEventListener('drop', async e => { e.preventDefault(); dragN = 0; $('drop').hidden = true; ingest(await filesFromDrop(e.dataTransfer)); });
 
+// ─────────── 질문 카드 ───────────
+function askList() { return sitePhotos().filter(p => p.ask); }
+function openAsk(startId) {
+  const L = askList(); if (!L.length) { closeAsk(); return; }
+  S.askId = startId && L.some(p => p.id === startId) ? startId : L[0].id;
+  $('ask').hidden = false; renderAsk(); updateButtons();
+}
+function closeAsk() { $('ask').hidden = true; S.askId = null; updateButtons(); }
+function renderAsk() {
+  const p = S.photos.get(S.askId); if (!p) return closeAsk();
+  const L = askList(), i = L.findIndex(x => x.id === p.id);
+  $('askN').textContent = `질문 ${i + 1} / ${L.length}`;
+  $('askImg').src = thumbUrl(p); $('askImg').alt = p.name;
+  $('askGuess').innerHTML = p.aiElement
+    ? `Claude 생각: <b>${esc(p.aiElement)}</b>일 것 같아요 (확신 ${Math.round((p.aiConf || 0) * 100)}%)${p.aiNote ? ` · ${esc(p.aiNote)}` : ''}`
+    : p.aiNote ? `Claude가 본 것: ${esc(p.aiNote)}` : '보기 중에서 골라 주세요.';
+  $('askChips').innerHTML = [...S.elements, OTHER].map((el, k) =>
+    `<button type="button" class="chip ${p.aiElement === el ? 'guess' : ''}" data-ans="${esc(el)}">${k < 9 ? `<span class="k">${k + 1}</span>` : ''}${esc(el)}</button>`).join('');
+}
+async function answer(el) {
+  const p = S.photos.get(S.askId); if (!p) return;
+  const st = stage.getBoundingClientRect(), r = $('askImg').getBoundingClientRect();
+  const nextL = askList().filter(x => x.id !== p.id);
+  p.element = el; p.by = 'user'; p.ask = false; savePhoto(p);
+  // 답한 사진이 행성으로 날아간다
+  renderPlanets();
+  const node = planetsEl.querySelector(`[data-node="${CSS.escape(el)}"]`);
+  if (node && !reduceMotion) {
+    const it = makeItem(p, r.left - st.left + r.width / 2, r.top - st.top + r.height / 2);
+    it.el.style.setProperty('--c', colorOf(el)[0]); it.el.style.setProperty('--g', colorOf(el)[1]);
+    flyTo(it, parseFloat(node.style.left), parseFloat(node.style.top), 700, 0, .15).then(() => { it.el.remove(); items.delete(p.id); node.classList.remove('pulse'); void node.offsetWidth; node.classList.add('pulse'); });
+  }
+  if (nextL.length) { S.askId = nextL[0].id; renderAsk(); updateButtons(); }
+  else { closeAsk(); toast('모든 질문에 답했습니다'); }
+}
+$('askChips').addEventListener('click', e => { const c = e.target.closest('[data-ans]'); if (c) answer(c.dataset.ans); });
+$('askSkip').addEventListener('click', () => {
+  const L = askList(), i = L.findIndex(x => x.id === S.askId);
+  S.askId = L[(i + 1) % L.length].id; renderAsk();
+});
+$('askClose').addEventListener('click', closeAsk);
+$('askBtn').addEventListener('click', () => openAsk());
+$('askImgBtn').addEventListener('click', () => openLb(S.askId));
+
 // ─────────── 예시 ───────────
-function demoImage(hue, label, i) {
+function demoImage(kind, i) {
   const c = document.createElement('canvas'); c.width = 320; c.height = 240;
   const g = c.getContext('2d');
-  const sk = g.createLinearGradient(0, 0, 0, 240); sk.addColorStop(0, `hsl(${hue},45%,72%)`); sk.addColorStop(1, `hsl(${hue},30%,88%)`);
+  const sk = g.createLinearGradient(0, 0, 0, 240); sk.addColorStop(0, '#9FB6D8'); sk.addColorStop(1, '#DCE4EE');
   g.fillStyle = sk; g.fillRect(0, 0, 320, 240);
-  g.fillStyle = `hsl(${hue},18%,${38 + (i % 3) * 8}%)`;
-  const bx = 40 + (i * 37) % 120, bw = 120 + (i * 13) % 80, bh = 110 + (i * 29) % 90;
-  g.fillRect(bx, 240 - bh, bw, bh);
-  g.fillStyle = 'rgba(255,255,255,.7)';
-  for (let y = 240 - bh + 14; y < 226; y += 22) for (let x = bx + 12; x < bx + bw - 14; x += 22) g.fillRect(x, y, 10, 12);
-  g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(0, 210, 320, 30);
-  g.fillStyle = '#fff'; g.font = '600 15px sans-serif'; g.fillText(label, 10, 230);
+  g.fillStyle = `hsl(28,14%,${46 + (i % 3) * 6}%)`; g.fillRect(0, 40, 320, 200);
+  g.fillStyle = '#2B2F38'; g.strokeStyle = '#2B2F38';
+  if (kind === '입구') { g.fillRect(120, 110, 80, 130); g.fillStyle = '#C9B48A'; g.fillRect(100, 96, 120, 14); }
+  else if (kind === '창') { g.fillStyle = '#E9F1FA'; for (let x = 40; x < 300; x += 70) for (let y = 70; y < 220; y += 70) { g.fillRect(x, y, 44, 48); g.fillStyle = '#2B2F38'; g.fillRect(x + 21, y, 2, 48); g.fillStyle = '#E9F1FA'; } }
+  else if (kind === '계단') { g.fillStyle = '#C8CCD4'; for (let s = 0; s < 8; s++) g.fillRect(60 + s * 24, 220 - s * 20, 200 - s * 24, 20); }
+  else { g.fillStyle = '#7A6E62'; g.fillRect(70 + i % 40, 70, 180, 170); }
+  g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(0, 214, 320, 26);
+  g.fillStyle = '#fff'; g.font = '600 14px sans-serif'; g.fillText(`예시 ${i}`, 10, 232);
   return new Promise(r => c.toBlob(r, 'image/jpeg', .85));
 }
 async function loadDemo() {
   if (S.busy) return;
-  const places = [
-    { hue: 215, base: [126.9784, 37.5665], t: '2026-11-08T10:05', n: 9 },
-    { hue: 28, base: [126.9910, 37.5700], t: '2026-11-08T11:40', n: 8 },
-    { hue: 150, base: [127.0090, 37.5610], t: '2026-11-08T13:30', n: 7 },
-    { hue: 290, base: [127.0250, 37.5540], t: '2026-11-08T15:10', n: 6 }
-  ];
-  const added = [];
-  let k = 0;
-  for (const pl of places) for (let i = 0; i < pl.n; i++) {
-    const blob = await demoImage(pl.hue, `예시 ${++k}`, k);
-    const d = new Date(pl.t); d.setMinutes(d.getMinutes() + i * 3);
-    const p = { id: uid(), name: `예시_${String(k).padStart(2, '0')}.jpg`, sig: 'demo' + k, demo: true, w: 320, h: 240, size: blob.size, blob, thumb: blob,
-      takenAt: localIso(d), timeFromExif: true, gps: [+(pl.base[0] + (Math.random() - .5) * .0012).toFixed(6), +(pl.base[1] + (Math.random() - .5) * .0009).toFixed(6)],
-      heading: Math.random() * 360 | 0, camera: '예시 데이터', planetId: null, element: null, pinned: false };
-    added.push(p);
+  const kinds = [...Array(9).fill('입구'), ...Array(8).fill('창'), ...Array(6).fill('계단'), ...Array(3).fill(OTHER)];
+  const list = [];
+  for (let i = 0; i < kinds.length; i++) {
+    const blob = await demoImage(kinds[i], i + 1);
+    const d = new Date('2026-11-08T14:00'); d.setMinutes(d.getMinutes() + i * 2);
+    list.push({ id: uid(), name: `예시_${pad(i + 1)}.jpg`, sig: 'demo' + i, demo: true, demoKind: kinds[i], w: 320, h: 240, size: blob.size, blob, thumb: blob, ai: blob,
+      takenAt: localIso(d), timeFromExif: true, gps: [+(126.9784 + (Math.random() - .5) * .0008).toFixed(6), +(37.5665 + (Math.random() - .5) * .0006).toFixed(6)],
+      heading: Math.random() * 360 | 0, camera: '예시 데이터', element: null, by: null, aiElement: null, aiConf: null, aiNote: null, ask: false });
   }
-  added.sort(() => Math.random() - .5);
-  S.busy = true; updateButtons(); $('intro').hidden = true;
-  renderPlanetsShell();
-  spin = .18; glow = .7;
-  for (let i = 0; i < added.length; i++) {
-    const p = added[i]; S.photos.set(p.id, p);
-    const w = stage.clientWidth, h = Math.min(stage.clientHeight, innerHeight);
-    const ang = Math.random() * 6.283;
-    toOrbit(makeItem(p, w / 2 + Math.cos(ang) * w * .7, h / 2 + Math.sin(ang) * h * .7), 1100, 0);
-    setCore(`${i + 1}/${added.length}`, '예시 사진을 읽는 중');
-    await sleep(70);
+  list.sort(() => Math.random() - .5);
+  await ingest([], list);
+}
+async function demoClassify(list, onProgress) {
+  // 예시는 Claude를 부르지 않는다: 대부분은 맞히고, 몇 장은 일부러 헷갈려서 질문으로 보낸다
+  let n = 0;
+  for (const p of list) {
+    await sleep(60);
+    const unsure = Math.random() < .2;
+    p.aiElement = p.demoKind; p.aiConf = unsure ? .35 + Math.random() * .2 : .7 + Math.random() * .28; p.aiNote = '예시 판단';
+    if (unsure) p.ask = true; else { p.element = p.aiElement; p.by = 'ai'; }
+    onProgress(++n);
   }
-  await sleep(900);
-  assignNew(added);
-  S.busy = false;
-  await runSortAfterIngest();
-  toast('예시 사진입니다. 내 사진을 올리면 예시는 사라집니다', 4500);
+  return { used: true };
 }
 function dropDemo() {
   for (const [id, p] of S.photos) if (p.demo) S.photos.delete(id);
-  for (const [id, pl] of S.planets) if (pl.demo || !photosOf(id).length) S.planets.delete(id);
+  for (const [id, s] of S.sites) if (s.demo) S.sites.delete(id);
+  if (!S.sites.has(S.siteId)) S.siteId = null;
   planetsEl.innerHTML = ''; raysSvg.innerHTML = '';
 }
 $('demoBtn').addEventListener('click', loadDemo);
 
-// ─────────── 카드 조작 ───────────
-planetsEl.addEventListener('change', e => {
-  const id = e.target.dataset?.rename; if (!id) return;
-  const pl = S.planets.get(id); const v = e.target.value.trim();
-  if (pl && v) { pl.name = v; savePlanet(pl); } else if (pl) e.target.value = pl.name;
+// ─────────── 답사 고르기·이름·새 답사·지우기 ───────────
+$('siteSel').addEventListener('change', e => { if (S.busy) return; S.siteId = e.target.value; saveSettings(); closeAsk(); clearItems(); renderPlanets(); });
+$('siteName').addEventListener('change', e => { const s = S.sites.get(S.siteId), v = e.target.value.trim(); if (s && v) { s.name = v; saveSite(s); renderSiteBar(); setCore($('coreNum').textContent, $('coreLabel').textContent); } });
+$('siteName').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+$('newSiteBtn').addEventListener('click', () => {
+  if (S.busy) return;
+  if ([...S.photos.values()].some(p => p.demo)) dropDemo();
+  S.siteId = null; closeAsk(); renderPlanets(); toast('새 답사입니다. 한 장소의 사진을 올려 주세요');
 });
-planetsEl.addEventListener('keydown', e => { if (e.target.dataset?.rename && e.key === 'Enter') e.target.blur(); });
-planetsEl.addEventListener('click', e => { const t = e.target.closest('[data-photo]'); if (t) openLb(t.dataset.photo); });
-
-$('replayBtn').addEventListener('click', () => runSort('replay'));
-$('gapSel').addEventListener('change', e => { S.gapMin = +e.target.value; saveSettings(); if (S.photos.size) runSort('recluster'); });
-
 let clearArmed = false;
 $('clearBtn').addEventListener('click', async () => {
   const b = $('clearBtn');
-  if (!clearArmed) { clearArmed = true; b.textContent = '한 번 더 누르면 모두 지움'; setTimeout(() => { clearArmed = false; b.textContent = '모두 지우기'; }, 3500); return; }
-  clearArmed = false; b.textContent = '모두 지우기';
-  S.photos.clear(); S.planets.clear();
-  for (const u of urls.values()) URL.revokeObjectURL(u); urls.clear();
-  await DB.clear('photos'); await DB.clear('planets');
-  renderPlanets(); toast('모두 지웠습니다');
+  if (!clearArmed) { clearArmed = true; b.textContent = '한 번 더 누르면 지움'; setTimeout(() => { clearArmed = false; b.textContent = '이 답사 지우기'; }, 3500); return; }
+  clearArmed = false; b.textContent = '이 답사 지우기';
+  const sid = S.siteId;
+  for (const [id, p] of S.photos) if (p.siteId === sid) { S.photos.delete(id); DB.del('photos', id); ['t', 'f'].forEach(k => { const u = urls.get(k + id); if (u) { URL.revokeObjectURL(u); urls.delete(k + id); } }); }
+  S.sites.delete(sid); DB.del('sites', sid);
+  const next = [...S.sites.values()].filter(s => s.count).sort((a, b) => (b.start || '').localeCompare(a.start || ''))[0];
+  S.siteId = next?.id || null; saveSettings(); closeAsk(); renderPlanets(); toast('이 답사의 사진을 지웠습니다');
 });
+$('replayBtn').addEventListener('click', replay);
+planetsEl.addEventListener('click', e => { const t = e.target.closest('[data-photo]'); if (t) openLb(t.dataset.photo); });
 
 // ─────────── 사진 보기 ───────────
-function lbList() { const p = S.photos.get(S.lbId); return p ? photosOf(p.planetId) : []; }
+function lbList() { const p = S.photos.get(S.lbId); return p ? photosOf(keyOf(p)) : []; }
 function openLb(id) { S.lbId = id; $('lb').hidden = false; renderLb(); $('lbClose').focus(); }
 function closeLb() { $('lb').hidden = true; const b = planetsEl.querySelector(`[data-photo="${S.lbId}"]`); S.lbId = null; b?.focus(); }
 function renderLb() {
   const p = S.photos.get(S.lbId); if (!p) return closeLb();
   $('lbImg').src = fullUrl(p); $('lbImg').alt = p.name; $('lbName').textContent = p.name;
+  $('lbAi').hidden = !p.aiElement && !p.aiNote;
+  $('lbAi').innerHTML = `Claude 판단: <b>${esc(p.aiElement || '모르겠음')}</b>${p.aiConf != null ? ` · 확신 ${Math.round(p.aiConf * 100)}%` : ''}${p.aiNote ? `<br>${esc(p.aiNote)}` : ''}`;
+  $('lbChips').innerHTML = [...S.elements, OTHER].map((el, i) => `<button type="button" class="chip ${p.element === el ? 'on' : ''}" data-el="${esc(el)}">${i < 9 ? `<span class="k">${i + 1}</span>` : ''}${esc(el)}</button>`).join('');
   const rows = [
+    ['분류', p.element ? `${p.element} (${p.by === 'user' ? '직접' : 'Claude'})` : '미분류'],
     ['촬영', p.takenAt.replace('T', ' ') + (p.timeFromExif ? '' : ' (파일 날짜)')],
     ['위치', p.gps ? `${p.gps[1]}, ${p.gps[0]}` : '없음'],
     ['방향', p.heading != null ? `${p.heading}°` : '없음'],
@@ -837,63 +899,55 @@ function renderLb() {
     ['크기', `${p.w}×${p.h}px · ${(p.size / 1048576).toFixed(2)}MB` + (p.origW && p.origW > p.w ? ` (원본 ${p.origW}px)` : '')]
   ];
   $('lbMeta').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
-  $('lbChips').innerHTML = S.elements.map((el, i) => `<button type="button" class="chip ${p.element === el ? 'on' : ''}" data-el="${esc(el)}">${i < 9 ? `<span class="k">${i + 1}</span>` : ''}${esc(el)}</button>`).join('');
-  $('lbMove').innerHTML = orderedPlanets().map(pl => `<option value="${pl.id}" ${pl.id === p.planetId ? 'selected' : ''}>${esc(pl.name)}</option>`).join('') + '<option value="__new">새 장소로</option>';
   const L = lbList(), i = L.findIndex(x => x.id === p.id);
   $('lbPrev').disabled = i <= 0; $('lbNext').disabled = i >= L.length - 1;
 }
 function stepLb(d) { const L = lbList(), i = L.findIndex(x => x.id === S.lbId); const n = L[i + d]; if (n) { S.lbId = n.id; renderLb(); } }
 function setElement(el) {
   const p = S.photos.get(S.lbId); if (!p) return;
-  p.element = p.element === el ? null : el; savePhoto(p); renderLb(); refreshCard(p.planetId);
-}
-function refreshCard(id) {
-  const card = planetsEl.querySelector(`[data-card="${id}"]`), pl = S.planets.get(id);
-  if (card && pl) { card.innerHTML = cardHTML(pl); }
+  p.element = el; p.by = 'user'; p.ask = false; savePhoto(p);
+  renderLb(); renderPlanets(); if (!$('ask').hidden) { askList().length ? renderAsk() : closeAsk(); }
 }
 $('lbChips').addEventListener('click', e => { const c = e.target.closest('[data-el]'); if (c) setElement(c.dataset.el); });
 $('addElForm').addEventListener('submit', e => {
-  e.preventDefault(); const v = $('addElInput').value.trim();
-  if (v && !S.elements.includes(v)) { S.elements.push(v); saveSettings(); }
-  $('addElInput').value = ''; if (v) setElement(v);
-});
-$('lbMove').addEventListener('change', e => {
-  const p = S.photos.get(S.lbId); if (!p) return;
-  const from = p.planetId;
-  const pl = e.target.value === '__new' ? newPlanet(p.demo) : S.planets.get(e.target.value);
-  p.planetId = pl.id; p.pinned = true; savePhoto(p);
-  for (const id of [from, pl.id]) { const x = S.planets.get(id); if (x) { refreshPlanet(x); savePlanet(x); } }
-  if (!photosOf(from).length) { S.planets.delete(from); DB.del('planets', from); }
-  renderPlanets(); renderLb(); toast(`${pl.name}(으)로 옮겼습니다`);
+  e.preventDefault(); const v = $('addElInput').value.trim().replace(/[,\n]/g, '');
+  if (v && v !== OTHER && v !== NONE && !S.elements.includes(v)) { S.elements.push(v); saveSettings(); }
+  $('addElInput').value = ''; if (v && v !== NONE) setElement(v);
 });
 $('lbClose').addEventListener('click', closeLb);
 $('lbPrev').addEventListener('click', () => stepLb(-1));
 $('lbNext').addEventListener('click', () => stepLb(1));
 $('lb').addEventListener('click', e => { if (e.target === $('lb') || e.target.classList.contains('lb-img')) closeLb(); });
 addEventListener('keydown', e => {
-  if ($('lb').hidden || e.target.closest('input, select, textarea')) return;
-  if (e.key === 'Escape') closeLb();
-  else if (e.key === 'ArrowLeft') stepLb(-1);
-  else if (e.key === 'ArrowRight') stepLb(1);
-  else if (/^[1-9]$/.test(e.key) && S.elements[+e.key - 1]) setElement(S.elements[+e.key - 1]);
+  if (e.target.closest('input, select, textarea')) return;
+  const opts = [...S.elements, OTHER];
+  if (!$('lb').hidden) {
+    if (e.key === 'Escape') closeLb();
+    else if (e.key === 'ArrowLeft') stepLb(-1);
+    else if (e.key === 'ArrowRight') stepLb(1);
+    else if (/^[1-9]$/.test(e.key) && opts[+e.key - 1]) setElement(opts[+e.key - 1]);
+  } else if (!$('ask').hidden) {
+    if (e.key === 'Escape') closeAsk();
+    else if (/^[1-9]$/.test(e.key) && opts[+e.key - 1]) answer(opts[+e.key - 1]);
+  }
 });
 
-// ─────────── ZIP 저장: 장소별 폴더 + 목록 ───────────
+// ─────────── ZIP: 답사/요소 폴더 + 목록 ───────────
 const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
-async function makeZip(entries) { // [{name, data:Uint8Array, date:Date}]
+function makeZip(entries) {
   const enc = new TextEncoder(), parts = [], central = []; let offset = 0;
   for (const e of entries) {
     const name = enc.encode(e.name), d = e.date || new Date(), crc = crc32(e.data);
     const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
     const date = ((Math.max(1980, d.getFullYear()) - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
     const lh = new DataView(new ArrayBuffer(30));
-    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
     lh.setUint16(10, time, true); lh.setUint16(12, date, true); lh.setUint32(14, crc, true); lh.setUint32(18, e.data.length, true); lh.setUint32(22, e.data.length, true);
-    lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    lh.setUint16(26, name.length, true);
     parts.push(lh, name, e.data);
     const ch = new DataView(new ArrayBuffer(46));
-    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
     ch.setUint16(12, time, true); ch.setUint16(14, date, true); ch.setUint32(16, crc, true); ch.setUint32(20, e.data.length, true); ch.setUint32(24, e.data.length, true);
     ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
     central.push(ch, name);
@@ -909,27 +963,27 @@ const safe = s => String(s).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim().sl
 async function exportZip() {
   const btn = $('zipBtn'); btn.disabled = true; btn.textContent = 'ZIP 만드는 중…';
   try {
-    const entries = [], rows = [['장소', '파일', '원본 파일명', '촬영시각', '위도', '경도', '방향(도)', '건축요소', '기종', '가로', '세로']];
-    const meta = { app: 'photo-sorting', exportedAt: new Date().toISOString(), places: [] };
-    const planets = orderedPlanets().filter(pl => !pl.demo);
-    for (const [i, pl] of planets.entries()) {
-      const folder = `${pad(i + 1)}_${safe(pl.name)}`;
-      const used = new Set(); const place = { name: pl.name, start: pl.start, end: pl.end, center: pl.center, photos: [] };
+    const site = S.sites.get(S.siteId), root = safe(site?.name || '답사');
+    const entries = [], rows = [['답사', '건축요소', '분류 방법', 'Claude 판단', 'Claude 확신', 'Claude 메모', '파일', '원본 파일명', '촬영시각', '위도', '경도', '방향(도)', '기종', '가로', '세로']];
+    const meta = { app: 'photo-sorting', format: 2, exportedAt: new Date().toISOString(),
+      site: { name: site?.name, start: site?.start, end: site?.end, center: site?.center }, elements: [] };
+    for (const [i, pl] of planetList().entries()) {
+      const folder = `${root}/${pad(i + 1)}_${safe(pl.name)}`, used = new Set(), group = { element: pl.name, photos: [] };
       for (const p of photosOf(pl.id)) {
-        let base = `${p.takenAt.slice(11, 16).replace(':', '')}_${p.element ? safe(p.element) + '_' : ''}${safe(p.name.replace(/\.[^.]+$/, ''))}`;
+        if (p.demo) continue;
+        const base = `${p.takenAt.slice(11, 16).replace(':', '')}_${safe(p.name.replace(/\.[^.]+$/, ''))}`;
         let fn = base + '.jpg', n = 2; while (used.has(fn)) fn = `${base}_${n++}.jpg`; used.add(fn);
         entries.push({ name: `${folder}/${fn}`, data: new Uint8Array(await p.blob.arrayBuffer()), date: new Date(p.takenAt) });
-        rows.push([pl.name, `${folder}/${fn}`, p.name, p.takenAt.replace('T', ' '), p.gps?.[1] ?? '', p.gps?.[0] ?? '', p.heading ?? '', p.element || '', p.camera || '', p.w, p.h]);
-        place.photos.push({ file: `${folder}/${fn}`, original: p.name, takenAt: p.takenAt, gps: p.gps, heading: p.heading, element: p.element });
+        rows.push([site?.name || '', pl.name, p.by === 'user' ? '직접' : p.by === 'ai' ? 'Claude' : '', p.aiElement || '', p.aiConf != null ? p.aiConf.toFixed(2) : '', p.aiNote || '',
+          `${folder}/${fn}`, p.name, p.takenAt.replace('T', ' '), p.gps?.[1] ?? '', p.gps?.[0] ?? '', p.heading ?? '', p.camera || '', p.w, p.h]);
+        group.photos.push({ file: `${folder}/${fn}`, original: p.name, takenAt: p.takenAt, gps: p.gps, heading: p.heading, element: p.element, by: p.by, ai: { element: p.aiElement, confidence: p.aiConf, note: p.aiNote } });
       }
-      meta.places.push(place);
+      if (group.photos.length) meta.elements.push(group);
     }
     const csv = '﻿' + rows.map(r => r.map(v => { const t = String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; }).join(',')).join('\r\n');
-    entries.push({ name: '사진목록.csv', data: new TextEncoder().encode(csv) });
-    entries.push({ name: 'photo-sorting.json', data: new TextEncoder().encode(JSON.stringify(meta, null, 1)) });
-    const zip = await makeZip(entries);
-    const day = planets[0]?.start?.slice(0, 10) || new Date().toISOString().slice(0, 10);
-    await saveFile(`PhotoSorting_${day}.zip`, zip);
+    entries.push({ name: `${root}/사진목록.csv`, data: new TextEncoder().encode(csv) });
+    entries.push({ name: `${root}/photo-sorting.json`, data: new TextEncoder().encode(JSON.stringify(meta, null, 1)) });
+    await saveFile(`${root}.zip`, makeZip(entries));
   } catch (e) { console.error(e); toast('ZIP을 만들지 못했습니다: ' + e.message, 5000); }
   finally { btn.textContent = 'ZIP 저장'; updateButtons(); }
 }
@@ -950,15 +1004,19 @@ $('zipBtn').addEventListener('click', exportZip);
 let resizeT;
 addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (!S.busy) renderPlanets(); else sizeSky(); }, 150); });
 (async function boot() {
-  sizeSky(); centerGalaxy();
-  requestAnimationFrame(frame);
+  sizeSky(); centerGalaxy(); requestAnimationFrame(frame);
   const st = await DB.get('settings', 'main');
-  if (st) { S.elements = st.elements?.length ? st.elements : S.elements; S.gapMin = st.gapMin || 30; $('gapSel').value = String(S.gapMin); }
+  if (st?.elements?.length) S.elements = st.elements;
   for (const p of (await DB.all('photos')) || []) S.photos.set(p.id, p);
-  for (const pl of (await DB.all('planets')) || []) S.planets.set(pl.id, pl);
-  for (const p of S.photos.values()) if (!S.planets.has(p.planetId)) p.planetId = null;
-  const orphans = [...S.photos.values()].filter(p => !p.planetId);
-  if (orphans.length) assignNew(orphans);
+  for (const s of (await DB.all('sites')) || []) S.sites.set(s.id, s);
+  // 이전 버전(장소별 분류)에서 넘어온 사진은 한 답사로 모은다. 원래 값은 지우지 않는다.
+  const orphans = [...S.photos.values()].filter(p => !p.siteId || !S.sites.has(p.siteId));
+  if (orphans.length) {
+    const s = { id: uid(), name: '이전에 올린 사진', createdAt: new Date().toISOString() }; S.sites.set(s.id, s);
+    for (const p of orphans) { p.siteId = s.id; if (p.ask === undefined) { p.ask = !p.element; p.by = p.element ? 'user' : null; } savePhoto(p); }
+  }
+  for (const s of S.sites.values()) { refreshSite(s); saveSite(s); }
+  S.siteId = S.sites.has(st?.siteId) ? st.siteId : [...S.sites.values()].filter(s => s.count).sort((a, b) => (b.start || '').localeCompare(a.start || ''))[0]?.id || null;
   renderPlanets();
   if (!window.exifr) toast('촬영 정보 읽기 도구를 불러오지 못했습니다. 시간은 파일 날짜로 대신합니다', 6000);
 })();
