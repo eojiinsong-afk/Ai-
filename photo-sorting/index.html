@@ -1103,7 +1103,13 @@ function loadThree() {
 // 건물 데이터: data/index.json(4km 격자) → data/b_<시도>_<n>.bin(셀마다 gzip)
 let dataIndexP = null; const chunkP = new Map();
 const loadIndex = () => (dataIndexP = dataIndexP || fetch('data/index.json').then(r => { if (!r.ok) throw new Error('건물 데이터 목록 없음'); return r.json(); }));
-const getChunk = name => { if (!chunkP.has(name)) chunkP.set(name, fetch('data/' + name).then(r => { if (!r.ok) throw new Error(name); return r.arrayBuffer(); })); return chunkP.get(name); };
+// 아티팩트는 이진 파일을 올릴 수 없어 청크를 base64 텍스트(.txt)로 올린다
+const getChunk = name => {
+  if (!chunkP.has(name)) chunkP.set(name, fetch('data/' + name.replace(/\.bin$/, '.txt')).then(r => { if (!r.ok) throw new Error(name); return r.text(); }).then(t => {
+    const bin = atob(t.trim()), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer;
+  }));
+  return chunkP.get(name);
+};
 async function gunzip(buf) {
   const st = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
   return new Uint8Array(await new Response(st).arrayBuffer());
