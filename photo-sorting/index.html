@@ -166,6 +166,14 @@ dl.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--
 .sp .st { position: absolute; right: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; font: 700 9px/14px var(--sans); text-align: center; background: rgba(7,10,20,.85); color: var(--ink-3); }
 .sp .st.ok { background: #6FE3B4; color: #04241A; }
 .sp .st.gps { background: rgba(255,255,255,.85); color: #222; }
+.loc-form { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); background: var(--panel-solid); border: 1px solid var(--line);
+  border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 10px; color: var(--ink-2); font-size: 13.5px; }
+.loc-form h3 { margin: 0; color: var(--ink); font-size: 17px; }
+.loc-form p { margin: 0; }
+.loc-form b { color: var(--ink); }
+.loc-form input { font: 500 15px var(--mono); background: var(--space-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; color: var(--ink); }
+.loc-form .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.loc-err { color: #FFB4B4; }
 .minfo { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); width: 270px; background: rgba(18,26,46,.94); border: 1px solid var(--line);
   border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
 .minfo img { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; cursor: zoom-in; }
@@ -272,6 +280,14 @@ dl.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--
     <button class="btn small" id="mapBack" type="button">은하로 돌아가기</button>
   </div>
   <div class="map-status" id="mapStatus"><b id="mapStatusB"></b><span id="mapStatusS"></span></div>
+  <form class="loc-form" id="locForm" hidden>
+    <h3>이 답사의 사진에는 위치 정보가 없어요</h3>
+    <p>아이폰에서 사진 보관함으로 고르면 위치가 빠진 채로 올라갑니다. 고르는 화면 위쪽의 <b>옵션 → 위치</b>를 켜고 다시 올리거나, AirDrop·케이블로 옮긴 원본을 올려 주세요.</p>
+    <p>지금은 답사한 곳의 위치를 직접 넣어도 됩니다. 지도 앱에서 그 자리를 길게 눌러 나온 <b>위도, 경도</b>나 구글 지도 링크를 붙여 넣으세요.</p>
+    <input id="locInput" placeholder="예: 36.3315, 127.4329" autocomplete="off">
+    <p class="loc-err" id="locErr" hidden></p>
+    <div class="row"><button class="btn primary" type="submit">이 위치로 내려가기</button><button class="btn" type="button" id="locCancel">취소</button></div>
+  </form>
   <div class="map-hint" id="mapHint" hidden></div>
   <aside class="minfo" id="minfo" hidden></aside>
   <div class="strip" id="strip" hidden>
@@ -667,7 +683,7 @@ function updateButtons() {
   $('newSiteBtn').hidden = !n; $('newSiteBtn').disabled = S.busy;
   $('askBtn').hidden = !asks || S.busy || !$('ask').hidden; $('askBtn').textContent = `질문 ${asks}`;
   $('siteSel').disabled = S.busy;
-  $('mapBtn').hidden = !n; $('mapBtn').disabled = S.busy || !S.sites.get(S.siteId)?.center;
+  $('mapBtn').hidden = !n; $('mapBtn').disabled = S.busy;
 }
 function setCore(num, label) {
   const c = $('core'); c.hidden = num == null;
@@ -798,7 +814,8 @@ async function ingest(files, demoList) {
     if (bigger) msg.push(`${bigger}장은 가로 ${MAX_W}px로 줄임 (${(saved / 1048576).toFixed(1)}MB 절약)`);
     if (!res.used) msg.push(res.reason === 'not_granted' ? 'Claude 사용을 허용하지 않아 직접 분류합니다' : res.reason === 'rate_limited' ? 'Claude 사용량이 많아 나머지는 직접 분류합니다' : '이 화면에서는 Claude가 사진을 볼 수 없어 직접 분류합니다');
     if (failed) msg.push(`읽지 못한 사진 ${failed}장`);
-    toast(msg.join(' · '), 5000);
+    if (!added.some(p => p.gps) && !demoList) msg.push('사진에 위치 정보가 없어요. 지도에서 위치를 직접 넣을 수 있습니다');
+    toast(msg.join(' · '), 6000);
     if (asks) openAsk();
     else if (site.center) setTimeout(() => { if (!S.busy && !M3.on && $('lb').hidden) openMap(); }, 2200);
   } finally { S.busy = false; clearItems(); updateButtons(); }
@@ -854,7 +871,7 @@ async function answer(el) {
     flyTo(it, parseFloat(node.style.left), parseFloat(node.style.top), 700, 0, .15).then(() => { it.el.remove(); items.delete(p.id); node.classList.remove('pulse'); void node.offsetWidth; node.classList.add('pulse'); });
   }
   if (nextL.length) { S.askId = nextL[0].id; renderAsk(); updateButtons(); }
-  else { closeAsk(); toast('모든 질문에 답했습니다. 지구로 내려갑니다'); if (S.sites.get(S.siteId)?.center) setTimeout(() => { if (!M3.on && $('lb').hidden) openMap(); }, 1400); }
+  else { closeAsk(); const ctr = S.sites.get(S.siteId)?.center; toast(ctr ? '모든 질문에 답했습니다. 지구로 내려갑니다' : '모든 질문에 답했습니다. 위쪽 지도 버튼으로 위치를 정할 수 있어요'); if (ctr) setTimeout(() => { if (!M3.on && $('lb').hidden) openMap(); }, 1400); }
 }
 $('askChips').addEventListener('click', e => { const c = e.target.closest('[data-ans]'); if (c) answer(c.dataset.ans); });
 $('askSkip').addEventListener('click', () => {
@@ -1144,17 +1161,22 @@ const elColor = p => p.element ? colorOf(p.element)[0] : '#9AA3BD';
 
 async function openMap() {
   const site = S.sites.get(S.siteId);
-  if (!site?.center) { toast('사진에 위치 정보가 없어 지도를 열 수 없습니다'); return; }
+  if (!site) return;
+  const center = site.center || site.manualCenter;
+  if (!center) { $('map').hidden = false; status(null); $('strip').hidden = true; $('minfo').hidden = true; $('mapHint').hidden = true; $('locForm').hidden = false; $('locErr').hidden = true; $('mapTitle').textContent = site.name || ''; $('locInput').focus(); return; }
   if (M3.on || S.busy) return;
   closeAsk(); closeLb();
   M3.on = true; $('map').hidden = false; $('strip').hidden = true; $('minfo').hidden = true; $('mapHint').hidden = true; $('gpsAllBtn').hidden = true;
-  $('mapTitle').innerHTML = `${esc(site.name)}<small>${site.center[1].toFixed(4)}, ${site.center[0].toFixed(4)}</small>`;
+  $('locForm').hidden = true;
+  $('mapTitle').innerHTML = `${esc(site.name)}<small>${center[1].toFixed(4)}, ${center[0].toFixed(4)}${site.center ? '' : ' · 직접 입력한 위치'}</small>`;
   status('지구로 내려가는 중', '3D 도구를 불러옵니다');
-  try { await loadThree(); } catch (e) { status('3D 도구를 불러오지 못했습니다', e.message); return; }
+  try { await loadThree(); } catch (e) { status('3D 도구를 불러오지 못했습니다', '인터넷 연결을 확인한 뒤 다시 열어 주세요 · ' + e.message); M3.on = false; return; }
+  if (!window.DecompressionStream) { status('이 브라우저에서는 건물 데이터를 풀 수 없습니다', '최신 Chrome·Safari·Edge에서 열어 주세요'); M3.on = false; return; }
   if (!M3.gl) initGL();
-  M3.center = TM.fwd(site.center[0], site.center[1]);
-  const bP = loadBuildings(M3.center[0], M3.center[1], 450).catch(e => { console.warn(e); return null; });
-  try { await flyGlobe(site.center); } catch (e) { console.error(e); }
+  M3.center = TM.fwd(center[0], center[1]);
+  let loadErr = '';
+  const bP = loadBuildings(M3.center[0], M3.center[1], 450).catch(e => { console.warn(e); loadErr = e.message; return null; });
+  try { await flyGlobe(center); } catch (e) { console.error(e); }
   $('veil').classList.add('on'); await sleep(450);
   status('건물을 세우는 중', '');
   const blds = await bP;
@@ -1162,11 +1184,12 @@ async function openMap() {
   $('veil').classList.remove('on');
   status(null);
   $('strip').hidden = false; renderStrip();
-  if (!blds) hint('건물 데이터를 불러오지 못했습니다. 바닥 격자 위에 사진만 표시합니다', 6000);
+  if (!blds) hint(`건물 데이터를 불러오지 못했습니다 (${loadErr}). 바닥 격자 위에 사진만 표시합니다`, 8000);
   else if (!blds.length) hint('이 지역의 건물 데이터가 아직 없습니다. 바닥 격자 위에 사진만 표시합니다', 6000);
   else hint(`건물 ${blds.length.toLocaleString()}동 · 아래에서 사진을 고르고 찍은 자리를 클릭하세요`, 5000);
 }
 function closeMap() {
+  $('locForm').hidden = true;
   M3.on = false; cancelAnimationFrame(M3.raf); M3.mode = null; M3.sel = null;
   $('map').hidden = true; renderPlanets();
 }
@@ -1445,6 +1468,25 @@ $('gpsAllBtn').addEventListener('click', () => {
 });
 $('stripList').addEventListener('click', e => { const b = e.target.closest('[data-mp]'); if (b) selectPhoto(b.dataset.mp); });
 addEventListener('keydown', e => { if (M3.on && e.key === 'Escape' && $('lb').hidden && M3.mode) { M3.mode = null; M3.preview.clear(); highlightBuilding(null); hint('취소했습니다', 1500); } });
+
+// 위치가 없는 답사: 위도·경도 또는 지도 링크를 붙여 넣어 위치를 정한다
+function parseLatLon(text) {
+  const nums = (String(text).match(/-?\d{2,3}\.\d+/g) || []).map(Number);
+  for (let i = 0; i + 1 < nums.length; i++) {
+    const [a, b] = [nums[i], nums[i + 1]];
+    if (a > 32 && a < 39.5 && b > 124 && b < 132.5) return [b, a];
+    if (b > 32 && b < 39.5 && a > 124 && a < 132.5) return [a, b];
+  }
+  return null;
+}
+$('locForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const ll = parseLatLon($('locInput').value);
+  if (!ll) { $('locErr').hidden = false; $('locErr').textContent = '한국 안의 위도·경도를 찾지 못했습니다. "36.3315, 127.4329"처럼 넣어 주세요'; return; }
+  const site = S.sites.get(S.siteId); site.manualCenter = [+ll[0].toFixed(6), +ll[1].toFixed(6)]; saveSite(site);
+  $('locForm').hidden = true; openMap();
+});
+$('locCancel').addEventListener('click', () => { $('locForm').hidden = true; $('map').hidden = true; });
 
 // ─────────── 시작 ───────────
 let resizeT;
