@@ -642,7 +642,45 @@ const DB = (() => {
 })();
 const savePhoto = p => (p.demo ? null : DB.put('photos', p.id, p));
 const saveSite = s => (s.demo ? null : DB.put('sites', s.id, s));
-const saveSettings = () => DB.put('settings', 'main', { elements: S.elements, defs: S.defs, siteId: S.siteId, lessons: S.lessons || [], defsPrev: S.defsPrev || null, autoSort: !!S.autoSort });
+const saveSettings = () => DB.put('settings', 'main', { elements: S.elements, defs: S.defs, siteId: S.siteId, lessons: S.lessons || [], defsPrev: S.defsPrev || null, autoSort: !!S.autoSort, autoTax: S.autoTax !== false, autoEls: S.autoEls || [] });
+// 요소 스스로 찾기: 사진을 먼저 훑어보고 필요한 건축요소를 Claude가 정해 목록에 더한다
+const MAX_ELS = 12;
+async function discoverElements(list, onStage) {
+  const sm = await sampler(); if (!sm || !list.length) return [];
+  const cap = ON_ARTIFACT ? Math.min(sm.max, 8) : 40;
+  const pick = list.length <= cap ? list : Array.from({ length: cap }, (_, i) => list[Math.floor(i * list.length / cap)]);
+  const small = pick.length > 12;
+  onStage?.();
+  const cur = S.elements.map(e => `- ${e}: ${S.defs[e] || ''}`).join('\n') || '(아직 없음)';
+  try {
+    const out = await sm.s.json(`건축물 답사 사진 ${pick.length}장입니다. 이 사진들을 나눌 건축요소 분류 체계를 정합니다.
+
+지금 있는 요소 (맞으면 그대로 씁니다):
+${cur}
+
+규칙:
+- 사진들에 반복해서 나타나는 건축요소·공간·부재를 요소로 삼습니다. 예: 입구, 창, 계단, 난간, 캐노피, 외벽, 지붕, 기둥, 천장, 바닥, 실내공간, 조경, 간판, 설비, 건물전경.
+- 지금 있는 요소로 설명되는 사진은 새 요소를 만들지 않습니다. 이름이 다를 뿐 같은 뜻이면 기존 이름을 씁니다.
+- 새 요소는 사진 2장 이상에 해당할 때만 만들고, 이름은 2~6자 명사. 전체 요소 수는 ${MAX_ELS}개 이하.
+- "${OTHER}"로 남는 사진이 최소가 되게 합니다.
+- desc는 판단 기준: 무엇이 화면 중심일 때 이 요소인지, 헷갈리는 이웃 요소와 구분 단서 (80자 이내).
+
+{"elements":[{"name":이름,"desc":기준,"count":해당 사진 수,"existing":기존 요소면 true}]} JSON만 답하세요.`,
+      { images: pick.map(p => small ? (p.thumb || p.ai) : (p.ai || p.thumb)), modelTier: 'default',
+        schema: { type: 'object', additionalProperties: false, required: ['elements'], properties: { elements: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'desc', 'count', 'existing'], properties: { name: { type: 'string' }, desc: { type: 'string' }, count: { type: 'integer' }, existing: { type: 'boolean' } } } } } } });
+    const added = [];
+    for (const e of (out?.elements || []).sort((a, b) => (b.count || 0) - (a.count || 0))) {
+      const name = String(e.name || '').trim().replace(/[,\n]/g, '').slice(0, 12);
+      if (!name || name === OTHER || name === NONE) continue;
+      if (S.elements.includes(name)) { if (!S.defs[name] && e.desc) S.defs[name] = e.desc.trim().slice(0, 200); continue; }
+      if ((e.count || 0) < 2 || S.elements.length >= MAX_ELS) continue;
+      S.elements.push(name); S.defs[name] = String(e.desc || '').trim().slice(0, 200); added.push(name);
+      S.autoEls = [...new Set([...(S.autoEls || []), name])];
+    }
+    if (added.length) saveSettings();
+    return added;
+  } catch (e) { console.warn('요소 찾기 실패', e); if (e?.code === 'bad_key' || e?.code === 'rate_limited') aiOff = e.code; return []; }
+}
 // 기준 다듬기: 교정이 쌓이면 Claude가 요소 설명을 고쳐 쓴다 (이전 기준은 되돌릴 수 있게 남김)
 async function refineDefs(force) {
   const L = (S.lessons || []).filter(l => !l.used);
@@ -1367,7 +1405,11 @@ async function sortNow() {
     if (demo || !aiOff) {
       setCore(0, `/ ${pend.length}`, '요소 판단 중'); spin = .12;
       const scan = setInterval(() => { for (const it of items.values()) it.el.classList.remove('scan'); const arr = [...items.values()]; for (let k = 0; k < 3 && arr.length; k++) arr[rnd() * arr.length | 0].el.classList.add('scan'); }, 380);
-      try { res = demo ? await demoClassify(pend, n => setCore(n, `/ ${pend.length}`)) : await classify(pend, n => setCore(n, `/ ${pend.length}`)); }
+      let found = [];
+      if (!demo && S.autoTax !== false) found = await discoverElements(pend, () => setCore(pend.length, '장', '요소 찾는 중'));
+      if (found.length) toast(`새 요소 · ${found.join(', ')}`, 4500);
+      setCore(0, `/ ${pend.length}`, '요소 판단 중');
+      try { res = demo ? await demoClassify(pend, n => setCore(n, `/ ${pend.length}`)) : aiOff ? (pend.forEach(markAsk), { used: false, reason: aiOff }) : await classify(pend, n => setCore(n, `/ ${pend.length}`)); }
       finally { clearInterval(scan); for (const it of items.values()) it.el.classList.remove('scan'); }
     } else for (const p of pend) markAsk(p);
     for (const p of pend) { p.pending = false; savePhoto(p); }
@@ -1562,16 +1604,39 @@ function renderLearn() {
       <p>키는 이 브라우저에만 저장되고, 분류할 때 사진(1024px)이 Anthropic API로 전송됨 · 요금은 키 계정에 청구 (${CLAUDE_MODEL})</p>` : ''}
     <div class="row"><span>학습 · 교정 ${L.length}건 (반영 대기 ${fresh}) · 직접 분류 ${refs}장${S.defsAt ? ' · 기준 갱신 ' + S.defsAt.slice(5, 10).replace('-', '.') : ''}</span>
       <button class="btn small" type="button" data-lr="refine" ${fresh ? '' : 'disabled'}>지금 반영</button>${S.defsPrev ? '<button class="btn small" type="button" data-lr="undo">기준 되돌리기</button>' : ''}</div>
-    <label class="sw"><input type="checkbox" data-lr="auto" ${S.autoSort ? 'checked' : ''}> 사진을 올리면 3초 뒤 자동 분류</label>`;
+    <label class="sw"><input type="checkbox" data-lr="tax" ${S.autoTax !== false ? 'checked' : ''}> 요소를 Claude가 사진을 보고 스스로 만들기</label>
+    <label class="sw"><input type="checkbox" data-lr="auto" ${S.autoSort ? 'checked' : ''}> 사진을 올리면 3초 뒤 자동 분류</label>
+    <div class="row"><span>전체 사진을 다시 보고 요소를 새로 짜기 (직접 고른 분류는 유지)</span><button class="btn small" type="button" data-lr="rebuild">다시 짜기</button></div>`;
 }
 $('learnBox').addEventListener('click', async e => {
   const k = e.target.closest('[data-lr]')?.dataset.lr; if (!k) return;
   if (k === 'ckSave') { const v = $('ckInput').value.trim(); if (!/^sk-ant-[\w-]{20,}$/.test(v)) { toast('키 형식이 아님'); return; } CK.set(v); toast('Claude 키 저장 · 이 브라우저'); renderLearn(); }
   if (k === 'ckDel') { CK.set(''); toast('Claude 키 지움'); renderLearn(); }
   if (k === 'refine') { e.target.disabled = true; await refineDefs(true); openElSheet(); }
+  if (k === 'rebuild') {
+    if (S.busy) return; const all = [...S.photos.values()].filter(p => !p.demo); if (!all.length) return;
+    const b = e.target; b.disabled = true; b.textContent = '요소 찾는 중';
+    S.busy = true; updateButtons();
+    try {
+      const found = await discoverElements(all);
+      const L = all.filter(p => p.by !== 'user');
+      b.textContent = `다시 분류 0 / ${L.length}`;
+      const r = await classify(L, n => (b.textContent = `다시 분류 ${n} / ${L.length}`));
+      for (const p of L) savePhoto(p);
+      // 아무 사진도 없는 자동 요소는 정리
+      const used = new Set([...S.photos.values()].map(p => p.element));
+      const drop = (S.autoEls || []).filter(el => !used.has(el));
+      if (drop.length) { S.elements = S.elements.filter(el => !drop.includes(el)); S.autoEls = S.autoEls.filter(el => !drop.includes(el)); saveSettings(); }
+      toast(r.used ? `요소 ${S.elements.length}개${found.length ? ' · 새 요소 ' + found.join(', ') : ''}` : 'Claude 사용 불가', 5000);
+    } finally { S.busy = false; updateButtons(); clearItems(); renderPlanets(); openElSheet(); }
+    return;
+  }
   if (k === 'undo' && S.defsPrev) { S.defs = { ...S.defsPrev }; S.defsPrev = null; saveSettings(); openElSheet(); toast('기준 되돌림'); }
 });
-$('learnBox').addEventListener('change', e => { if (e.target.dataset.lr === 'auto') { S.autoSort = e.target.checked; saveSettings(); } });
+$('learnBox').addEventListener('change', e => {
+  if (e.target.dataset.lr === 'auto') { S.autoSort = e.target.checked; saveSettings(); }
+  if (e.target.dataset.lr === 'tax') { S.autoTax = e.target.checked; saveSettings(); }
+});
 function openElSheet() {
   renderLearn();
   $('elRows').innerHTML = S.elements.map(el => elRowHTML(el, S.defs[el] || '', false)).join('') + elRowHTML(OTHER, OTHER_DEF, true);
@@ -3089,6 +3154,7 @@ addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout((
   if (Array.isArray(st?.lessons)) S.lessons = st.lessons;
   if (st?.defsPrev) S.defsPrev = st.defsPrev;
   S.autoSort = !!st?.autoSort;
+  S.autoTax = st?.autoTax !== false; S.autoEls = st?.autoEls || [];
   for (const p of (await DB.all('photos')) || []) S.photos.set(p.id, p);
   for (const s of (await DB.all('sites')) || []) S.sites.set(s.id, s);
   // 이전 버전(장소별 분류)에서 넘어온 사진은 한 답사로 모은다. 원래 값은 지우지 않는다.
