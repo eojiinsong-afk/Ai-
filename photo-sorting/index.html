@@ -192,6 +192,20 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 .abmap svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .abmap svg path { fill: #1C1C1E; stroke: #48484A; stroke-width: .012; }
 .abtiles { position: absolute; inset: 0; }
+.mapon #stage { visibility: hidden; }
+.ovcards { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.ovc { position: absolute; left: 0; top: 0; border: 0; padding: 0; background: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: auto; will-change: transform; }
+.ovc .ai { position: relative; width: 62px; height: 62px; border-radius: 14px; display: block; background: var(--bg-2); box-shadow: 0 0 0 2px #fff, 0 8px 22px rgba(0,0,0,.6); transition: transform .2s; }
+.ovc:hover .ai { transform: scale(1.12); }
+.ovc .ai img { width: 100%; height: 100%; object-fit: cover; border-radius: 14px; display: block; }
+.ovc .ai em { position: absolute; right: -8px; top: -8px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--blue); color: #fff; font: 700 12px/22px var(--sans); font-style: normal; text-align: center; }
+.ovc .al { order: -1; font: 600 12px var(--sans); color: var(--label); text-shadow: 0 1px 4px #000; white-space: nowrap; }
+.ovc::after { content: ""; width: 2px; height: 12px; background: #fff; border-radius: 1px; margin-top: -4px; box-shadow: 0 0 6px rgba(0,0,0,.6); }
+.ovpick { position: absolute; z-index: 3; width: 250px; max-height: 60vh; overflow-y: auto; padding: 6px; border-radius: 14px; background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: 0 12px 40px rgba(0,0,0,.55); display: flex; flex-direction: column; gap: 2px; }
+.ovpick button { display: grid; grid-template-columns: 40px 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; text-align: left; padding: 6px; border: 0; border-radius: 9px; background: none; color: var(--label); cursor: pointer; }
+.ovpick button:hover { background: rgba(255,255,255,.08); }
+.ovpick img, .ovpick span { grid-row: span 2; width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: var(--bg-2); }
+.ovpick b { font: 600 13px var(--display); } .ovpick i { font-style: normal; font-size: 11px; color: var(--label-2); }
 .atile { position: absolute; transform: translate(-50%, -100%); border: 0; padding: 0; background: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .atile .ai { position: relative; width: 54px; height: 54px; border-radius: 12px; overflow: visible; display: block; background: var(--bg-2); box-shadow: 0 0 0 2px #fff, 0 6px 16px rgba(0,0,0,.6); }
 .atile .ai img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block; }
@@ -382,7 +396,7 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
     <label>일정<span class="dates"><input id="scFrom" type="date" aria-label="시작일"><i>–</i><input id="scTo" type="date" aria-label="종료일"></span></label>
     <label>주소<input id="scAddr" maxlength="100" placeholder="주소 입력 후 Enter"></label>
     <p class="scloc" id="scLoc"></p>
-    <div class="scact"><button class="btn small" id="newSiteBtn" type="button">새 답사</button><button class="btn small" id="zipBtn" type="button" disabled>ZIP</button><button class="btn small warn" id="clearBtn" type="button">삭제</button></div>
+    <div class="scact"><button class="btn small" id="siteMapBtn" type="button">매핑</button><button class="btn small" id="newSiteBtn" type="button">새 답사</button><button class="btn small" id="zipBtn" type="button" disabled>ZIP</button><button class="btn small warn" id="clearBtn" type="button">삭제</button></div>
   </section>
   <div class="hud" id="core" hidden><div class="num" id="coreNum">0</div><div class="label" id="coreLabel"></div></div>
   <div class="pstatus" id="coreSite" hidden></div>
@@ -427,12 +441,15 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 
 <section class="map" id="map" hidden aria-label="지도">
   <canvas id="gl"></canvas>
+  <div class="ovcards" id="ovCards" hidden></div>
+  <div class="ovpick" id="ovPick" hidden></div>
   <div class="veil" id="veil"></div>
   <div class="map-top">
     <button type="button" class="homelink" data-home aria-label="처음 화면 · 사진 추가">Photo Sorting</button>
     <div class="map-title" id="mapTitle"></div>
     <button class="btn small" id="gpsAllBtn" type="button" hidden>GPS 적용</button>
     <button class="btn small" id="keyBtn" type="button" hidden>인증키</button>
+    <button class="btn small" id="ovBack" type="button" hidden>전체 지도</button>
     <button class="btn small" id="mapBack" type="button">닫기</button>
   </div>
   <div class="map-status" id="mapStatus"><b id="mapStatusB"></b><span id="mapStatusS"></span></div>
@@ -998,7 +1015,8 @@ function updateButtons() {
   $('newSiteBtn').hidden = !n; $('newSiteBtn').disabled = S.busy;
   $('askBtn').hidden = !asks || S.busy || !$('ask').hidden; $('askBtn').textContent = `확인 ${asks}`;
   $('siteSel').disabled = S.busy;
-  $('mapBtn').hidden = !n; $('mapBtn').disabled = S.busy;
+  $('mapBtn').hidden = ![...S.sites.values()].some(s => s.count && !s.demo); $('mapBtn').disabled = S.busy;
+  $('siteMapBtn').hidden = !n; $('siteMapBtn').disabled = S.busy;
   const pend = sitePhotos().filter(p => p.pending).length;
   $('sortBtn').hidden = !pend; $('sortBtn').disabled = S.busy; $('sortBtn').textContent = `분류 ${pend}`;
   $('replayBtn').hidden = !!pend;
@@ -1647,17 +1665,19 @@ const toLocal = ([x, y]) => [x - M3.center[0], -(y - M3.center[1])];         // 
 const toWorld = (x, z) => [M3.center[0] + x, M3.center[1] - z];               // 장면 → 5179
 const elColor = p => p.element ? colorOf(p.element)[0] : '#8E8E93';
 
-async function openMap() {
+async function openMap(fromOv) {
+  if (fromOv !== true) fromOv = false;
   const site = S.sites.get(S.siteId);
   if (!site) return;
   if (!site.addrCenter && site.address) { const f = await findPlace(site.address); if (f) { site.addrCenter = f.ll; site.addrMatch = f.how; saveSite(site); } }
   const center = site.addrCenter || site.center || site.manualCenter;
   if (!center) { $('map').hidden = false; status(null); $('strip').hidden = true; $('minfo').hidden = true; $('mapHint').hidden = true; $('locForm').hidden = false; $('locErr').hidden = true; $('mapTitle').textContent = site.name || ''; $('locInput').focus(); return; }
-  if (M3.on || S.busy) return;
+  if ((M3.on && !fromOv) || S.busy) return;
   if (!ON_ARTIFACT && !VW.key()) { openKeyForm(); return; }
   closeAsk(); closeLb();
-  $('keyBtn').hidden = ON_ARTIFACT;
-  M3.on = true; $('map').hidden = false; $('strip').hidden = true; $('minfo').hidden = true; $('mapHint').hidden = true; $('gpsAllBtn').hidden = true;
+  if (!fromOv) M3.ov = false;
+  $('keyBtn').hidden = ON_ARTIFACT; $('ovBack').hidden = !M3.ov; $('ovCards').hidden = true;
+  M3.on = true; M3.view = 'site'; document.body.classList.add('mapon'); $('map').hidden = false; $('strip').hidden = true; $('minfo').hidden = true; $('mapHint').hidden = true; $('gpsAllBtn').hidden = true;
   $('locForm').hidden = true;
   $('mapTitle').innerHTML = `${esc(site.name)}<small>${center[1].toFixed(4)}, ${center[0].toFixed(4)}${site.addrCenter ? ' · 주소' : site.center ? '' : ' · 직접 입력'}</small>`;
   status('불러오는 중', '');
@@ -1679,12 +1699,37 @@ async function openMap() {
   else if (!blds.length) hint(ON_ARTIFACT ? '이 지역 건물 데이터 없음 · 웹 버전은 전국 가능' : `건물 0동 · ${vwInfo}`, 8000);
   else hint(`건물 ${blds.length.toLocaleString()}동`, 3000);
 }
-function closeMap() {
-  $('locForm').hidden = true; $('keyForm').hidden = true;
-  M3.on = false; cancelAnimationFrame(M3.raf); M3.mode = null; M3.sel = null;
-  $('map').hidden = true; renderPlanets();
+function closeMap(keep) {
+  $('locForm').hidden = true; $('keyForm').hidden = true; $('ovCards').hidden = true; $('ovPick').hidden = true;
+  M3.on = false; cancelAnimationFrame(M3.raf); M3.mode = null; M3.sel = null; M3.view = null;
+  if (M3.ctl) M3.ctl.enabled = false;
+  if (keep === true) return;
+  M3.ov = false; $('map').hidden = true; document.body.classList.remove('mapon'); renderPlanets();
 }
-$('mapBtn').addEventListener('click', openMap);
+$('mapBtn').addEventListener('click', openOverview);
+$('siteMapBtn').addEventListener('click', () => openMap());
+$('ovBack').addEventListener('click', openOverview);
+$('ovCards').addEventListener('click', e => {
+  const c = e.target.closest('[data-ov]'); if (!c) return;
+  if (c.dataset.group) {
+    // 묶인 폴더: 그 자리로 다가가 펼친다
+    const ids = c.dataset.group.split(','), lls = ids.map(id => siteLoc(S.sites.get(id)));
+    const lon = lls.reduce((t, q) => t + q[0], 0) / lls.length, lat = lls.reduce((t, q) => t + q[1], 0) / lls.length;
+    const span = Math.max(...lls.map(q => Math.hypot(q[0] - lon, q[1] - lat)));
+    ovZoomTo(lon, lat, 1 + Math.max(.07, span * 0.035));
+    const pick = $('ovPick'), r = c.getBoundingClientRect();
+    pick.innerHTML = ids.map(id => { const st = S.sites.get(id), cv = photosOfSite(id)[0]; return `<button type="button" data-ovgo="${id}">${cv ? `<img alt="" src="${thumbUrl(cv)}">` : '<span></span>'}<b>${esc(st.name)}</b><i>${esc(siteDates(st))} · ${st.count}장</i></button>`; }).join('');
+    pick.style.left = Math.min(innerWidth - 260, r.right + 10) + 'px'; pick.style.top = Math.max(70, r.top) + 'px'; pick.hidden = false;
+    return;
+  }
+  enterSite(c.dataset.ov);
+});
+$('ovPick').addEventListener('click', e => { const b = e.target.closest('[data-ovgo]'); if (b) { $('ovPick').hidden = true; enterSite(b.dataset.ovgo); } });
+$('gl').addEventListener('pointerdown', () => ($('ovPick').hidden = true));
+$('gl').addEventListener('wheel', e => {
+  if (M3.view !== 'overview') return; e.preventDefault();
+  const v = M3.gs.view, t = v.target || v; ovZoomTo(t.lon, t.lat, 1 + (t.d - 1) * Math.exp(e.deltaY * .0015));
+}, { passive: false });
 $('mapBack').addEventListener('click', closeMap);
 function status(b, s) { $('mapStatus').hidden = !b; if (b) { $('mapStatusB').textContent = b; $('mapStatusS').textContent = s || ''; } }
 let hintT;
@@ -1729,7 +1774,8 @@ function globeTexture() {
     return new THREE.CanvasTexture(c);
   })());
 }
-async function flyGlobe([lon, lat]) {
+async function getGlobe() {
+  if (M3.gs) return M3.gs;
   const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(40, 1, 0.001, 200);
   M3.gcam = cam; M3.fit();
   // 바다는 파랗게, 육지는 위도에 따라 초록·갈색·눈빛으로 칠한 지구 텍스처
@@ -1741,7 +1787,7 @@ async function flyGlobe([lon, lat]) {
   scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.045, 64, 48), new THREE.MeshBasicMaterial({ color: 0x0A84FF, transparent: true, opacity: .14, side: THREE.BackSide, blending: THREE.AdditiveBlending })));
   const sp = new Float32Array(1500 * 3); for (let i = 0; i < 1500; i++) { const u = Math.random() * 2 - 1, th = Math.random() * 6.283, rr = Math.sqrt(1 - u * u), v = new THREE.Vector3(rr * Math.cos(th), u, rr * Math.sin(th)).multiplyScalar(40 + Math.random() * 40); sp.set([v.x, v.y, v.z], i * 3); }
   const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-  scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xDCE4FF, size: .08 })));
+  const stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xDCE4FF, size: 1.6, sizeAttenuation: false })); stars.name = 'stars'; scene.add(stars);
   try {
     const arcs = await (worldP = worldP || fetch('data/world.json').then(r => r.json()));
     const seg = [];
@@ -1757,30 +1803,109 @@ async function flyGlobe([lon, lat]) {
       scene.add(new THREE.LineSegments(kg, new THREE.LineBasicMaterial({ color: 0x64D2FF, transparent: true, opacity: .8 })));
     }
   } catch (e) { console.warn('세계 윤곽 없음', e); }
-  const pin = llVec(lon, lat, 1), tip = llVec(lon, lat, 1.06);
-  const pg = new THREE.BufferGeometry().setFromPoints([pin, tip]);
-  scene.add(new THREE.Line(pg, new THREE.LineBasicMaterial({ color: 0x0A84FF })));
-  const dot = new THREE.Mesh(new THREE.SphereGeometry(.008, 16, 12), new THREE.MeshBasicMaterial({ color: 0x0A84FF })); dot.position.copy(pin); scene.add(dot);
-  const dur = reduceMotion ? 1 : 4600, t0 = performance.now(), ez = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  status(null);
-  await new Promise(res => {
+  const pin = new THREE.Group(); scene.add(pin);
+  return (M3.gs = { scene, cam, pin, view: null });
+}
+// 카메라 상태 { lon, lat, d(지구 중심에서 거리), look(바라보는 점) } 사이를 부드럽게
+function globeFly(gs, from, to, dur, frame) {
+  const ez = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2, t0 = performance.now();
+  return new Promise(res => {
     const step = now => {
-      const k = Math.min(1, (now - t0) / dur), e = ez(k);
-      const cl = lon - 110 * (1 - e), ca = lat + 18 * (1 - e);
-      const dist = k < .62 ? 3.6 - 2.0 * ez(k / .62) : 1.6 - .565 * ez((k - .62) / .38);
-      cam.position.copy(llVec(cl, ca, dist));
-      cam.up.set(0, 1, 0);
-      cam.lookAt(new THREE.Vector3().lerpVectors(new THREE.Vector3(), pin, Math.min(1, e * 1.2)));
-      dot.scale.setScalar(1 + .5 * Math.sin(now / 160));
-      M3.gl.render(scene, cam);
-      if (k < 1) M3.raf = requestAnimationFrame(step); else res();
+      const k = dur <= 1 ? 1 : Math.min(1, (now - t0) / dur), e = ez(k);
+      const v = { lon: from.lon + (to.lon - from.lon) * e, lat: from.lat + (to.lat - from.lat) * e, d: from.d + (to.d - from.d) * e, look: new THREE.Vector3().lerpVectors(from.look, to.look, Math.min(1, e * 1.2)) };
+      gs.cam.position.copy(llVec(v.lon, v.lat, v.d)); gs.cam.up.set(0, 1, 0); gs.cam.lookAt(v.look);
+      gs.view = v; frame?.(now, k);
+      M3.gl.render(gs.scene, gs.cam);
+      if (k < 1 && M3.on) M3.raf = requestAnimationFrame(step); else res();
     };
-    M3.raf = requestAnimationFrame(step);
+    cancelAnimationFrame(M3.raf); M3.raf = requestAnimationFrame(step);
   });
-  scene.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+}
+async function flyGlobe([lon, lat]) {
+  const gs = await getGlobe(); M3.gcam = gs.cam; M3.fit();
+  gs.pin.clear();
+  const pin = llVec(lon, lat, 1), tip = llVec(lon, lat, 1.06);
+  gs.pin.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([pin, tip]), new THREE.LineBasicMaterial({ color: 0x0A84FF })));
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(.008, 16, 12), new THREE.MeshBasicMaterial({ color: 0x0A84FF })); dot.position.copy(pin); gs.pin.add(dot);
+  status(null);
+  // 전체 지도에서 들어오면 지금 보이는 자리에서, 아니면 멀리서 돌며
+  const from = gs.view && M3.ov ? gs.view : { lon: lon - 110, lat: lat + 18, d: 3.6, look: new THREE.Vector3() };
+  await globeFly(gs, from, { lon, lat, d: 1.035, look: pin }, reduceMotion ? 1 : M3.ov ? 2200 : 4600, now => dot.scale.setScalar(1 + .5 * Math.sin(now / 160)));
 }
 
-// 2) 3D 건물: 바깥쪽부터 차례로 솟아오른다
+// ─────────── 전체 지도: 지구가 돌아 한국 전체, 답사마다 대표 사진이 떠 있다 ───────────
+const KOREA = { lon: 127.6, lat: 36.1 };
+function ovSites() { return [...S.sites.values()].filter(s => s.count && !s.demo && siteLoc(s)); }
+async function openOverview() {
+  if (S.busy) return;
+  if (M3.on) closeMap(true);
+  closeAsk(); closeLb();
+  M3.on = true; M3.view = 'overview'; M3.ov = true; document.body.classList.add('mapon');
+  $('map').hidden = false; ['strip', 'minfo', 'mapHint', 'locForm', 'keyForm', 'gpsAllBtn', 'ovBack'].forEach(id => ($(id).hidden = true));
+  $('keyBtn').hidden = true;
+  const L = ovSites(), lost = [...S.sites.values()].filter(s => s.count && !s.demo && !siteLoc(s)).length;
+  $('mapTitle').innerHTML = `전체 답사<small>${L.length}곳 · ${L.reduce((t, s) => t + s.count, 0)}장${lost ? ` · 위치 없음 ${lost}` : ''}</small>`;
+  status('불러오는 중', '');
+  try { await loadThree(); } catch (e) { status('3D 불러오기 실패', e.message); M3.on = false; return; }
+  if (!M3.gl) initGL();
+  const gs = await getGlobe(); M3.gcam = gs.cam; M3.fit(); gs.pin.clear();
+  status(null);
+  if (!L.length) hint('위치가 정해진 답사 없음', 4000);
+  const box = $('ovCards'); box.hidden = false;
+  box.innerHTML = L.map(s => { const c = photosOfSite(s.id)[0]; return `<button type="button" class="ovc" data-ov="${s.id}" hidden><span class="ai">${c ? `<img alt="" src="${thumbUrl(c)}">` : ''}<em>${s.count}</em></span><span class="al">${esc(s.name)}</span></button>`; }).join('');
+  M3.ovZoom = 1.3;
+  const from = gs.view && gs.view.d > 1.1 ? gs.view : { lon: KOREA.lon - 120, lat: KOREA.lat + 14, d: 3.6, look: new THREE.Vector3() };
+  await globeFly(gs, from, { ...KOREA, d: M3.ovZoom, look: new THREE.Vector3() }, reduceMotion ? 1 : 3400, placeOvCards);
+  if (M3.view !== 'overview') return;
+  M3.ovT = performance.now();
+  const loop = now => {
+    if (!M3.on || M3.view !== 'overview') return;
+    const v = gs.view; if (v.target) { const k = .12; v.lon += (v.target.lon - v.lon) * k; v.lat += (v.target.lat - v.lat) * k; v.d += (v.target.d - v.d) * k; }
+    gs.cam.position.copy(llVec(v.lon, v.lat, v.d)); gs.cam.lookAt(v.look);
+    placeOvCards(now); M3.gl.render(gs.scene, gs.cam);
+    M3.raf = requestAnimationFrame(loop);
+  };
+  gs.view.target = { lon: gs.view.lon, lat: gs.view.lat, d: gs.view.d };
+  M3.raf = requestAnimationFrame(loop);
+}
+// 대표 사진 카드: 화면에서 겹치면 한 폴더로 묶는다
+function placeOvCards(now = performance.now()) {
+  const gs = M3.gs, box = $('ovCards'); if (!gs || box.hidden) return;
+  const r = $('gl').getBoundingClientRect(), camDir = gs.cam.position.clone().normalize();
+  const pts = [];
+  for (const el of box.children) {
+    const s = S.sites.get(el.dataset.ov); if (!s) continue;
+    const ll = siteLoc(s), v = llVec(ll[0], ll[1], 1);
+    if (v.dot(camDir) < .2) { el.hidden = true; continue; }
+    const q = v.clone().project(gs.cam);
+    pts.push({ el, s, x: (q.x + 1) / 2 * r.width, y: (1 - q.y) / 2 * r.height });
+  }
+  const groups = [];
+  for (const p of pts.sort((a, b) => (a.s.start || '').localeCompare(b.s.start || ''))) {
+    const g = groups.find(g => Math.hypot(g.x - p.x, g.y - p.y) < 74);
+    if (g) g.items.push(p); else groups.push({ x: p.x, y: p.y, items: [p] });
+  }
+  for (const g of groups) g.items.forEach((p, i) => {
+    p.el.hidden = i > 0;
+    if (i) return;
+    const bob = Math.sin(now / 900 + (p.s.id.charCodeAt(p.s.id.length - 1) || 0)) * 4;
+    p.el.style.transform = `translate(${g.x}px, ${g.y + bob}px) translate(-50%, -100%)`;
+    const n = g.items.length;
+    p.el.dataset.group = n > 1 ? g.items.map(q => q.s.id).join(',') : '';
+    p.el.querySelector('em').textContent = n > 1 ? g.items.reduce((t, q) => t + q.s.count, 0) : p.s.count;
+    p.el.querySelector('.al').textContent = n > 1 ? `${p.s.name} 외 ${n - 1}` : p.s.name;
+  });
+}
+function ovZoomTo(lon, lat, d) { const v = M3.gs?.view; if (!v) return; v.target = { lon, lat, d: Math.max(1.07, Math.min(2.4, d)) }; }
+async function enterSite(id) {
+  if (S.busy || !S.sites.has(id)) return;
+  $('ovCards').hidden = true; $('ovPick').hidden = true; cancelAnimationFrame(M3.raf);
+  selectSite(id);
+  M3.view = 'site';
+  await openMap(true);
+}
+
+// // 2) 3D 건물: 바깥쪽부터 차례로 솟아오른다
 function buildLocal(blds) {
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0B0B0D); scene.fog = new THREE.Fog(0x0B0B0D, 650, 1500);
   const cam = new THREE.PerspectiveCamera(45, 1, 1, 5000); M3.cam = cam; M3.scene = scene; M3.fit();
@@ -1827,6 +1952,7 @@ function buildLocal(blds) {
   M3.preview = new THREE.Group(); scene.add(M3.preview);
   drawShots();
   // 카메라: 위에서 내려다보다가 비스듬히
+  M3.ctl?.dispose();
   const ctl = new THREE.OrbitControls(cam, $('gl'));
   ctl.enableDamping = true; ctl.maxPolarAngle = 1.45; ctl.minDistance = 25; ctl.maxDistance = 1500; ctl.target.set(0, 0, 0);
   M3.ctl = ctl;
@@ -1909,7 +2035,7 @@ function selectPhoto(id, place) {
   const xz = shotPos(p); if (xz && M3.ctl) { M3.ctl.target.set(xz[0], 0, xz[1]); }
 }
 function onMove(e) {
-  if (M3.mode !== 'dir' || !M3.cam) return;
+  if (M3.mode !== 'dir' || !M3.cam || M3.view !== 'site') return;
   const g = groundAt(e); if (!g) return;
   const [x, z] = M3.pending, hdg = (Math.atan2(g[0] - x, -(g[1] - z)) / D2R + 360) % 360;
   M3.pendingH = hdg;
@@ -1918,7 +2044,7 @@ function onMove(e) {
   const t = targetBuilding(x, z, hdg); highlightBuilding(t?.i ?? null);
 }
 function onPick(e) {
-  if (!M3.cam) return;
+  if (!M3.cam || M3.view !== 'site') return;
   if (M3.mode === 'pos') {
     // 건물을 누르면 그 바닥 위치(실내), 아니면 땅
     const rc0 = ray(); rc0.setFromCamera(ndc(e), M3.cam);
@@ -2068,7 +2194,8 @@ $('gpsAllBtn').addEventListener('click', () => {
 });
 $('stripList').addEventListener('click', e => {
   // 초록 체크를 누르면 지정 취소 → 바로 다시 찍은 자리를 고를 수 있다
-  const u = e.target.closest('[data-unmap]');
+  const sp = e.target.closest('[data-mp]'), badge = sp?.querySelector('[data-unmap]'), br = badge?.getBoundingClientRect();
+  const u = badge && e.clientX >= br.left - 8 && e.clientX <= br.right + 8 && e.clientY >= br.top - 8 && e.clientY <= br.bottom + 8 ? badge : null;
   if (u) { const p = S.photos.get(u.dataset.unmap); if (p?.shot) { const prev = p.shot; delete p.shot; savePhoto(p); M3.hlFloor = null; selectPhoto(p.id); hint('지정 취소 · 촬영 위치 클릭', 2500); undoUnmap = { id: p.id, shot: prev }; } return; }
   const b = e.target.closest('[data-mp]'); if (b) selectPhoto(b.dataset.mp);
 });
