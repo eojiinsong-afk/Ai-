@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- 자동 생성: tools/build_web.py 로 index.html 에서 만든다. 직접 고치지 말 것 -->
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<script src="config.js"></script>
 </head>
 <body>
 <title>Photo Sorting</title>
@@ -67,8 +68,19 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 #sky { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #rays { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .fx { position: absolute; inset: 0; pointer-events: none; }
-.star { position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 6px; overflow: hidden; will-change: transform, opacity; transform-origin: 50% 50%;
-  box-shadow: 0 0 0 2px rgba(255,255,255,.92), 0 4px 14px rgba(0,0,0,.45); background: var(--bg-2); }
+.star { position: absolute; left: 0; top: 0; width: 20px; height: 20px; border-radius: 50%; overflow: hidden; will-change: transform, opacity; transform-origin: 50% 50%; pointer-events: auto; cursor: zoom-in;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.95), 0 0 8px 2px rgba(200,220,255,.9), 0 0 22px 7px rgba(120,160,255,.45); background: var(--bg-2);
+  transition: border-radius .4s, box-shadow .4s; animation: twinkle 3.2s ease-in-out var(--tw, 0s) infinite; }
+.star img { filter: saturate(.85) brightness(1.08); }
+.star:hover { animation: none; z-index: 3000 !important; box-shadow: 0 0 0 1.5px #fff, 0 0 26px 8px rgba(160,190,255,.7); }
+.star.tile { border-radius: 4px; animation: none; box-shadow: 0 0 0 1px rgba(255,255,255,.9), 0 4px 12px rgba(0,0,0,.5); }
+@keyframes twinkle { 50% { box-shadow: 0 0 0 1px rgba(255,255,255,.95), 0 0 12px 4px rgba(220,232,255,1), 0 0 30px 10px rgba(130,170,255,.55); } }
+.sitecard { position: absolute; z-index: 11; left: max(16px, env(safe-area-inset-left, 0px)); top: 16px; width: 260px; display: flex; flex-direction: column; gap: 8px; padding: 12px;
+  background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); border: .5px solid var(--sep); border-radius: 16px; }
+.sitecard label { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 8px; font-size: 12px; color: var(--label-2); }
+.sitecard input { min-width: 0; background: var(--fill); border: 0; border-radius: 8px; padding: 7px 9px; font-size: 13px; color: var(--label); color-scheme: dark; }
+.scloc { margin: 0; font-size: 12px; color: var(--label-2); font-variant-numeric: tabular-nums; }
+.scloc.warn { color: var(--orange); }
 .star img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .star.scan { box-shadow: 0 0 0 2px var(--blue), 0 0 22px 4px rgba(10,132,255,.6); }
 
@@ -195,6 +207,8 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 .minfo .bld b { color: var(--label); font-weight: 600; }
 
 @media (max-width: 760px) {
+  .sitecard { left: 12px; right: 12px; top: 10px; width: auto; padding: 10px; gap: 6px; }
+  .sitecard input { padding: 5px 8px; }
   .hud .num { font-size: 40px; }
   .hud { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
   .minfo { left: 16px; right: 16px; width: auto; top: auto; bottom: 120px; max-height: 40vh; overflow-y: auto; }
@@ -221,7 +235,6 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
     <h1>Photo Sorting</h1>
     <div class="site" id="siteBox" hidden>
       <select id="siteSel" aria-label="답사"></select>
-      <input id="siteName" aria-label="답사 이름" maxlength="40">
     </div>
   </div>
   <div class="actions">
@@ -231,7 +244,8 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
     <button class="btn" id="zipBtn" type="button" disabled>내보내기</button>
     <button class="btn" id="newSiteBtn" type="button" hidden>새 답사</button>
     <button class="btn warn" id="clearBtn" type="button" hidden>삭제</button>
-    <label class="btn primary" for="fileIn">사진 추가</label>
+    <label class="btn" for="fileIn">사진 추가</label>
+    <button class="btn primary" id="sortBtn" type="button" hidden>분류</button>
     <input id="fileIn" type="file" accept="image/*,.heic,.heif" multiple hidden>
   </div>
 </header>
@@ -241,6 +255,12 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
   <svg id="rays" aria-hidden="true"></svg>
   <div id="planets"></div>
   <div class="fx" id="fx"></div>
+  <section class="sitecard" id="siteCard" hidden aria-label="답사 정보">
+    <label>이름<input id="scName" maxlength="40"></label>
+    <label>일자<input id="scDate" type="date"></label>
+    <label>주소<input id="scAddr" maxlength="100" placeholder="도로명 · 지번 · 위도,경도"></label>
+    <p class="scloc" id="scLoc"></p>
+  </section>
   <div class="hud" id="core" hidden><div class="num" id="coreNum">0</div><div class="label" id="coreLabel"></div></div>
   <div class="pstatus" id="coreSite" hidden></div>
   <div class="intro" id="intro">
@@ -534,52 +554,118 @@ function refreshSite(s) {
 function renderSiteBar() {
   const sites = [...S.sites.values()].filter(s => s.count).sort((a, b) => (b.start || '').localeCompare(a.start || ''));
   const cur = S.sites.get(S.siteId);
-  $('siteBox').hidden = !cur || !cur.count;
+  $('siteBox').hidden = sites.length < 2;
   $('siteSel').hidden = sites.length < 2;
   $('siteSel').innerHTML = sites.map(s => `<option value="${s.id}" ${s.id === S.siteId ? 'selected' : ''}>${esc(s.name)} · ${s.count}장</option>`).join('');
-  if (cur && document.activeElement !== $('siteName')) $('siteName').value = cur.name || '';
 }
 
-// ─────────── 배경 (canvas) ───────────
+// ─────────── 배경: 나선은하 (canvas) ───────────
+// 은하는 정면 모습을 한 번만 그려 두고(텍스처), 매 프레임 기울이고 돌려서 그린다. 사진은 팔 위의 별이 된다.
 const sky = $('sky'), ctx = sky.getContext('2d');
-let W = 0, H = 0, DPR = 1, galaxy = { x: 0, y: 0, r: 160 }, spin = 0.25, glow = 0;
-const motes = Array.from({ length: 90 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + .3, p: Math.random() * 6.28, s: .3 + Math.random() }));
+let W = 0, H = 0, DPR = 1, galaxy = { x: 0, y: 0, r: 260 }, spin = .035, glow = 1, glowNow = 1;
+const GAL = { tilt: -.36, squash: .6, arms: 2, wind: 3.1 };
+const rnd = Math.random, gauss = () => (rnd() + rnd() + rnd() + rnd() - 2) / 2;
+let galTex = null, fieldTex = null, twinkles = [];
+function makeGalaxy(S = 1100) {
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'), C = S / 2, R = S * .46;
+  const dot = (x, y, r, col, a) => { g.globalAlpha = a; g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill(); };
+  const armPt = (t, arm, dTh = 0, dR = 0) => { const r = t * R * (1 + dR), th = arm * Math.PI * 2 / GAL.arms + GAL.wind * t + dTh; return [C + Math.cos(th) * r, C + Math.sin(th) * r]; };
+  g.globalCompositeOperation = 'lighter';
+  // 원반의 옅은 빛
+  const haze = g.createRadialGradient(C, C, 0, C, C, R * .95);
+  haze.addColorStop(0, 'rgba(150,180,255,.35)'); haze.addColorStop(.35, 'rgba(90,120,220,.14)'); haze.addColorStop(1, 'rgba(60,80,180,0)');
+  g.fillStyle = haze; g.beginPath(); g.arc(C, C, R * .95, 0, 6.283); g.fill();
+  for (let i = 0; i < 16000; i++) { const rr = Math.abs(gauss()) * R * .75, th = rnd() * 6.283; dot(C + Math.cos(th) * rr, C + Math.sin(th) * rr, .6 + rnd() * 1.4, `hsl(${205 + rnd() * 25},55%,75%)`, .035 + rnd() * .04); }
+  // 나선팔: 안쪽은 노란빛, 바깥은 푸른빛
+  for (let arm = 0; arm < GAL.arms; arm++) for (let i = 0; i < 26000; i++) {
+    const t = .05 + Math.pow(rnd(), .75) * .95, spread = .38 + .55 * (1 - t);
+    const [x, y] = armPt(t, arm, gauss() * spread, gauss() * .16);
+    const col = t < .22 ? `hsl(${38 + rnd() * 14},70%,${78 + rnd() * 12}%)` : `hsl(${200 + rnd() * 28},${60 + rnd() * 30}%,${68 + rnd() * 22}%)`;
+    dot(x, y, .5 + rnd() * 1.5, col, .04 + rnd() * .12);
+  }
+  // 성간 먼지: 팔 안쪽 가장자리를 어둡게
+  g.globalCompositeOperation = 'source-over';
+  for (let arm = 0; arm < GAL.arms; arm++) for (let i = 0; i < 5200; i++) {
+    const t = .12 + rnd() * .8, [x, y] = armPt(t, arm, -.42 + gauss() * .16, gauss() * .05);
+    dot(x, y, 1.5 + rnd() * 3, '#05040A', .05);
+  }
+  g.globalCompositeOperation = 'lighter';
+  // 분홍빛 성운 덩어리
+  for (let k = 0; k < 260; k++) {
+    const t = .2 + rnd() * .75, [cx, cy] = armPt(t, k % GAL.arms, gauss() * .35, gauss() * .08), n = 14 + rnd() * 30, sz = 3 + rnd() * 10;
+    for (let i = 0; i < n; i++) dot(cx + gauss() * sz, cy + gauss() * sz, .6 + rnd() * 1.4, rnd() < .8 ? `hsl(${318 + rnd() * 20},85%,${66 + rnd() * 12}%)` : '#FFFFFF', .12 + rnd() * .25);
+  }
+  // 젊고 밝은 별
+  for (let i = 0; i < 1600; i++) {
+    const t = .1 + rnd() * .9, [x, y] = armPt(t, i % GAL.arms, gauss() * (.35 + .45 * (1 - t)), gauss() * .12);
+    dot(x, y, .6 + rnd() * 1.2, `hsl(${205 + rnd() * 20},100%,92%)`, .55 + rnd() * .4);
+  }
+  // 중심핵
+  const core = g.createRadialGradient(C, C, 0, C, C, R * .45);
+  core.addColorStop(0, 'rgba(255,255,255,1)'); core.addColorStop(.1, 'rgba(230,240,255,.85)'); core.addColorStop(.35, 'rgba(140,175,255,.3)'); core.addColorStop(1, 'rgba(90,120,255,0)');
+  g.globalAlpha = 1; g.fillStyle = core; g.beginPath(); g.arc(C, C, R * .45, 0, 6.283); g.fill();
+  const hot = g.createRadialGradient(C, C, 0, C, C, R * .1);
+  hot.addColorStop(0, 'rgba(255,255,255,1)'); hot.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = hot; g.beginPath(); g.arc(C, C, R * .1, 0, 6.283); g.fill();
+  return { c, R };
+}
+// 배경의 별: 크기가 다른 흰·파랑·노랑 별, 밝은 별 몇 개는 빛번짐
+function makeField(w, h) {
+  const c = document.createElement('canvas'); c.width = Math.max(1, w * DPR); c.height = Math.max(1, h * DPR);
+  const g = c.getContext('2d'); g.scale(DPR, DPR);
+  const cols = ['#FFFFFF', '#FFFFFF', '#DCE8FF', '#C9DBFF', '#FFF1D6', '#FFD9E8'];
+  const n = Math.round(w * h / 1700);
+  twinkles = [];
+  for (let i = 0; i < n; i++) {
+    const x = rnd() * w, y = rnd() * h, big = rnd() < .012, r = big ? 1.2 + rnd() * 1.2 : .35 + Math.pow(rnd(), 3) * 1.3, col = cols[rnd() * cols.length | 0];
+    if (big) {
+      const gl = g.createRadialGradient(x, y, 0, x, y, r * 5); gl.addColorStop(0, 'rgba(255,255,255,.45)'); gl.addColorStop(1, 'rgba(180,200,255,0)');
+      g.fillStyle = gl; g.beginPath(); g.arc(x, y, r * 5, 0, 6.283); g.fill();
+    }
+    g.globalAlpha = big ? 1 : .35 + rnd() * .55; g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill(); g.globalAlpha = 1;
+    if (rnd() < .06) twinkles.push({ x, y, r: r + .4, p: rnd() * 6.28, s: .6 + rnd() * 1.4, col });
+  }
+  // 아래쪽의 붉은 먼지빛
+  const hz = g.createLinearGradient(0, h * .72, 0, h); hz.addColorStop(0, 'rgba(60,18,10,0)'); hz.addColorStop(1, 'rgba(60,18,10,.35)');
+  g.fillStyle = hz; g.fillRect(0, h * .72, w, h * .28);
+  return c;
+}
 function sizeSky() {
   DPR = Math.min(2, devicePixelRatio || 1);
   W = stage.clientWidth; H = stage.clientHeight;
   sky.width = W * DPR; sky.height = H * DPR;
   raysSvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  fieldTex = makeField(W, H);
+  if (!galTex) galTex = makeGalaxy();
 }
-let rot = 0, ringT = 0;
+let rot = 0;
 function drawSky(t, dt) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  const bg = ctx.createRadialGradient(W / 2, Math.min(H, innerHeight) * .45, 0, W / 2, Math.min(H, innerHeight) * .45, Math.max(W, H) * .8);
-  bg.addColorStop(0, '#202022'); bg.addColorStop(1, '#0B0B0C');
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-  for (const m of motes) {
-    ctx.fillStyle = `rgba(255,255,255,${.06 + .08 * Math.sin(t / 1000 * m.s + m.p)})`;
-    ctx.beginPath(); ctx.arc(m.x * W, m.y * H, m.r, 0, 6.283); ctx.fill();
-  }
-  // 구를 감싸는 고리 (구가 보일 때만)
-  ringT += ((glow > 0 ? 1 : 0) - ringT) * Math.min(1, dt / 300);
-  if (ringT > .01) {
-    ctx.save(); ctx.translate(galaxy.x, galaxy.y); ctx.lineWidth = 1;
-    for (let k = 0; k < 2; k++) {
-      ctx.strokeStyle = `rgba(255,255,255,${(.16 - k * .06) * ringT})`;
-      ctx.beginPath(); ctx.ellipse(0, 0, galaxy.r * (1.22 + k * .16), galaxy.r * (.2 + k * .05), -.12, 0, 6.283); ctx.stroke();
-    }
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.fillStyle = '#020206'; ctx.fillRect(0, 0, W, H);
+  if (fieldTex) ctx.drawImage(fieldTex, 0, 0, W, H);
+  for (const s of twinkles) { ctx.globalAlpha = .25 + .5 * (1 + Math.sin(t / 1000 * s.s + s.p)) / 2; ctx.fillStyle = s.col; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.283); ctx.fill(); }
+  glowNow += (glow - glowNow) * Math.min(1, dt / 600);
+  if (galTex) {
+    const R = galaxy.r / .46 * .5 * 2; // 텍스처 한 변 = 은하 반지름 / .46
+    ctx.save(); ctx.translate(galaxy.x, galaxy.y); ctx.rotate(GAL.tilt); ctx.scale(1, GAL.squash); ctx.rotate(rot);
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .18 + .82 * glowNow;
+    ctx.drawImage(galTex.c, -R / 2, -R / 2, R, R);
     ctx.restore();
   }
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
 
-// ─────────── 사진 타일: 구 → 버블 ───────────
+// ─────────── 사진 = 은하의 별 → 버블의 타일 ───────────
 const items = new Map();
-let sphereN = 0;
-const tileFor = n => n <= 30 ? 46 : n <= 80 ? 38 : 30;
+let starSeq = 0;
+const tileFor = n => { const t = n <= 40 ? 20 : n <= 120 ? 15 : 11; return innerWidth < 760 ? Math.min(t, 13) : t; };
 function makeItem(p, x, y, size) {
   let it = items.get(p.id);
   if (!it) {
-    const el = document.createElement('div'); el.className = 'star';
+    const el = document.createElement('div'); el.className = 'star'; el.dataset.photo = p.id;
+    el.style.setProperty('--tw', (rnd() * 4).toFixed(2) + 's');
     const img = new Image(); img.alt = ''; img.src = thumbUrl(p); el.appendChild(img);
     fx.appendChild(el);
     it = { el, x, y, s: 1, o: 1, z: 0, mode: 'idle', size: size || tileFor(sitePhotos().length) };
@@ -592,21 +678,17 @@ function place(it) {
   it.el.style.transform = `translate(${it.x - it.size / 2}px, ${it.y - it.size / 2}px) scale(${it.s})`;
   it.el.style.opacity = it.o; it.el.style.zIndex = it.z;
 }
-// 피보나치 구 위의 자리. 전체를 천천히 돌리고 살짝 기울인다.
-function sphereRadius() { const n = Math.max(1, sphereN); return Math.max(90, Math.min(Math.sqrt(n) * tileFor(n) * .62, Math.min(W, Math.min(H, innerHeight)) * .34)); }
-function spherePos(it) {
-  const n = Math.max(1, sphereN), k = it.k % n;
-  const phi = Math.acos(1 - 2 * (k + .5) / n), th = k * 2.399963 + rot;
-  const x3 = Math.sin(phi) * Math.cos(th), y3 = Math.cos(phi), z3 = Math.sin(phi) * Math.sin(th);
-  const tl = .32, y = y3 * Math.cos(tl) - z3 * Math.sin(tl), z = y3 * Math.sin(tl) + z3 * Math.cos(tl);
-  const R = galaxy.r, persp = 1 / (1 - z * .28), d = (z + 1) / 2;
-  return { x: galaxy.x + x3 * R * persp, y: galaxy.y + y * R * persp, s: (.55 + .5 * d), o: .35 + .65 * d, z: Math.round(d * 1000) };
+// 팔 위의 자리: 텍스처의 팔과 같은 식, 같은 회전
+function galaxyPos(it) {
+  if (it.t == null) { it.k = starSeq++; it.arm = it.k % GAL.arms; it.t = .18 + rnd() * .76; it.j = gauss() * (.3 + .4 * (1 - it.t)); it.rj = 1 + gauss() * .1; }
+  const r = it.t * galaxy.r * it.rj, th = it.arm * Math.PI * 2 / GAL.arms + GAL.wind * it.t + it.j + rot;
+  const x = Math.cos(th) * r, y = Math.sin(th) * r * GAL.squash, ct = Math.cos(GAL.tilt), st = Math.sin(GAL.tilt);
+  const d = (Math.sin(th) + 1) / 2;
+  return { x: galaxy.x + x * ct - y * st, y: galaxy.y + x * st + y * ct, s: .8 + .35 * d, o: .7 + .3 * d, z: 100 + Math.round(d * 800) };
 }
-let sphereSeq = 0;
-function toSphere(it, dur, delay = 0) {
-  if (it.k == null) it.k = sphereSeq++;
-  sphereN = Math.max(sphereN, sphereSeq);
-  return new Promise(res => { it.mode = 'join'; it.from = [it.x, it.y, it.s, it.o]; it.t0 = performance.now() + delay; it.dur = reduceMotion ? 1 : dur; it.done = () => { it.mode = 'sphere'; res(); }; });
+function toGalaxy(it, dur, delay = 0) {
+  it.el.classList.remove('tile');
+  return new Promise(res => { it.mode = 'join'; it.from = [it.x, it.y, it.s, it.o]; it.t0 = performance.now() + delay; it.dur = reduceMotion ? 1 : dur; it.done = () => { it.mode = 'galaxy'; res(); }; });
 }
 function flyTo(it, x, y, dur, delay = 0, curve = 0, scale = 1) {
   return new Promise(res => { it.mode = 'fly'; it.from = [it.x, it.y, it.s, it.o]; it.to = [x, y, scale, 1]; it.t0 = performance.now() + delay; it.dur = reduceMotion ? 1 : dur; it.curve = curve; it.done = res; });
@@ -614,14 +696,13 @@ function flyTo(it, x, y, dur, delay = 0, curve = 0, scale = 1) {
 const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 function stepItems(now, dt) {
   rot += spin * dt / 1000;
-  if (sphereN) galaxy.r = sphereRadius();
   for (const it of items.values()) {
-    if (it.mode === 'sphere') { const q = spherePos(it); it.x = q.x; it.y = q.y; it.s = q.s; it.o = q.o; it.z = q.z; }
+    if (it.mode === 'galaxy') { const q = galaxyPos(it); it.x = q.x; it.y = q.y; it.s = q.s; it.o = q.o; it.z = q.z; }
     else if (it.mode === 'join' || it.mode === 'fly') {
       const k = Math.max(0, Math.min(1, (now - it.t0) / it.dur)), e = ease(k);
       let to;
-      if (it.mode === 'join') { const q = spherePos(it); to = [q.x, q.y, q.s, q.o]; it.z = q.z; } else { to = it.to; it.z = 2000; }
-      const nx = -(to[1] - it.from[1]), ny = to[0] - it.from[0], bend = (it.mode === 'join' ? .08 : it.curve) * Math.sin(Math.PI * e);
+      if (it.mode === 'join') { const q = galaxyPos(it); to = [q.x, q.y, q.s, q.o]; it.z = q.z; } else { to = it.to; it.z = 2000; }
+      const nx = -(to[1] - it.from[1]), ny = to[0] - it.from[0], bend = (it.mode === 'join' ? .1 : it.curve) * Math.sin(Math.PI * e);
       it.x = it.from[0] + (to[0] - it.from[0]) * e + nx * bend;
       it.y = it.from[1] + (to[1] - it.from[1]) * e + ny * bend;
       it.s = it.from[2] + (to[2] - it.from[2]) * e; it.o = it.from[3] + (to[3] - it.from[3]) * e;
@@ -630,9 +711,10 @@ function stepItems(now, dt) {
     place(it);
   }
 }
-function clearItems() { for (const it of items.values()) it.el.remove(); items.clear(); sphereN = 0; sphereSeq = 0; glow = 0; }
+function clearItems() { for (const it of items.values()) it.el.remove(); items.clear(); starSeq = 0; }
 let last = performance.now();
 function frame(now) { const dt = Math.min(64, now - last); last = now; if (!M3.on) { drawSky(now, dt); stepItems(now, dt); } requestAnimationFrame(frame); }
+fx.addEventListener('click', e => { const s = e.target.closest('.star'); if (s && !S.busy) openLb(s.dataset.photo); });
 
 // ─────────── 버블 배치 ───────────
 // 버블 크기는 사진 수의 제곱근에 비례. 서로 밀어내며 화면 가운데에 모인다.
@@ -677,9 +759,14 @@ function renderPlanets(opts = {}) {
   planetsEl.innerHTML = ''; raysSvg.innerHTML = '';
   $('intro').hidden = sitePhotos().length > 0 || S.busy;
   renderSiteBar(); updateButtons();
-  if (!list.length) { layout = null; setStageHeight(Math.max(520, innerHeight - $('bar').offsetHeight)); centerGalaxy(); if (!S.busy) setCore(null); return; }
+  renderSiteCard();
+  if (!list.length) { layout = null; clearItems(); galaxyStage(true); centerGalaxy(); if (!S.busy) setCore(null); return; }
+  const pend = sitePhotos().filter(p => p.pending).length;
+  if (pend && !opts.animate) { showGalaxy(); if (!S.busy) setCore(pend, '분류 대기', null); return; }
+  if (!opts.animate) clearItems();
   layout = layoutBubbles(list);
   setStageHeight(layout.h);
+  galaxy.x = stage.clientWidth / 2; galaxy.y = Math.min(layout.h, innerHeight) * .5; glow = .28;
   if (!S.busy) { const asks = sitePhotos().filter(p => p.ask).length; setCore(asks, asks ? '확인 필요' : '정렬 완료', null); }
   const svg = [];
   const B = layout.B;
@@ -714,12 +801,20 @@ function renderPlanets(opts = {}) {
 }
 function centerGalaxy() {
   const w = stage.clientWidth, h = Math.min(stage.clientHeight, innerHeight);
-  galaxy = { x: w / 2, y: h * .42, r: galaxy.r || 160 };
   const intro = $('intro'); intro.style.left = (w / 2) + 'px'; intro.style.top = (h * .5 - 40) + 'px';
 }
-function sphereStage() {
+function galaxyStage(bright = true) {
   const view = Math.max(520, innerHeight - $('bar').offsetHeight);
-  setStageHeight(view); galaxy.x = stage.clientWidth / 2; galaxy.y = view * .47; glow = 1;
+  if (stage.clientHeight !== view) setStageHeight(view);
+  const narrow = stage.clientWidth < 760;
+  galaxy.x = stage.clientWidth / 2; galaxy.y = view * (narrow ? .62 : .5); galaxy.r = Math.min(stage.clientWidth * (narrow ? .5 : .46), view * .62); glow = bright ? 1 : .28;
+}
+// 분류 전: 이 답사의 사진이 모두 은하의 별로 떠 있다
+function showGalaxy() {
+  planetsEl.innerHTML = ''; raysSvg.innerHTML = ''; raysSvg.classList.remove('on');
+  galaxyStage(true); spin = .035;
+  const L = sitePhotos(), size = tileFor(L.length);
+  for (const p of L) if (!items.has(p.id)) { const it = makeItem(p, galaxy.x, galaxy.y, size); const q = galaxyPos(it); Object.assign(it, { x: q.x, y: q.y, s: q.s, o: q.o, z: q.z, mode: 'galaxy' }); place(it); }
 }
 function updateButtons() {
   const n = sitePhotos().length, real = sitePhotos().some(p => !p.demo);
@@ -730,6 +825,9 @@ function updateButtons() {
   $('askBtn').hidden = !asks || S.busy || !$('ask').hidden; $('askBtn').textContent = `확인 ${asks}`;
   $('siteSel').disabled = S.busy;
   $('mapBtn').hidden = !n; $('mapBtn').disabled = S.busy;
+  const pend = sitePhotos().filter(p => p.pending).length;
+  $('sortBtn').hidden = !pend; $('sortBtn').disabled = S.busy; $('sortBtn').textContent = `분류 ${pend}`;
+  $('replayBtn').hidden = !!pend;
 }
 // 왼쪽 아래 큰 숫자 + 위쪽 상태
 function setCore(num, label, status) {
@@ -741,14 +839,14 @@ function setCore(num, label, status) {
 // ─────────── 연출 ───────────
 async function gatherExisting() {
   const st = stage.getBoundingClientRect(), pending = [];
-  sphereStage();
   const thumbs = [...planetsEl.querySelectorAll('.bubble .t')];
-  sphereN = thumbs.length; sphereSeq = 0;
+  const rects = thumbs.map(b => b.getBoundingClientRect());
+  galaxyStage(true);
   thumbs.forEach((b, i) => {
     const p = S.photos.get(b.dataset.photo); if (!p) return;
-    const r = b.getBoundingClientRect(), it = makeItem(p, r.left - st.left + r.width / 2, r.top - st.top + r.height / 2, tileFor(thumbs.length));
-    it.s = r.width / it.size; place(it);
-    pending.push(toSphere(it, 1000, Math.min(i * 12, 500)));
+    const r = rects[i], it = makeItem(p, r.left - st.left + r.width / 2, r.top - st.top + r.height / 2, tileFor(sitePhotos().length));
+    it.el.classList.add('tile'); it.s = r.width / it.size; place(it);
+    pending.push(toGalaxy(it, 1100, Math.min(i * 12, 500)));
   });
   planetsEl.querySelectorAll('.bubble, .blabel').forEach(el => el.classList.remove('on'));
   raysSvg.classList.remove('on');
@@ -759,12 +857,12 @@ async function sortShow() {
   const list = planetList(), total = sitePhotos().length;
   let left = total;
   setCore(left, '남음', '정렬 중');
-  spin = .9; await sleep(900);
+  spin = .7; await sleep(1000);
   renderPlanets({ animate: true });
   // 버블이 하나씩 열린다
   for (const el of planetsEl.querySelectorAll('.bubble')) { el.classList.add('on'); await sleep(90); }
   raysSvg.classList.add('on');
-  spin = .5;
+  spin = .25;
   const st = stage.getBoundingClientRect(), flights = [];
   // 앞쪽(크게 보이는) 사진부터, 요소를 섞어 가며 빠져나간다
   const order = sitePhotos().map(p => ({ p, z: items.get(p.id)?.z ?? 0 })).sort((a, b) => b.z - a.z);
@@ -773,14 +871,14 @@ async function sortShow() {
     const t = planetsEl.querySelector(`.bubble .t[data-photo="${p.id}"]`); if (!t) return;
     const r = t.getBoundingClientRect(), tx = r.left - st.left + r.width / 2, ty = r.top - st.top + r.height / 2;
     const it = items.get(p.id) || makeItem(p, galaxy.x, galaxy.y);
-    flights.push(sleep(i * gap).then(() => { it.mode = 'idle'; return flyTo(it, tx, ty, 780, 0, (Math.random() - .5) * .18, r.width / it.size); }).then(() => {
+    flights.push(sleep(i * gap).then(() => { it.mode = 'idle'; it.el.classList.add('tile'); return flyTo(it, tx, ty, 780, 0, (Math.random() - .5) * .18, r.width / it.size); }).then(() => {
       t.classList.add('on'); it.el.remove(); items.delete(p.id);
       setCore(--left, left ? '남음' : '정렬 완료');
     }));
   });
   await Promise.all(flights);
   for (const l of planetsEl.querySelectorAll('.blabel')) l.classList.add('on');
-  spin = .25; glow = 0; sphereN = 0; sphereSeq = 0;
+  spin = .035; glow = .28;
   setCore(0, '정렬 완료', '완료');
   await sleep(900);
   setCore(undefined, undefined, null);
@@ -798,7 +896,7 @@ planetsEl.addEventListener('click', e => {
 
 // ─────────── 사진 올리기 → 읽기 → Claude 판단 → 행성 ───────────
 async function ingest(files, demoList) {
-  if (S.busy) { toast('정렬 중'); return; }
+  if (S.busy) { toast('처리 중'); return; }
   let todo = [];
   if (!demoList) {
     files = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
@@ -808,25 +906,23 @@ async function ingest(files, demoList) {
     todo = files.filter(f => !seen.has(`${f.name}|${f.size}|${f.lastModified}`));
     if (!todo.length) { toast('이미 추가된 사진'); return; }
   }
-  // 한 번 올리기 = 한 장소의 답사. 지금 답사에 사진이 있으면 새 답사로 시작한다.
-  const cur = S.sites.get(S.siteId);
-  if (!cur || (!demoList && sitePhotos().length) || (demoList && !cur.demo)) newSite(!!demoList);
-  const site = S.sites.get(S.siteId);
+  // 한 건물의 사진을 계속 더한다. 새 건물은 「새 답사」로 시작한다.
+  let site = S.sites.get(S.siteId);
+  if (!site || !!site.demo !== !!demoList) site = newSite(!!demoList);
   S.busy = true; closeAsk(); updateButtons(); $('intro').hidden = true;
-  if (planetsEl.childElementCount) await gatherExisting(); else { clearItems(); sphereStage(); }
-  spin = .35;
-  const total = demoList ? demoList.length : todo.length;
+  if (planetsEl.querySelector('.bubble')) await gatherExisting();
+  showGalaxy();
+  const total = demoList ? demoList.length : todo.length, size = tileFor(sitePhotos().length + total);
   let done = 0, failed = 0, heic = 0, bigger = 0, saved = 0;
   setCore(0, `/ ${total}`, '사진 읽는 중');
   const added = [];
   const enter = p => {
-    const w = stage.clientWidth, h = Math.min(stage.clientHeight, innerHeight), a = Math.random() * 6.283;
-    sphereN = Math.max(sphereN, total);
-    toSphere(makeItem(p, w / 2 + Math.cos(a) * w * .75, h / 2 + Math.sin(a) * h * .75, tileFor(total)), 1200);
+    const w = stage.clientWidth, h = Math.min(stage.clientHeight, innerHeight), a = rnd() * 6.283;
+    toGalaxy(makeItem(p, w / 2 + Math.cos(a) * w * .7, h / 2 + Math.sin(a) * h * .7, size), 1400);
   };
   try {
     if (demoList) {
-      for (const p of demoList) { p.siteId = site.id; S.photos.set(p.id, p); added.push(p); enter(p); done++; setCore(done, `/ ${total}`); await sleep(70); }
+      for (const p of demoList) { p.siteId = site.id; p.pending = true; S.photos.set(p.id, p); added.push(p); enter(p); done++; setCore(done, `/ ${total}`); await sleep(60); }
     } else {
       const queue = [...todo];
       const worker = async () => {
@@ -835,6 +931,7 @@ async function ingest(files, demoList) {
           try {
             if (isHeic(f)) heic++;
             const p = await processFile(f, site.id);
+            p.pending = true;
             if (p.origW > MAX_W) { bigger++; saved += Math.max(0, p.origSize - p.size); }
             S.photos.set(p.id, p); added.push(p); savePhoto(p); enter(p);
           } catch (e) { console.warn('읽기 실패', f.name, e); failed++; }
@@ -843,35 +940,43 @@ async function ingest(files, demoList) {
       };
       await Promise.all([worker(), worker()]);
     }
-    refreshSite(site); saveSite(site); renderSiteBar();
-    await sleep(500);
-    // Claude가 사진을 본다: 보고 있는 사진이 빛난다 (Claude를 쓸 수 없는 곳에서는 건너뛴다)
-    if (!demoList && !(await sampler())) aiOff = aiOff || 'unavailable';
-    if (!aiOff || demoList) setCore(0, `/ ${added.length}`, '요소 판단 중');
-    spin = .45;
-    let scanTimer = setInterval(() => {
-      for (const it of items.values()) it.el.classList.remove('scan');
-      const arr = [...items.values()]; for (let k = 0; k < 3 && arr.length; k++) arr[Math.random() * arr.length | 0].el.classList.add('scan');
-    }, 380);
-    let res;
-    try {
-      res = demoList ? await demoClassify(added, n => setCore(n, `/ ${added.length}`))
-                     : await classify(added, n => setCore(n, `/ ${added.length}`));
-    } finally { clearInterval(scanTimer); }
-    for (const p of added) savePhoto(p);
+    refreshSite(site); saveSite(site); renderSiteBar(); renderSiteCard();
+    const msg = [`+${added.length}장`];
+    if (bigger) msg.push(`${bigger}장 ${MAX_W}px로 축소 · −${(saved / 1048576).toFixed(1)}MB`);
+    if (failed) msg.push(`실패 ${failed}장`);
+    if (!demoList && added.length && !added.some(p => p.gps)) msg.push('위치 정보 없음');
+    toast(msg.join(' · '), 4000);
+  } finally {
+    S.busy = false; updateButtons();
+    const pend = sitePhotos().filter(p => p.pending).length;
+    setCore(pend, '분류 대기', null);
+  }
+}
+// 「분류」: 쌓아 둔 사진을 Claude가 보고 요소별 버블로 보낸다
+async function sortNow() {
+  const pend = sitePhotos().filter(p => p.pending);
+  if (S.busy || !pend.length) return;
+  const site = S.sites.get(S.siteId);
+  S.busy = true; closeAsk(); updateButtons();
+  try {
+    showGalaxy();
+    const demo = pend.every(p => p.demo);
+    if (!demo && !(await sampler())) aiOff = aiOff || 'unavailable';
+    let res = { used: false, reason: aiOff };
+    if (demo || !aiOff) {
+      setCore(0, `/ ${pend.length}`, '요소 판단 중'); spin = .12;
+      const scan = setInterval(() => { for (const it of items.values()) it.el.classList.remove('scan'); const arr = [...items.values()]; for (let k = 0; k < 3 && arr.length; k++) arr[rnd() * arr.length | 0].el.classList.add('scan'); }, 380);
+      try { res = demo ? await demoClassify(pend, n => setCore(n, `/ ${pend.length}`)) : await classify(pend, n => setCore(n, `/ ${pend.length}`)); }
+      finally { clearInterval(scan); for (const it of items.values()) it.el.classList.remove('scan'); }
+    } else for (const p of pend) markAsk(p);
+    for (const p of pend) { p.pending = false; savePhoto(p); }
     await sortShow();
     S.busy = false; clearItems(); renderPlanets();
-    const asks = added.filter(p => p.ask).length;
-    const msg = [`${added.length}장`];
-    if (bigger) msg.push(`${bigger}장 ${MAX_W}px로 축소 · −${(saved / 1048576).toFixed(1)}MB`);
-    if (!res.used && ON_ARTIFACT) msg.push(res.reason === 'not_granted' ? 'Claude 미허용 · 직접 선택' : res.reason === 'rate_limited' ? 'Claude 사용량 초과 · 직접 선택' : 'Claude 사용 불가 · 직접 선택');
-    if (failed) msg.push(`실패 ${failed}장`);
-    if (!added.some(p => p.gps) && !demoList) msg.push('위치 정보 없음');
-    toast(msg.join(' · '), 6000);
-    if (asks) openAsk();
-    else if (site.center) setTimeout(() => { if (!S.busy && !M3.on && $('lb').hidden) openMap(); }, 2200);
-  } finally { S.busy = false; clearItems(); updateButtons(); }
+    if (!res.used && ON_ARTIFACT && !demo) toast(res.reason === 'not_granted' ? 'Claude 미허용 · 직접 선택' : res.reason === 'rate_limited' ? 'Claude 사용량 초과 · 직접 선택' : 'Claude 사용 불가 · 직접 선택', 4000);
+    if (askList().length) openAsk();
+  } finally { S.busy = false; updateButtons(); }
 }
+$('sortBtn').addEventListener('click', sortNow);
 $('fileIn').addEventListener('change', e => { const f = [...e.target.files]; e.target.value = ''; ingest(f); });
 async function filesFromDrop(dt) {
   const entries = [...(dt.items || [])].map(i => i.webkitGetAsEntry?.()).filter(Boolean);
@@ -986,8 +1091,33 @@ $('demoBtn').addEventListener('click', loadDemo);
 
 // ─────────── 답사 고르기·이름·새 답사·지우기 ───────────
 $('siteSel').addEventListener('change', e => { if (S.busy) return; S.siteId = e.target.value; saveSettings(); closeAsk(); clearItems(); renderPlanets(); });
-$('siteName').addEventListener('change', e => { const s = S.sites.get(S.siteId), v = e.target.value.trim(); if (s && v) { s.name = v; saveSite(s); renderSiteBar(); setCore($('coreNum').textContent, $('coreLabel').textContent); } });
-$('siteName').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+// 답사 정보: 이름 · 일자 · 주소 (한 번에 한 건물)
+function renderSiteCard() {
+  const s = S.sites.get(S.siteId), card = $('siteCard');
+  card.hidden = !s || !sitePhotos().length || M3.on;
+  if (card.hidden) return;
+  const act = document.activeElement;
+  if (act !== $('scName')) $('scName').value = s.name || '';
+  if (act !== $('scDate')) $('scDate').value = s.date || (s.start || '').slice(0, 10);
+  if (act !== $('scAddr')) $('scAddr').value = s.address || '';
+  const g = sitePhotos().filter(p => p.gps).length;
+  $('scLoc').textContent = s.addrCenter ? `주소 위치 ${s.addrCenter[1].toFixed(5)}, ${s.addrCenter[0].toFixed(5)}` : g ? `GPS ${g}장` : s.manualCenter ? '직접 입력 위치' : '위치 없음';
+  $('scLoc').classList.toggle('warn', !s.addrCenter && !g && !s.manualCenter);
+}
+$('scName').addEventListener('change', e => { const s = S.sites.get(S.siteId), v = e.target.value.trim(); if (s && v) { s.name = v; saveSite(s); renderSiteBar(); } });
+$('scDate').addEventListener('change', e => { const s = S.sites.get(S.siteId); if (s) { s.date = e.target.value || null; saveSite(s); } });
+$('scAddr').addEventListener('change', async e => {
+  const s = S.sites.get(S.siteId); if (!s) return;
+  s.address = e.target.value.trim() || null; s.addrCenter = null; saveSite(s);
+  if (s.address) {
+    const ll = parseLatLon(s.address);
+    if (ll) s.addrCenter = ll;
+    else if (!ON_ARTIFACT && VW.key()) { $('scLoc').textContent = '주소 찾는 중'; s.addrCenter = await geocode(s.address).catch(() => null); if (!s.addrCenter) toast('주소를 찾지 못함'); }
+    saveSite(s);
+  }
+  renderSiteCard();
+});
+for (const id of ['scName', 'scDate', 'scAddr']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
 $('newSiteBtn').addEventListener('click', () => {
   if (S.busy) return;
   if ([...S.photos.values()].some(p => p.demo)) dropDemo();
@@ -1092,7 +1222,7 @@ async function exportZip() {
     const site = S.sites.get(S.siteId), root = safe(site?.name || '답사');
     const entries = [], rows = [['답사', '건축요소', '분류 방법', 'Claude 판단', 'Claude 확신', 'Claude 메모', '파일', '원본 파일명', '촬영시각', '위도', '경도', '방향(도)', '기종', '가로', '세로', '촬영위치(지도) 위도', '촬영위치(지도) 경도', '바라본 방향(지도)', '대상 건물 주소', '대상 건물 용도', '대상 건물 층수', '대상 건물 사용승인연도']];
     const meta = { app: 'photo-sorting', format: 2, exportedAt: new Date().toISOString(),
-      site: { name: site?.name, start: site?.start, end: site?.end, center: site?.center }, elements: [] };
+      site: { name: site?.name, date: site?.date || (site?.start || '').slice(0, 10) || null, address: site?.address || null, addressPoint: site?.addrCenter || null, start: site?.start, end: site?.end, center: site?.center }, elements: [] };
     for (const [i, pl] of planetList().entries()) {
       const folder = `${root}/${pad(i + 1)}_${safe(pl.name)}`, used = new Set(), group = { element: pl.name, photos: [] };
       for (const p of photosOf(pl.id)) {
@@ -1213,7 +1343,8 @@ const elColor = p => p.element ? colorOf(p.element)[0] : '#8E8E93';
 async function openMap() {
   const site = S.sites.get(S.siteId);
   if (!site) return;
-  const center = site.center || site.manualCenter;
+  if (!site.addrCenter && site.address && !ON_ARTIFACT && VW.key()) site.addrCenter = await geocode(site.address).catch(() => null);
+  const center = site.addrCenter || site.center || site.manualCenter;
   if (!center) { $('map').hidden = false; status(null); $('strip').hidden = true; $('minfo').hidden = true; $('mapHint').hidden = true; $('locForm').hidden = false; $('locErr').hidden = true; $('mapTitle').textContent = site.name || ''; $('locInput').focus(); return; }
   if (M3.on || S.busy) return;
   if (!ON_ARTIFACT && !VW.key()) { openKeyForm(); return; }
@@ -1221,7 +1352,7 @@ async function openMap() {
   $('keyBtn').hidden = ON_ARTIFACT;
   M3.on = true; $('map').hidden = false; $('strip').hidden = true; $('minfo').hidden = true; $('mapHint').hidden = true; $('gpsAllBtn').hidden = true;
   $('locForm').hidden = true;
-  $('mapTitle').innerHTML = `${esc(site.name)}<small>${center[1].toFixed(4)}, ${center[0].toFixed(4)}${site.center ? '' : ' · 직접 입력'}</small>`;
+  $('mapTitle').innerHTML = `${esc(site.name)}<small>${center[1].toFixed(4)}, ${center[0].toFixed(4)}${site.addrCenter ? ' · 주소' : site.center ? '' : ' · 직접 입력'}</small>`;
   status('불러오는 중', '');
   try { await loadThree(); } catch (e) { status('3D 불러오기 실패', e.message); M3.on = false; return; }
   if (ON_ARTIFACT && !window.DecompressionStream) { status('지원하지 않는 브라우저', '최신 Safari·Chrome 필요'); M3.on = false; return; }
@@ -1527,7 +1658,7 @@ addEventListener('keydown', e => { if (M3.on && e.key === 'Escape' && $('lb').hi
 const ON_ARTIFACT = !!window.claude?.use;
 const VW = {
   layer: 'LT_C_SPBD',
-  key() { try { return localStorage.getItem('ps.vworldKey') || ''; } catch (e) { return ''; } },
+  key() { if (window.PS_CONFIG?.vworldKey) return window.PS_CONFIG.vworldKey; try { return localStorage.getItem('ps.vworldKey') || ''; } catch (e) { return ''; } },
   setKey(k) { try { localStorage.setItem('ps.vworldKey', k); } catch (e) {} }
 };
 let jsonpSeq = 0;
@@ -1579,6 +1710,18 @@ async function vworldBuildings([lon, lat], R) {
   }
   return out;
 }
+// 주소 → 좌표 (브이월드 지오코더: 도로명, 안 되면 지번)
+async function geocode(addr) {
+  for (const type of ['road', 'parcel']) {
+    const q = new URLSearchParams({ service: 'address', request: 'getcoord', version: '2.0', crs: 'epsg:4326', address: addr, refine: 'true', simple: 'false', format: 'json', type, key: VW.key() });
+    const r = await vwGet('https://api.vworld.kr/req/address?' + q);
+    const pt = r?.response?.status === 'OK' ? r.response.result?.point : null;
+    if (pt && +pt.x && +pt.y) return [+(+pt.x).toFixed(6), +(+pt.y).toFixed(6)];
+  }
+  return null;
+}
+// 주소창에 ?key=… 를 붙여 열면 이 브라우저에 저장하고 주소에서 지운다
+try { const u = new URL(location.href), k = u.searchParams.get('key'); if (k) { VW.setKey(k); u.searchParams.delete('key'); history.replaceState(null, '', u); } } catch (e) {}
 function openKeyForm() {
   $('map').hidden = false; status(null); ['strip', 'minfo', 'mapHint', 'locForm'].forEach(id => ($(id).hidden = true));
   $('keyForm').hidden = false; $('keyErr').hidden = true; $('keyInput').value = VW.key(); $('keyInput').focus();
