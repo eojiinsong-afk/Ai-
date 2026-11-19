@@ -193,6 +193,7 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 .abmap svg path { fill: #1C1C1E; stroke: #48484A; stroke-width: .012; }
 .abtiles { position: absolute; inset: 0; }
 .mapon #stage { visibility: hidden; }
+.attrib { position: absolute; right: 10px; bottom: calc(136px + env(safe-area-inset-bottom, 0px)); font-size: 10px; color: var(--label-2); text-shadow: 0 1px 3px #000; pointer-events: none; }
 .ovcards { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .ovc { position: absolute; left: 0; top: 0; border: 0; padding: 0; background: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: auto; will-change: transform; }
 .ovc .ai { position: relative; width: 62px; height: 62px; border-radius: 14px; display: block; background: var(--bg-2); box-shadow: 0 0 0 2px #fff, 0 8px 22px rgba(0,0,0,.6); transition: transform .2s; }
@@ -448,12 +449,14 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 <section class="map" id="map" hidden aria-label="지도">
   <canvas id="gl"></canvas>
   <div class="ovcards" id="ovCards" hidden></div>
+  <div class="attrib" id="attrib" hidden></div>
   <div class="ovpick" id="ovPick" hidden></div>
   <div class="veil" id="veil"></div>
   <div class="map-top">
     <button type="button" class="homelink" data-home aria-label="처음 화면 · 사진 추가">Photo Sorting</button>
     <div class="map-title" id="mapTitle"></div>
     <button class="btn small" id="gpsAllBtn" type="button" hidden>GPS 적용</button>
+    <button class="btn small" id="baseBtn" type="button" hidden>바닥 지도</button>
     <button class="btn small" id="keyBtn" type="button" hidden>인증키</button>
     <button class="btn small" id="ovBack" type="button" hidden>전체 지도</button>
     <button class="btn small" id="mapBack" type="button">닫기</button>
@@ -1698,6 +1701,7 @@ async function openMap(fromOv) {
   status('건물 불러오는 중', '');
   const blds = await bP;
   try { buildLocal(blds || []); } catch (e) { console.error(e); status('3D 생성 실패', e.message); return; }
+  M3.baseLL = center; loadBaseMap();
   $('veil').classList.remove('on');
   status(null);
   $('strip').hidden = false; renderStrip();
@@ -1839,6 +1843,72 @@ async function flyGlobe([lon, lat]) {
   await globeFly(gs, from, { lon, lat, d: 1.035, look: pin }, reduceMotion ? 1 : M3.ov ? 2200 : 4600, now => dot.scale.setScalar(1 + .5 * Math.sin(now / 160)));
 }
 
+// ─────────── 바닥 지도: 도로·물길·지형 (웹 버전, 타일 이미지를 땅에 깐다) ───────────
+// 브이월드 배경지도(야간·위성)를 먼저, 안 되면 공개 지도(OSM·Esri)로. 5179 장면 좌표 → 경위도 → 메르카토르 타일 픽셀로 맞춘다.
+const BASE_MODES = ['off', 'map', 'sat'], BASE_LABEL = { off: '바닥 없음', map: '바닥 지도', sat: '바닥 위성' };
+let baseMode = (() => { try { return localStorage.getItem('ps.base') || 'map'; } catch (e) { return 'map'; } })();
+function baseProviders(mode) {
+  const k = VW.key(), L = [];
+  if (k) L.push(mode === 'sat'
+    ? { name: '브이월드 위성', url: (z, x, y) => `https://api.vworld.kr/req/wmts/1.0.0/${k}/Satellite/${z}/${y}/${x}.jpeg`, filter: 'brightness(.85)' }
+    : { name: '브이월드', url: (z, x, y) => `https://api.vworld.kr/req/wmts/1.0.0/${k}/midnight/${z}/${y}/${x}.png`, filter: 'none' });
+  L.push(mode === 'sat'
+    ? { name: 'Esri World Imagery', url: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`, filter: 'brightness(.85)' }
+    : { name: 'OpenStreetMap', url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`, filter: 'invert(1) hue-rotate(180deg) brightness(.75) contrast(.9) saturate(.6)' });
+  return L;
+}
+const merc = (lon, lat, z) => { const n = 256 * 2 ** z, a = lat * D2R; return [(lon + 180) / 360 * n, (1 - Math.log(Math.tan(a) + 1 / Math.cos(a)) / Math.PI) / 2 * n]; };
+function loadImg(url, ms = 9000) {
+  return new Promise((res, rej) => { const im = new Image(); im.crossOrigin = 'anonymous'; const t = setTimeout(() => { im.src = ''; rej(new Error('timeout')); }, ms); im.onload = () => { clearTimeout(t); res(im); }; im.onerror = () => { clearTimeout(t); rej(new Error('load')); }; im.src = url; });
+}
+async function loadBaseMap() {
+  $('baseBtn').hidden = ON_ARTIFACT; $('attrib').hidden = true;
+  if (M3.baseMesh) { M3.scene.remove(M3.baseMesh); M3.baseMesh.geometry.dispose(); M3.baseMesh.material.map?.dispose(); M3.baseMesh.material.dispose(); M3.baseMesh = null; }
+  if (M3.grid) M3.grid.visible = true;
+  if (M3.ground) M3.ground.material.visible = true;
+  $('baseBtn').textContent = BASE_LABEL[baseMode];
+  if (ON_ARTIFACT || baseMode === 'off' || !M3.scene) return;
+  const seq = ++loadBaseMap.seq, R = 620, Z = 17;
+  // 장면 네 모서리 → 경위도 → 타일 범위
+  const ll = (x, z) => { const [X, Y] = toWorld(x, z); return TM.inv(X, Y); };
+  const cs = [[-R, -R], [R, -R], [R, R], [-R, R]].map(([x, z]) => merc(...ll(x, z), Z));
+  const tx0 = Math.floor(Math.min(...cs.map(c => c[0])) / 256), tx1 = Math.floor(Math.max(...cs.map(c => c[0])) / 256);
+  const ty0 = Math.floor(Math.min(...cs.map(c => c[1])) / 256), ty1 = Math.floor(Math.max(...cs.map(c => c[1])) / 256);
+  const W = (tx1 - tx0 + 1) * 256, H = (ty1 - ty0 + 1) * 256;
+  let canvas = null, used = null;
+  for (const pv of baseProviders(baseMode)) {
+    try {
+      await loadImg(pv.url(Z, tx0, ty0)); // 첫 장으로 접속·허용 여부 확인
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+      g.fillStyle = '#141416'; g.fillRect(0, 0, W, H); g.filter = pv.filter;
+      const jobs = [];
+      for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) jobs.push(loadImg(pv.url(Z, tx, ty)).then(im => g.drawImage(im, (tx - tx0) * 256, (ty - ty0) * 256)).catch(() => {}));
+      await Promise.all(jobs);
+      cv.getContext('2d').getImageData(0, 0, 1, 1); // 다른 출처 이미지로 막혔는지 확인
+      canvas = cv; used = pv; break;
+    } catch (e) { console.warn('바닥 지도', pv.name, e.message); }
+  }
+  if (seq !== loadBaseMap.seq || !M3.on || !M3.scene) return;
+  if (!canvas) { hint('바닥 지도 불러오기 실패', 3000); return; }
+  const geo = new THREE.PlaneGeometry(2 * R, 2 * R, 48, 48); geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position, uv = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) { const [px, py] = merc(...ll(pos.getX(i), pos.getZ(i)), Z); uv.setXY(i, (px - tx0 * 256) / W, 1 - (py - ty0 * 256) / H); }
+  uv.needsUpdate = true;
+  const tex = new THREE.CanvasTexture(canvas); tex.anisotropy = M3.gl.capabilities.getMaxAnisotropy();
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, fog: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
+  mesh.position.y = .03; mesh.renderOrder = -1; M3.scene.add(mesh); M3.baseMesh = mesh;
+  if (M3.grid) M3.grid.visible = false;
+  if (M3.ground) M3.ground.material.visible = false; // 클릭 판정용으로는 남는다
+  const t0 = performance.now(); (function fade(now) { if (M3.baseMesh !== mesh) return; mesh.material.opacity = Math.min(1, (now - t0) / 700); if (mesh.material.opacity < 1) requestAnimationFrame(fade); })(t0);
+  $('attrib').hidden = false; $('attrib').textContent = '© ' + used.name;
+}
+loadBaseMap.seq = 0;
+$('baseBtn').addEventListener('click', () => {
+  baseMode = BASE_MODES[(BASE_MODES.indexOf(baseMode) + 1) % BASE_MODES.length];
+  try { localStorage.setItem('ps.base', baseMode); } catch (e) {}
+  loadBaseMap();
+});
+
 // ─────────── 전체 지도: 지구가 돌아 한국 전체, 답사마다 대표 사진이 떠 있다 ───────────
 const KOREA = { lon: 127.6, lat: 36.1 };
 function ovSites() { return [...S.sites.values()].filter(s => s.count && !s.demo && siteLoc(s)); }
@@ -1847,7 +1917,7 @@ async function openOverview() {
   if (M3.on) closeMap(true);
   closeAsk(); closeLb();
   M3.on = true; M3.view = 'overview'; M3.ov = true; document.body.classList.add('mapon');
-  $('map').hidden = false; ['strip', 'minfo', 'mapHint', 'locForm', 'keyForm', 'gpsAllBtn', 'ovBack'].forEach(id => ($(id).hidden = true));
+  $('map').hidden = false; ['strip', 'minfo', 'mapHint', 'locForm', 'keyForm', 'gpsAllBtn', 'ovBack', 'baseBtn', 'attrib'].forEach(id => ($(id).hidden = true));
   $('keyBtn').hidden = true;
   const L = ovSites(), lost = [...S.sites.values()].filter(s => s.count && !s.demo && !siteLoc(s)).length;
   $('mapTitle').innerHTML = `전체 답사<small>${L.length}곳 · ${L.reduce((t, s) => t + s.count, 0)}장${lost ? ` · 위치 없음 ${lost}` : ''}</small>`;
@@ -1919,7 +1989,8 @@ function buildLocal(blds) {
   const sun = new THREE.DirectionalLight(0xFFF1DD, .75); sun.position.set(300, 600, 200); scene.add(sun);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshLambertMaterial({ color: 0x141416 }));
   ground.rotation.x = -Math.PI / 2; ground.name = 'ground'; scene.add(ground); M3.ground = ground;
-  const grid = new THREE.GridHelper(1000, 40, 0x2C2C2E, 0x1C1C1E); grid.position.y = .05; scene.add(grid);
+  const grid = new THREE.GridHelper(1000, 40, 0x2C2C2E, 0x1C1C1E); grid.position.y = .05; scene.add(grid); M3.grid = grid;
+  M3.baseMesh = null;
   const ring = new THREE.Mesh(new THREE.RingGeometry(448, 452, 96), new THREE.MeshBasicMaterial({ color: 0x3A3A3C, side: THREE.DoubleSide }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = .06; scene.add(ring);
   // 건물을 한 덩어리로 합친다 (그리는 횟수를 줄이려고). 꼭짓점마다 주인 건물 번호를 기억해 클릭에 쓴다.
