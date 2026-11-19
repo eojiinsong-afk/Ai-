@@ -419,6 +419,7 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
   <div class="actions">
     <div class="grp grp-proj" aria-label="이 답사">
       <button class="btn ask" id="askBtn" type="button" hidden>확인 0</button>
+      <button class="btn proj" id="noneBtn" type="button" hidden>미분류 분류</button>
       <button class="btn proj" id="replayBtn" type="button" disabled>다시 정렬</button>
       <label class="btn proj" for="fileIn">사진 추가</label>
       <button class="btn primary" id="sortBtn" type="button" hidden>분류</button>
@@ -870,7 +871,8 @@ JSON으로만 답하세요 ({"items": [...]}). second가 없으면 빈 문자열
         if (Array.isArray(r?.tags)) { const user = (p.tags || []).filter(t => p.userTags?.includes(t)); p.tags = [...new Set([...user, ...r.tags.filter(t => typeof t === 'string').map(t => t.trim().replace(/\s+/g, '')).filter(Boolean).slice(0, 14)])]; }
         if (opt.tagsOnly) { savePhoto(p); return; }
         if (p.by === 'user') return;
-        if (p.aiElement && conf >= SURE) { p.element = p.aiElement; p.by = 'ai'; p.ask = false; }
+        // 가장 그럴듯한 요소로 바로 넣고, 확신이 낮은 것만 '확인' 표시 (미분류로 두지 않는다)
+        if (p.aiElement) { p.element = p.aiElement; p.by = 'ai'; p.ask = conf < SURE; }
         else markAsk(p);
       });
     } catch (e) {
@@ -1194,6 +1196,8 @@ function updateButtons() {
   $('clearBtn').hidden = !n; $('clearBtn').disabled = S.busy; $('fileIn').disabled = S.busy;
   $('newSiteBtn').hidden = !n; $('newSiteBtn').disabled = S.busy;
   $('askBtn').hidden = !asks || S.busy || !$('ask').hidden; $('askBtn').textContent = `확인 ${asks}`;
+  const none = sitePhotos().filter(p => !p.element && !p.pending && !p.demo).length;
+  $('noneBtn').hidden = !none || S.busy; $('noneBtn').textContent = `미분류 ${none} · Claude로 분류`;
   $('siteSel').disabled = S.busy;
   $('mapBtn').hidden = ![...S.sites.values()].some(s => s.count && !s.demo); $('mapBtn').disabled = S.busy;
   $('siteMapBtn').hidden = !n; $('siteMapBtn').disabled = S.busy;
@@ -1417,10 +1421,19 @@ async function sortNow() {
     S.busy = false; clearItems(); renderPlanets();
     if (!res.used && !demo) toast(res.reason === 'bad_key' ? 'Claude 키 확인 필요 · 직접 선택' : res.reason === 'not_granted' ? 'Claude 미허용 · 직접 선택' : res.reason === 'rate_limited' ? 'Claude 사용량 초과 · 직접 선택' : !ON_ARTIFACT && !CK.key() ? 'Claude 키 없음 · 직접 선택 (요소 → Claude 키)' : 'Claude 사용 불가 · 직접 선택', 5000);
     else if (res.used && !demo) refineDefs();
-    if (askList().length) openAsk();
+    if (sitePhotos().some(p => !p.element)) openAsk();
   } finally { S.busy = false; updateButtons(); }
 }
 $('sortBtn').addEventListener('click', sortNow);
+// 남아 있는 미분류(예전에 Claude 없이 올린 사진 등)를 다시 맡긴다
+$('noneBtn').addEventListener('click', async () => {
+  if (S.busy) return;
+  if (!ON_ARTIFACT && !CK.key()) { toast('Claude 키 없음 · 요소 → Claude 키', 4000); openElSheet(); return; }
+  aiOff = null; samplerP = null;
+  const L = sitePhotos().filter(p => !p.element && !p.demo);
+  for (const p of L) { p.pending = true; p.ask = false; }
+  clearItems(); renderPlanets(); await sortNow();
+});
 $('fileIn').addEventListener('change', e => { const f = [...e.target.files]; e.target.value = ''; ingest(f); });
 async function filesFromDrop(dt) {
   const entries = [...(dt.items || [])].map(i => i.webkitGetAsEntry?.()).filter(Boolean);
