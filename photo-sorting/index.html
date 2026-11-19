@@ -279,9 +279,17 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
   <div class="map-top">
     <div class="map-title" id="mapTitle"></div>
     <button class="btn small" id="gpsAllBtn" type="button" hidden>GPS 적용</button>
+    <button class="btn small" id="keyBtn" type="button" hidden>인증키</button>
     <button class="btn small" id="mapBack" type="button">닫기</button>
   </div>
   <div class="map-status" id="mapStatus"><b id="mapStatusB"></b><span id="mapStatusS"></span></div>
+  <form class="loc-form" id="keyForm" hidden>
+    <h3>브이월드 인증키</h3>
+    <input id="keyInput" placeholder="인증키" autocomplete="off">
+    <p class="loc-err" id="keyErr" hidden></p>
+    <div class="row"><button class="btn primary" type="submit">저장</button><button class="btn" type="button" id="keyCancel">취소</button></div>
+    <p class="hint">vworld.kr 인증키 · 서비스 URL에 이 페이지 주소 등록 · 이 브라우저에만 저장</p>
+  </form>
   <form class="loc-form" id="locForm" hidden>
     <h3>위치 없음</h3>
     <p>위도, 경도 또는 구글 지도 링크</p>
@@ -828,8 +836,9 @@ async function ingest(files, demoList) {
     }
     refreshSite(site); saveSite(site); renderSiteBar();
     await sleep(500);
-    // Claude가 사진을 본다: 보고 있는 사진이 빛난다
-    setCore(0, `/ ${added.length}`, '요소 판단 중');
+    // Claude가 사진을 본다: 보고 있는 사진이 빛난다 (Claude를 쓸 수 없는 곳에서는 건너뛴다)
+    if (!demoList && !(await sampler())) aiOff = aiOff || 'unavailable';
+    if (!aiOff || demoList) setCore(0, `/ ${added.length}`, '요소 판단 중');
     spin = .45;
     let scanTimer = setInterval(() => {
       for (const it of items.values()) it.el.classList.remove('scan');
@@ -846,7 +855,7 @@ async function ingest(files, demoList) {
     const asks = added.filter(p => p.ask).length;
     const msg = [`${added.length}장`];
     if (bigger) msg.push(`${bigger}장 ${MAX_W}px로 축소 · −${(saved / 1048576).toFixed(1)}MB`);
-    if (!res.used) msg.push(res.reason === 'not_granted' ? 'Claude 미허용 · 직접 선택' : res.reason === 'rate_limited' ? 'Claude 사용량 초과 · 직접 선택' : 'Claude 사용 불가 · 직접 선택');
+    if (!res.used && ON_ARTIFACT) msg.push(res.reason === 'not_granted' ? 'Claude 미허용 · 직접 선택' : res.reason === 'rate_limited' ? 'Claude 사용량 초과 · 직접 선택' : 'Claude 사용 불가 · 직접 선택');
     if (failed) msg.push(`실패 ${failed}장`);
     if (!added.some(p => p.gps) && !demoList) msg.push('위치 정보 없음');
     toast(msg.join(' · '), 6000);
@@ -1198,17 +1207,19 @@ async function openMap() {
   const center = site.center || site.manualCenter;
   if (!center) { $('map').hidden = false; status(null); $('strip').hidden = true; $('minfo').hidden = true; $('mapHint').hidden = true; $('locForm').hidden = false; $('locErr').hidden = true; $('mapTitle').textContent = site.name || ''; $('locInput').focus(); return; }
   if (M3.on || S.busy) return;
+  if (!ON_ARTIFACT && !VW.key()) { openKeyForm(); return; }
   closeAsk(); closeLb();
+  $('keyBtn').hidden = ON_ARTIFACT;
   M3.on = true; $('map').hidden = false; $('strip').hidden = true; $('minfo').hidden = true; $('mapHint').hidden = true; $('gpsAllBtn').hidden = true;
   $('locForm').hidden = true;
   $('mapTitle').innerHTML = `${esc(site.name)}<small>${center[1].toFixed(4)}, ${center[0].toFixed(4)}${site.center ? '' : ' · 직접 입력'}</small>`;
   status('불러오는 중', '');
   try { await loadThree(); } catch (e) { status('3D 불러오기 실패', e.message); M3.on = false; return; }
-  if (!window.DecompressionStream) { status('지원하지 않는 브라우저', '최신 Safari·Chrome 필요'); M3.on = false; return; }
+  if (ON_ARTIFACT && !window.DecompressionStream) { status('지원하지 않는 브라우저', '최신 Safari·Chrome 필요'); M3.on = false; return; }
   if (!M3.gl) initGL();
   M3.center = TM.fwd(center[0], center[1]);
   let loadErr = '';
-  const bP = loadBuildings(M3.center[0], M3.center[1], 450).catch(e => { console.warn(e); loadErr = e.message; return null; });
+  const bP = (ON_ARTIFACT ? loadBuildings(M3.center[0], M3.center[1], 450) : vworldBuildings(center, 450)).catch(e => { console.warn(e); loadErr = e.message; return null; });
   try { await flyGlobe(center); } catch (e) { console.error(e); }
   $('veil').classList.add('on'); await sleep(450);
   status('건물 불러오는 중', '');
@@ -1222,7 +1233,7 @@ async function openMap() {
   else hint(`건물 ${blds.length.toLocaleString()}동`, 3000);
 }
 function closeMap() {
-  $('locForm').hidden = true;
+  $('locForm').hidden = true; $('keyForm').hidden = true;
   M3.on = false; cancelAnimationFrame(M3.raf); M3.mode = null; M3.sel = null;
   $('map').hidden = true; renderPlanets();
 }
@@ -1501,6 +1512,77 @@ $('gpsAllBtn').addEventListener('click', () => {
 });
 $('stripList').addEventListener('click', e => { const b = e.target.closest('[data-mp]'); if (b) selectPhoto(b.dataset.mp); });
 addEventListener('keydown', e => { if (M3.on && e.key === 'Escape' && $('lb').hidden && M3.mode) { M3.mode = null; M3.preview.clear(); highlightBuilding(null); hint('취소', 1200); } });
+
+// ─────────── 브이월드 (GitHub Pages 등 일반 웹페이지에서) ───────────
+// Claude 아티팩트 안에서는 외부 요청이 막혀 있어 올려 둔 데이터 파일을, 그 밖에서는 브이월드 데이터 API를 쓴다.
+const ON_ARTIFACT = !!window.claude?.use;
+const VW = {
+  layer: 'LT_C_SPBD',
+  key() { try { return localStorage.getItem('ps.vworldKey') || ''; } catch (e) { return ''; } },
+  setKey(k) { try { localStorage.setItem('ps.vworldKey', k); } catch (e) {} }
+};
+let jsonpSeq = 0;
+function jsonp(url, ms = 12000) {
+  return new Promise((res, rej) => {
+    const name = '__vw' + (++jsonpSeq) + '_' + Date.now(), s = document.createElement('script');
+    const done = (fn, v) => { clearTimeout(t); delete window[name]; s.remove(); fn(v); };
+    const t = setTimeout(() => done(rej, new Error('브이월드 응답 없음')), ms);
+    window[name] = d => done(res, d);
+    s.onerror = () => done(rej, new Error('브이월드 요청 실패'));
+    s.src = url + '&callback=' + name; document.head.appendChild(s);
+  });
+}
+async function vwGet(url) {
+  try { const r = await fetch(url); if (r.ok) return await r.json(); } catch (e) { /* CORS면 JSONP로 */ }
+  return jsonp(url);
+}
+const pick = (p, ...ks) => { for (const k of ks) { const v = p[k] ?? p[k.toUpperCase()]; if (v != null && v !== '') return v; } return null; };
+async function vworldBuildings([lon, lat], R) {
+  const key = VW.key(); if (!key) throw new Error('인증키 없음');
+  const dLat = R / 110540, dLon = R / (111320 * Math.cos(lat * D2R));
+  const box = `BOX(${(lon - dLon).toFixed(6)},${(lat - dLat).toFixed(6)},${(lon + dLon).toFixed(6)},${(lat + dLat).toFixed(6)})`;
+  const feats = [];
+  for (let page = 1, total = 1; feats.length < total && page <= 10; page++) {
+    const q = new URLSearchParams({ service: 'data', request: 'GetFeature', data: VW.layer, key, domain: location.origin, geomFilter: box,
+      size: '1000', page: String(page), crs: 'EPSG:4326', geometry: 'true', attribute: 'true', format: 'json' });
+    const r = await vwGet('https://api.vworld.kr/req/data?' + q);
+    const st = r?.response?.status;
+    if (st === 'NOT_FOUND') break;
+    if (st !== 'OK') throw new Error(r?.response?.error?.text || st || '응답 없음');
+    feats.push(...(r.response.result?.featureCollection?.features || []));
+    total = +(r.response.record?.total ?? r.response.page?.total ?? feats.length);
+    if (+(r.response.page?.total) && page >= +r.response.page.total) break;
+  }
+  const out = [];
+  for (const f of feats) {
+    const g = f.geometry, p = f.properties || {};
+    const polys = g?.type === 'Polygon' ? [g.coordinates] : g?.type === 'MultiPolygon' ? g.coordinates : [];
+    const floors = +pick(p, 'gro_flo_co', 'grnd_flr', 'flr_co') || 0, base = +pick(p, 'und_flo_co', 'ugrnd_flr') || 0;
+    const name = pick(p, 'buld_nm', 'bd_nm', 'bld_nm') || '', road = pick(p, 'rd_nm') || '', no = [pick(p, 'buld_mnnm'), pick(p, 'buld_slno')].filter(v => v && v !== '0').join('-');
+    const use = pick(p, 'bdtyp_nm', 'main_purps_cd_nm', 'buld_se_nm') || '';
+    const year = +String(pick(p, 'useapr_day', 'use_aprv_de') || '').slice(0, 4) || null;
+    for (const poly of polys) {
+      const ring = poly[0]; if (!ring || ring.length < 4) continue;
+      const pts = ring.slice(0, -1).map(([x, y]) => { const [X, Y] = TM.fwd(x, y); return [X - M3.center[0], Y - M3.center[1]]; });
+      if (Math.hypot(pts[0][0], pts[0][1]) > R) continue;
+      out.push({ pts, floors, base, h: +pick(p, 'height', 'buld_hg') || 0, use, year, addr: [road, no].filter(Boolean).join(' ') + (name ? ` ${name}` : ''), props: p });
+    }
+  }
+  return out;
+}
+function openKeyForm() {
+  $('map').hidden = false; status(null); ['strip', 'minfo', 'mapHint', 'locForm'].forEach(id => ($(id).hidden = true));
+  $('keyForm').hidden = false; $('keyErr').hidden = true; $('keyInput').value = VW.key(); $('keyInput').focus();
+}
+$('keyForm').addEventListener('submit', e => {
+  e.preventDefault(); const k = $('keyInput').value.trim();
+  if (!/^[0-9A-Za-z-]{20,}$/.test(k)) { $('keyErr').hidden = false; $('keyErr').textContent = '인증키 형식이 아님'; return; }
+  VW.setKey(k); $('keyForm').hidden = true;
+  if (M3.on) { closeMap(); }
+  openMap();
+});
+$('keyCancel').addEventListener('click', () => { $('keyForm').hidden = true; if (!M3.on) $('map').hidden = true; });
+$('keyBtn').addEventListener('click', openKeyForm);
 
 // 위치가 없는 답사: 위도·경도 또는 지도 링크를 붙여 넣어 위치를 정한다
 function parseLatLon(text) {
