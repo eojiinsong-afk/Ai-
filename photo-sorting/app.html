@@ -192,6 +192,7 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 .atile.on .ai { box-shadow: 0 0 0 3px var(--blue), 0 6px 16px rgba(0,0,0,.6); }
 .abpanel { border-left: .5px solid var(--sep); overflow-y: auto; padding: 12px 16px 24px; display: flex; flex-direction: column; gap: 18px; background: var(--material-solid); }
 .apart header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: .5px solid var(--sep); margin-bottom: 8px; }
+.apart header .aact { display: flex; flex-direction: row; gap: 6px; flex: none; }
 .apart header div { display: flex; flex-direction: column; min-width: 0; }
 .apart header b { font: 600 15px var(--display); }
 .apart header span { font-size: 12px; color: var(--label-2); }
@@ -1262,12 +1263,17 @@ $('clearBtn').addEventListener('click', async () => {
   const b = $('clearBtn');
   if (!clearArmed) { clearArmed = true; b.textContent = '삭제 확인'; setTimeout(() => { clearArmed = false; b.textContent = '삭제'; }, 3500); return; }
   clearArmed = false; b.textContent = '삭제';
-  const sid = S.siteId;
-  for (const [id, p] of S.photos) if (p.siteId === sid) { S.photos.delete(id); DB.del('photos', id); ['t', 'f'].forEach(k => { const u = urls.get(k + id); if (u) { URL.revokeObjectURL(u); urls.delete(k + id); } }); }
-  S.sites.delete(sid); DB.del('sites', sid);
-  const next = [...S.sites.values()].filter(s => s.count).sort((a, b) => (b.start || '').localeCompare(a.start || ''))[0];
-  S.siteId = next?.id || null; saveSettings(); closeAsk(); renderPlanets(); toast('삭제됨');
+  deleteSite(S.siteId); toast('삭제됨');
 });
+function deleteSite(sid) {
+  for (const [id, p] of S.photos) if (p.siteId === sid) { S.photos.delete(id); DB.del('photos', id); ['t', 'f'].forEach(k => { const u = urls.get(k + id); if (u) { URL.revokeObjectURL(u); urls.delete(k + id); } }); }
+  S.sites.delete(sid); DB.del('sites', sid); RP.sel.delete(sid);
+  if (S.siteId === sid) {
+    const next = [...S.sites.values()].filter(s => s.count).sort((a, b) => (b.start || '').localeCompare(a.start || ''))[0];
+    S.siteId = next?.id || null; saveSettings(); closeAsk();
+  }
+  renderPlanets();
+}
 $('replayBtn').addEventListener('click', replay);
 
 // ─────────── 요소 기준 편집 ───────────
@@ -2133,7 +2139,7 @@ function showCluster(i) {
   $('abTiles').querySelectorAll('.atile').forEach(t => t.classList.toggle('on', +t.dataset.c === i));
   $('abPanel').innerHTML = list.length ? list.map(s => {
     const L = photosOfSite(s.id);
-    return `<section class="apart"><header><div><b>${esc(s.name)}</b><span>${esc(siteDates(s))}${s.address ? ` · ${esc(s.address)}` : ''} · ${L.length}장</span></div><button type="button" class="btn small" data-open="${s.id}">열기</button></header>
+    return `<section class="apart"><header><div><b>${esc(s.name)}</b><span>${esc(siteDates(s))}${s.address ? ` · ${esc(s.address)}` : ''} · ${L.length}장</span></div><div class="aact"><button type="button" class="btn small warn" data-del="${s.id}">삭제</button><button type="button" class="btn small" data-open="${s.id}">열기</button></div></header>
       <div class="agrid">${L.map(p => `<button type="button" data-photo="${p.id}" style="--c:${p.element ? colorOf(p.element)[0] : '#8E8E93'}" title="${esc(p.element || '미분류')}"><img alt="" loading="lazy" src="${thumbUrl(p)}"></button>`).join('')}</div></section>`;
   }).join('') : '<p class="hint">지도에서 폴더를 고르세요</p>';
 }
@@ -2143,6 +2149,11 @@ $('album').addEventListener('click', e => {
   const t = e.target.closest('.atile'); if (t) { showCluster(+t.dataset.c); return; }
   if (e.target.closest('#abLost')) { showCluster('lost'); return; }
   const o = e.target.closest('[data-open]'); if (o) { $('album').hidden = true; selectSite(o.dataset.open); return; }
+  const d = e.target.closest('[data-del]');
+  if (d) {
+    if (!d.classList.contains('arm')) { d.classList.add('arm'); d.textContent = '삭제 확인'; setTimeout(() => { if (d.isConnected) { d.classList.remove('arm'); d.textContent = '삭제'; } }, 3500); return; }
+    const site = S.sites.get(d.dataset.del); deleteSite(d.dataset.del); toast(`${site?.name || '답사'} 삭제됨`); openAlbum(); return;
+  }
   const ph = e.target.closest('[data-photo]'); if (ph) openLb(ph.dataset.photo);
 });
 
