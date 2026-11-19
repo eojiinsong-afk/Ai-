@@ -309,6 +309,23 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 .msec h6 { margin: 0; font: 600 13px var(--display); color: var(--label); display: flex; gap: 6px; align-items: baseline; }
 .msec h6 span, .mgrp h5 span { color: var(--label-2); font-weight: 400; font-variant-numeric: tabular-nums; }
 .msec p { margin: 0; font-size: 12px; color: var(--label-2); }
+.floors { display: flex; flex-wrap: wrap; gap: 4px; }
+.floors button { min-width: 38px; padding: 5px 8px; border-radius: 8px; border: 0; background: rgba(255,255,255,.08); color: var(--label); font: 500 12px var(--sans); cursor: pointer; font-variant-numeric: tabular-nums; }
+.floors button.on { background: var(--blue); color: #fff; }
+.section { display: flex; flex-direction: column; border: 1px solid rgba(255,255,255,.35); border-bottom: 0; border-radius: 3px 3px 0 0; }
+.srow { display: grid; grid-template-columns: 34px 1fr; min-height: 34px; border-bottom: 1px solid rgba(255,255,255,.18); cursor: pointer; }
+.srow:hover { background: rgba(255,255,255,.04); }
+.srow.on { background: rgba(10,132,255,.18); }
+.srow > b { font: 500 11px var(--sans); color: var(--label-2); display: flex; align-items: center; justify-content: center; border-right: 1px solid rgba(255,255,255,.18); font-variant-numeric: tabular-nums; }
+.srow > div { display: flex; flex-wrap: wrap; gap: 3px; padding: 4px; align-items: center; }
+.srow.ground { border-bottom: 2.5px solid rgba(255,255,255,.75); }
+.srow.empty { min-height: 14px; } .srow.empty > b { font-size: 9px; }
+.section.un { border-style: dashed; border-bottom: 1px dashed rgba(255,255,255,.35); border-radius: 3px; }
+.section.un .srow { border-bottom: 0; }
+.srow button { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 4px; overflow: hidden; cursor: pointer; box-shadow: inset 0 0 0 2px var(--c); background: var(--bg-2); }
+.minfo .srow img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 0; cursor: pointer; opacity: .92; }
+.slegend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--label-2); }
+.slegend span { display: inline-flex; align-items: center; gap: 4px; } .slegend i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
 .mgrp + .mgrp { border-top: .5px dashed var(--sep); padding-top: 10px; }
 .mgrp h5 { margin: 0 0 6px; font: 500 12px var(--sans); color: var(--label); display: flex; gap: 6px; align-items: center; }
 .mgrp h5 i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
@@ -1849,8 +1866,10 @@ function drawShots() {
   for (const p of sitePhotos()) {
     const xz = shotPos(p); if (!xz) continue;
     const placed = !!p.shot, on = p.id === M3.sel, color = placed ? elColor(p) : '#8E8E93';
-    const g = new THREE.Group(); g.position.set(xz[0], 0, xz[1]); g.userData.photo = p.id;
-    const dot = new THREE.Mesh(new THREE.CylinderGeometry(on ? 3 : 2, on ? 3 : 2, 1, 20), new THREE.MeshBasicMaterial({ color: on ? '#ffffff' : color }));
+    const ib = shotBld(p), fl = ib && p.shot.floor ? floorY(ib, p.shot.floor) : 0;
+    const g = new THREE.Group(); g.position.set(xz[0], fl, xz[1]); g.userData.photo = p.id;
+    const dot = new THREE.Mesh(new THREE.CylinderGeometry(on ? 3 : 2, on ? 3 : 2, 1, 20), new THREE.MeshBasicMaterial({ color: on ? '#ffffff' : color, depthTest: !ib }));
+    if (ib) { dot.renderOrder = 10; }
     dot.position.y = .5; dot.userData.photo = p.id; g.add(dot);
     if (placed && p.shot.heading != null) { const f = fanMesh(p.shot.heading, color, on ? .5 : .28); f.userData.photo = p.id; g.add(f); }
     if (placed || on) {
@@ -1859,6 +1878,7 @@ function drawShots() {
       const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, sp.position.y - s * .375, 0)]), new THREE.LineBasicMaterial({ color }));
       g.add(ln);
     }
+    if (ib) g.traverse(o => { if (o.material) { o.material.depthTest = false; o.renderOrder = 10; } });
     G.add(g);
   }
 }
@@ -1868,6 +1888,17 @@ function highlightBuilding(i) {
   const g = new THREE.ExtrudeGeometry(new THREE.Shape(b.pts.map(p => new THREE.Vector2(p[0], p[1]))), { depth: b.H + .3, bevelEnabled: false }); g.rotateX(-Math.PI / 2);
   M3.hl.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: 0x0A84FF })));
   g.dispose();
+  // 층 바닥판: 벽을 비쳐 보이게, 사진이 있는 층·고른 층은 진하게
+  const shape = new THREE.Shape(b.pts.map(p => new THREE.Vector2(p[0], p[1])));
+  const used = new Set(sitePhotos().filter(p => shotBld(p) === b && p.shot.floor).map(p => p.shot.floor));
+  for (const f of floorsOf(b)) {
+    const on = f === M3.hlFloor, has = used.has(f);
+    const pg = new THREE.ShapeGeometry(shape); pg.rotateX(-Math.PI / 2); pg.translate(0, floorY(b, f) + .15, 0);
+    const m = new THREE.Mesh(pg, new THREE.MeshBasicMaterial({ color: on ? 0xFFFFFF : 0x0A84FF, transparent: true, opacity: on ? .45 : has ? .28 : .1, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
+    m.renderOrder = 5; M3.hl.add(m);
+    const ln = new THREE.LineSegments(new THREE.EdgesGeometry(pg), new THREE.LineBasicMaterial({ color: on ? 0xFFFFFF : 0x64D2FF, transparent: true, opacity: on || has ? .9 : .35, depthTest: false }));
+    ln.renderOrder = 6; M3.hl.add(ln);
+  }
 }
 
 // 사진 고르기 → 찍은 자리 클릭 → 바라본 쪽 클릭
@@ -1877,6 +1908,7 @@ function groundAt(e) { const rc = ray(); rc.setFromCamera(ndc(e), M3.cam); const
 function selectPhoto(id, place) {
   M3.sel = id; const p = S.photos.get(id);
   M3.mode = place || !p.shot ? 'pos' : null;
+  M3.hlFloor = p.shot?.inside ? p.shot.floor ?? null : null;
   M3.preview.clear(); drawShots(); renderStrip(); renderMinfo();
   highlightBuilding(p.shot?.target?.i ?? null);
   if (M3.mode === 'pos') hint('촬영 위치 클릭');
@@ -1911,8 +1943,9 @@ function onPick(e) {
     const ins = insideOf(x, z), t = ins != null ? { i: ins, b: M3.blds[ins], d: 0 } : targetBuilding(x, z, hdg);
     p.shot = { x: +X.toFixed(2), y: +Y.toFixed(2), lon: +lon.toFixed(7), lat: +lat.toFixed(7), heading: hdg, by: 'user', at: new Date().toISOString(),
       inside: ins != null, target: tgtInfo(t) };
+    if (ins != null) { const fl = floorsOf(M3.blds[ins]); p.shot.floor = fl.includes(M3.lastFloor) ? M3.lastFloor : 1; }
     savePhoto(p); M3.mode = null; M3.preview.clear();
-    hint(t ? `${ins != null ? '실내 · ' : ''}${t.b.addr || ''} ${t.b.use || ''}`.trim() : '저장됨', 3000);
+    hint(ins != null ? `실내 ${floorLabel(p.shot.floor)} · 층 바꾸기는 오른쪽` : t ? `${t.b.addr || ''} ${t.b.use || ''}`.trim() : '저장됨', 3000);
     const next = sitePhotos().find(q => !q.shot && q.id !== p.id);
     drawShots(); renderStrip(); renderMinfo();
     return;
@@ -1922,8 +1955,14 @@ function onPick(e) {
   const hs = rc.intersectObjects(M3.shots.children, true).find(h => h.object.userData.photo);
   if (hs) { selectPhoto(hs.object.userData.photo); return; }
   const hb = M3.mesh && rc.intersectObject(M3.mesh)[0];
-  if (hb) { const i = M3.owner[hb.face.a]; highlightBuilding(i); renderMinfo(i); }
+  if (hb) { const i = M3.owner[hb.face.a]; if (i !== M3.bi) M3.hlFloor = null; highlightBuilding(i); renderMinfo(i); }
 }
+// 층: 1, 2, … 지상 / -1, -2, … 지하. 층 높이는 건물 높이 ÷ 지상 층수
+const floorLabel = f => f > 0 ? `${f}F` : `B${-f}`;
+const floorH = b => b.H / Math.max(1, b.floors || 1);
+const floorY = (b, f) => (f > 0 ? f - 1 : f) * floorH(b);
+const floorsOf = b => { const L = []; for (let f = Math.max(1, b.floors || 1); f >= 1; f--) L.push(f); for (let f = 1; f <= (b.base || 0); f++) L.push(-f); return L; };
+const shotBld = p => p?.shot?.inside && p.shot.target ? M3.blds[p.shot.target.i] : null;
 const tgtInfo = t => t ? { i: t.i, addr: t.b.addr, use: t.b.use, floors: t.b.floors, base: t.b.base, year: t.b.year, height: t.b.h || null, dist: +t.d.toFixed(1) } : null;
 // 점이 들어 있는 건물(실내 사진)
 function insideOf(x, z) {
@@ -1944,6 +1983,17 @@ function photosOfBuilding(bi) {
   const b = M3.blds[bi], same = t => t && (t.i === bi && (!t.addr || !b.addr || t.addr === b.addr));
   const L = sitePhotos().filter(p => p.shot && same(p.shot.target));
   return { inside: L.filter(p => p.shot.inside), outside: L.filter(p => !p.shot.inside) };
+}
+// 단면: 위층부터 아래로, 지면선 아래는 지하. 층마다 사진을 요소 순서로
+function sectionHTML(b, L) {
+  const ord = k => { const i = S.elements.indexOf(k); return i < 0 ? 99 : i; };
+  const at = f => L.filter(p => p.shot.floor === f).sort((a, b2) => ord(keyOf(a)) - ord(keyOf(b2)));
+  const row = (f, lab) => { const P = f == null ? L.filter(p => !p.shot.floor) : at(f);
+    return `<div class="srow${f === M3.hlFloor ? ' on' : ''}${f === 1 ? ' ground' : ''}${!P.length && floorsOf(b).length > 6 ? ' empty' : ''}" ${f != null ? `data-sfloor="${f}"` : ''}><b>${lab}</b><div>${P.map(p => `<button type="button" data-mph="${p.id}" style="--c:${colorOf(keyOf(p))[0]}" title="${esc(keyOf(p))}"><img alt="" src="${thumbUrl(p)}"></button>`).join('')}</div></div>`; };
+  const un = L.filter(p => !p.shot.floor).length;
+  const used = [...new Set(L.map(p => keyOf(p)))].sort((a, b2) => ord(a) - ord(b2));
+  return `<div class="section">${floorsOf(b).map(f => row(f, floorLabel(f))).join('')}</div>${un ? `<div class="section un">${row(null, '층?')}</div>` : ''}
+    ${used.length ? `<div class="slegend">${used.map(k => `<span style="--c:${colorOf(k)[0]}"><i></i>${esc(k)} ${L.filter(p => keyOf(p) === k).length}</span>`).join('')}</div>` : '<p>사진 고른 뒤 이 건물 위를 클릭</p>'}`;
 }
 function groupHTML(L) {
   const by = new Map(); for (const p of L) { const k = keyOf(p); by.has(k) || by.set(k, []); by.get(k).push(p); }
@@ -1976,12 +2026,12 @@ function renderStrip() {
 function renderMinfo(bi) {
   const box = $('minfo');
   if (bi != null && M3.mode == null && (!M3.sel || bi !== S.photos.get(M3.sel)?.shot?.target?.i)) {
-    const b = M3.blds[bi], ph = photosOfBuilding(bi);
+    const b = M3.blds[bi], ph = photosOfBuilding(bi); M3.bi = bi;
     box.hidden = false; box.classList.add('wide');
     box.innerHTML = `<h4>${esc(b.addr || '—')}</h4>
       <dl class="mfacts"><dt>용도</dt><dd>${esc(b.use || '—')}</dd><dt>규모</dt><dd>지상 ${b.floors}층${b.base ? ` · 지하 ${b.base}층` : ''}</dd>
       <dt>높이</dt><dd>${b.h ? b.h + 'm' : `약 ${Math.round(b.H)}m`}</dd>${b.year ? `<dt>사용승인</dt><dd>${esc(b.year)}</dd>` : ''}</dl>
-      <section class="msec"><h6>실내<span>${ph.inside.length}</span></h6>${ph.inside.length ? groupHTML(ph.inside) : '<p>사진 고른 뒤 이 건물 안을 클릭</p>'}</section>
+      <section class="msec"><h6>실내 단면<span>${ph.inside.length}</span></h6>${sectionHTML(b, ph.inside)}</section>
       ${ph.outside.length ? `<section class="msec"><h6>외관<span>${ph.outside.length}</span></h6>${groupHTML(ph.outside)}</section>` : ''}
       <div class="row"><button class="btn small" type="button" data-mi="close">닫기</button></div>`;
     return;
@@ -1992,7 +2042,8 @@ function renderMinfo(bi) {
   box.innerHTML = `<img src="${thumbUrl(p)}" alt="${esc(p.name)}" data-mi="big">
     <h4>${esc(p.element || '미분류')} · ${esc(p.name)}</h4>
     <div>${p.shot ? `매핑됨${p.shot.heading != null ? ` · ${p.shot.heading}°` : ''}` : p.gps ? 'GPS만' : '위치 없음'}</div>
-    ${t ? `<div class="bld">${p.shot.inside ? '실내' : '대상'} <b>${esc(t.addr || '')}</b><br>${esc(t.use || '')} · ${t.floors}층${t.year ? ` · ${t.year}` : ''} · ${t.dist}m</div>` : p.shot ? '<div class="bld">대상 건물 없음</div>' : ''}
+    ${shotBld(p) ? `<div class="floors" role="radiogroup" aria-label="층">${floorsOf(shotBld(p)).slice().reverse().map(f => `<button type="button" class="${p.shot.floor === f ? 'on' : ''}" data-floor="${f}">${floorLabel(f)}</button>`).join('')}</div>` : ''}
+    ${t ? `<div class="bld">${p.shot.inside ? `실내${p.shot.floor ? ' ' + floorLabel(p.shot.floor) : ''}` : '대상'} <b>${esc(t.addr || '')}</b><br>${esc(t.use || '')} · ${t.floors}층${t.year ? ` · ${t.year}` : ''} · ${t.dist}m</div>` : p.shot ? '<div class="bld">대상 건물 없음</div>' : ''}
     <div class="row">
       <button class="btn small" type="button" data-mi="place">${p.shot ? '다시 지정' : '위치 지정'}</button>
       ${p.gps ? '<button class="btn small" type="button" data-mi="gps">GPS</button>' : ''}
@@ -2001,6 +2052,10 @@ function renderMinfo(bi) {
 }
 $('minfo').addEventListener('click', e => {
   const ph = e.target.closest('[data-mph]'); if (ph) { selectPhoto(ph.dataset.mph); return; }
+  const fb = e.target.closest('[data-floor]');
+  if (fb) { const p = S.photos.get(M3.sel); if (p?.shot) { p.shot.floor = +fb.dataset.floor; M3.lastFloor = p.shot.floor; M3.hlFloor = p.shot.floor; savePhoto(p); drawShots(); highlightBuilding(p.shot.target.i); renderMinfo(); renderStrip(); } return; }
+  const sf = e.target.closest('[data-sfloor]');
+  if (sf) { const f = +sf.dataset.sfloor; M3.hlFloor = M3.hlFloor === f ? null : f; highlightBuilding(M3.bi); renderMinfo(M3.bi); return; }
   const k = e.target.closest('[data-mi]')?.dataset.mi; if (!k) return;
   if (k === 'close') { $('minfo').hidden = true; M3.sel = null; M3.mode = null; M3.preview?.clear(); highlightBuilding(null); drawShots(); renderStrip(); hint(null); }
   if (k === 'place') selectPhoto(M3.sel, true);
