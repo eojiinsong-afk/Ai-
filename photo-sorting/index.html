@@ -354,6 +354,12 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 .skinctl label { display: grid; grid-template-columns: 44px 1fr 36px; align-items: center; gap: 6px; }
 .skinctl input { width: 100%; accent-color: var(--blue); }
 .skinctl span { text-align: right; font-variant-numeric: tabular-nums; }
+.learn { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); font-size: 13px; }
+.learn .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.learn .row > span { color: var(--label-2); margin-right: auto; }
+.learn input[type=password] { flex: 1; min-width: 160px; background: var(--fill); border: 0; border-radius: 8px; padding: 7px 10px; color: var(--label); font: 13px var(--sans); }
+.learn label.sw { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.learn p { margin: 0; font-size: 11.5px; color: var(--label-3); line-height: 1.5; }
 .floors { display: flex; flex-wrap: wrap; gap: 4px; }
 .floors button { min-width: 38px; padding: 5px 8px; border-radius: 8px; border: 0; background: rgba(255,255,255,.08); color: var(--label); font: 500 12px var(--sans); cursor: pointer; font-variant-numeric: tabular-nums; }
 .floors button.on { background: var(--blue); color: #fff; }
@@ -550,6 +556,7 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
   <form class="elsheet" id="elForm" aria-label="요소 기준">
     <div class="eh"><h3>요소 기준</h3><button class="btn small" type="button" id="elClose">닫기</button></div>
     <p class="hint">설명은 Claude가 분류할 때 기준으로 씀 · 직접 고른 사진은 참고 예시로 쓰임</p>
+    <div class="learn" id="learnBox"></div>
     <div id="elRows"></div>
     <button class="btn small" type="button" id="elAdd">+ 요소 추가</button>
     <div class="ef"><button class="btn" type="button" id="elRedo">저장 후 다시 분류</button><button class="btn primary" type="submit">저장</button></div>
@@ -635,7 +642,27 @@ const DB = (() => {
 })();
 const savePhoto = p => (p.demo ? null : DB.put('photos', p.id, p));
 const saveSite = s => (s.demo ? null : DB.put('sites', s.id, s));
-const saveSettings = () => DB.put('settings', 'main', { elements: S.elements, defs: S.defs, siteId: S.siteId, lessons: S.lessons || [] });
+const saveSettings = () => DB.put('settings', 'main', { elements: S.elements, defs: S.defs, siteId: S.siteId, lessons: S.lessons || [], defsPrev: S.defsPrev || null, autoSort: !!S.autoSort });
+// 기준 다듬기: 교정이 쌓이면 Claude가 요소 설명을 고쳐 쓴다 (이전 기준은 되돌릴 수 있게 남김)
+async function refineDefs(force) {
+  const L = (S.lessons || []).filter(l => !l.used);
+  if (!force && L.length < 5) return;
+  const sm = await sampler(); if (!sm) return;
+  const els = [...new Set(L.map(l => l.to).concat(L.map(l => l.ai)))].filter(e => S.elements.includes(e));
+  if (!els.length) return;
+  try {
+    const cur = S.elements.map(e => `- ${e}: ${S.defs[e] || ''}`).join('\n');
+    const ex = L.map(l => `- "${l.d || l.tags.join(', ')}" → ${l.to} (Claude는 ${l.ai}로 봄)`).join('\n');
+    const out = await sm.s.json(`건축 답사 사진 분류 기준입니다.\n${cur}\n\n사용자가 고친 기록:\n${ex}\n\n이 기록이 다시 틀리지 않도록 관련 요소(${els.join(', ')})의 기준 설명을 고쳐 씁니다. 원래 뜻은 유지하고, 구분 단서(재료·위치·형태)를 구체적으로, 요소마다 120자 이내.\n{"defs":[{"element":이름,"desc":설명}]} JSON만 답하세요.`,
+      { modelTier: 'default', schema: { type: 'object', additionalProperties: false, required: ['defs'], properties: { defs: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['element', 'desc'], properties: { element: { type: 'string', enum: S.elements }, desc: { type: 'string' } } } } } } });
+    const changed = [];
+    S.defsPrev = { ...S.defs };
+    for (const d of out?.defs || []) if (S.elements.includes(d.element) && d.desc?.trim()) { S.defs[d.element] = d.desc.trim().slice(0, 200); changed.push(d.element); }
+    for (const l of L) l.used = true;
+    S.defsAt = new Date().toISOString(); saveSettings();
+    if (changed.length) toast(`학습 반영 · ${changed.join(', ')} 기준 다듬음`, 4000);
+  } catch (e) { console.warn('기준 다듬기 실패', e); }
+}
 // 학습: 사용자가 Claude와 다르게 고친 기록을 다음 분류의 예시로 쓴다
 function learn(p, el) {
   if (!p || !el || el === NONE || !p.aiElement || p.aiElement === el) return;
@@ -703,13 +730,49 @@ async function processFile(file, siteId) {
 
 // ─────────── 건축요소 분류: Claude가 보고, 애매하면 질문 ───────────
 let samplerP = null;
+// 웹: 내 Claude API 키로 (이 브라우저에만 저장). 공개 저장소의 config.js에는 넣지 않는다.
+const CK = {
+  key() { try { return localStorage.getItem('ps.claudeKey') || ''; } catch (e) { return ''; } },
+  set(k) { try { k ? localStorage.setItem('ps.claudeKey', k) : localStorage.removeItem('ps.claudeKey'); } catch (e) {} samplerP = null; aiOff = null; }
+};
+const CLAUDE_MODEL = 'claude-opus-5-5';
+let sdkP = null;
+async function blobB64(b) { const u = new Uint8Array(await b.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
+async function apiSampler() {
+  const mod = await (sdkP = sdkP || import('https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@1.4.0/+esm'));
+  const Anthropic = mod.default || mod.Anthropic;
+  // 사용자가 자기 키를 자기 브라우저에서 쓰는 경우라 브라우저 호출을 허용한다
+  const client = new Anthropic({ apiKey: CK.key(), dangerouslyAllowBrowser: true });
+  const json = async (prompt, opt = {}) => {
+    const imgs = await Promise.all((opt.images || []).map(async b => ({ type: 'image', source: { type: 'base64', media_type: /png|webp|gif/.test(b.type) ? b.type : 'image/jpeg', data: await blobB64(b) } })));
+    let res;
+    try {
+      res = await client.beta.messages.create({
+        model: CLAUDE_MODEL, max_tokens: 16000,
+        betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', // 거절되면 서버가 다른 모델로 이어서
+        output_config: { effort: 'low', ...(opt.schema ? { format: { type: 'json_schema', schema: opt.schema } } : {}) },
+        messages: [{ role: 'user', content: [...imgs, { type: 'text', text: prompt }] }]
+      });
+    } catch (e) {
+      if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) throw Object.assign(new Error('키 확인 필요'), { code: 'bad_key' });
+      if (e instanceof Anthropic.RateLimitError) throw Object.assign(new Error('사용량 초과'), { code: 'rate_limited' });
+      throw e;
+    }
+    if (res.stop_reason === 'refusal') throw Object.assign(new Error('거절됨'), { code: 'refusal' });
+    const text = res.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+  };
+  return { s: { json }, max: 8 };
+}
 function sampler() {
   if (!samplerP) samplerP = (async () => {
-    if (!window.claude?.use) return null;
+    if (!window.claude?.use) return CK.key() ? apiSampler().catch(e => { console.warn('Claude SDK', e); return null; }) : null;
     const s = await window.claude.use('sample').catch(() => null);
     if (!s) return null;
     const lim = await s.limits().catch(() => null);
-    return lim?.images ? { s, max: Math.max(1, Math.min(8, lim.images.maxCount || 1)) } : null;
+    // 아티팩트의 sample은 schema 옵션을 모르므로 빼고 넘긴다
+    const json = (prompt, o = {}) => s.json(prompt, Object.fromEntries(Object.entries({ images: o.images, modelTier: o.modelTier }).filter(([, v]) => v !== undefined)));
+    return lim?.images ? { s: { json }, max: Math.max(1, Math.min(8, lim.images.maxCount || 1)) } : null;
   })();
   return samplerP;
 }
@@ -724,6 +787,9 @@ function refExamples(maxRefs) {
   }
   return out.slice(0, maxRefs);
 }
+const CLS_SCHEMA = cats => ({ type: 'object', additionalProperties: false, required: ['items'], properties: { items: { type: 'array', items: { type: 'object', additionalProperties: false,
+  required: ['n', 'element', 'confidence', 'second', 'note', 'desc', 'tags'],
+  properties: { n: { type: 'integer' }, element: { type: 'string', enum: cats }, confidence: { type: 'number' }, second: { type: 'string' }, note: { type: 'string' }, desc: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } } } } } } });
 async function classify(list, onProgress, opt = {}) {
   const sm = await sampler();
   if (!sm || aiOff) { for (const p of list) markAsk(p); return { used: false, reason: aiOff || 'unavailable' }; }
@@ -752,10 +818,10 @@ ${rules}
 - tags: 검색어가 될 짧은 명사 6~12개. 재료(유리, 메탈, 스틸, 알루미늄, 노출콘크리트, 벽돌, 목재, 석재, 타일), 부재(난간, 손스침, 디딤판, 캐노피, 루버, 차양, 기둥, 보, 문, 창틀), 위치 관계(계단옆, 계단위, 계단아래, 입구상부, 모서리, 실내, 실외), 무늬·처리(격자, 줄눈, 타공, 곡면, 반복, 녹슨, 도장)를 우선합니다.
 
 각 사진마다 {"n": 번호, "element": 기준 중 하나의 이름 그대로, "confidence": 0~1, "second": 두 번째 후보 이름 또는 null, "note": 무엇인지 20자 이내, "desc": 문장, "tags": ["…"]}
-JSON 배열만 답하세요.`;
+JSON으로만 답하세요 ({"items": [...]}). second가 없으면 빈 문자열.`;
     try {
-      const out = await sm.s.json(prompt, { images: [...refs.map(p => p.ai || p.thumb), ...batch.map(p => p.ai || p.thumb)], modelTier: 'default' });
-      const arr = Array.isArray(out) ? out : [];
+      const out = await sm.s.json(prompt, { images: [...refs.map(p => p.ai || p.thumb), ...batch.map(p => p.ai || p.thumb)], modelTier: 'default', schema: CLS_SCHEMA(cats) });
+      const arr = Array.isArray(out) ? out : Array.isArray(out?.items) ? out.items : [];
       batch.forEach((p, k) => {
         const r = arr.find(x => Number(x?.n) === k + 1) || arr[k];
         const el = typeof r?.element === 'string' ? r.element.trim() : '';
@@ -772,7 +838,7 @@ JSON 배열만 답하세요.`;
     } catch (e) {
       console.warn('분류 실패', e);
       for (const p of batch) markAsk(p);
-      if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed', 'images_unavailable'].includes(e?.code)) aiOff = e.code;
+      if (['bad_key', 'not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed', 'images_unavailable'].includes(e?.code)) aiOff = e.code;
       if (e?.code === 'rate_limited') aiOff = 'rate_limited';
     }
     done += batch.length; onProgress?.(done);
@@ -1229,6 +1295,7 @@ planetsEl.addEventListener('click', e => {
 // ─────────── 사진 올리기 → 읽기 → Claude 판단 → 행성 ───────────
 async function ingest(files, demoList) {
   if (S.busy) { toast('처리 중'); return; }
+  clearTimeout(ingest.t);
   let todo = [];
   if (!demoList) {
     files = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
@@ -1282,6 +1349,8 @@ async function ingest(files, demoList) {
     S.busy = false; updateButtons();
     const pend = sitePhotos().filter(p => p.pending).length;
     setCore(pend, '분류 대기', null);
+    // 자동 분류: 더 올리는 사진이 없으면 잠시 뒤 시작
+    if (S.autoSort && pend && !demoList) { clearTimeout(ingest.t); ingest.t = setTimeout(() => { if (!S.busy && $('lb').hidden) sortNow(); }, 3000); }
   }
 }
 // 「분류」: 쌓아 둔 사진을 Claude가 보고 요소별 버블로 보낸다
@@ -1304,7 +1373,8 @@ async function sortNow() {
     for (const p of pend) { p.pending = false; savePhoto(p); }
     await sortShow();
     S.busy = false; clearItems(); renderPlanets();
-    if (!res.used && ON_ARTIFACT && !demo) toast(res.reason === 'not_granted' ? 'Claude 미허용 · 직접 선택' : res.reason === 'rate_limited' ? 'Claude 사용량 초과 · 직접 선택' : 'Claude 사용 불가 · 직접 선택', 4000);
+    if (!res.used && !demo) toast(res.reason === 'bad_key' ? 'Claude 키 확인 필요 · 직접 선택' : res.reason === 'not_granted' ? 'Claude 미허용 · 직접 선택' : res.reason === 'rate_limited' ? 'Claude 사용량 초과 · 직접 선택' : !ON_ARTIFACT && !CK.key() ? 'Claude 키 없음 · 직접 선택 (요소 → Claude 키)' : 'Claude 사용 불가 · 직접 선택', 5000);
+    else if (res.used && !demo) refineDefs();
     if (askList().length) openAsk();
   } finally { S.busy = false; updateButtons(); }
 }
@@ -1483,7 +1553,27 @@ function elRowHTML(name, desc, fixed) {
     <textarea class="ed" rows="2" maxlength="200" placeholder="판단 기준" ${fixed ? 'readonly' : ''} aria-label="판단 기준">${esc(desc)}</textarea>
     ${fixed ? '<span></span>' : '<button type="button" class="del" aria-label="삭제">×</button>'}</div>`;
 }
+function renderLearn() {
+  const L = S.lessons || [], fresh = L.filter(l => !l.used).length, refs = [...S.photos.values()].filter(p => p.by === 'user' && p.element).length;
+  const web = !ON_ARTIFACT;
+  $('learnBox').innerHTML = `
+    ${web ? `<div class="row"><span>Claude 키 ${CK.key() ? '· 저장됨 (이 브라우저)' : '· 없음'}</span>
+      <input type="password" id="ckInput" placeholder="${CK.key() ? '새 키로 바꾸기' : 'sk-ant-…'}" autocomplete="off"><button class="btn small" type="button" data-lr="ckSave">저장</button>${CK.key() ? '<button class="btn small warn" type="button" data-lr="ckDel">지우기</button>' : ''}</div>
+      <p>키는 이 브라우저에만 저장되고, 분류할 때 사진(1024px)이 Anthropic API로 전송됨 · 요금은 키 계정에 청구 (${CLAUDE_MODEL})</p>` : ''}
+    <div class="row"><span>학습 · 교정 ${L.length}건 (반영 대기 ${fresh}) · 직접 분류 ${refs}장${S.defsAt ? ' · 기준 갱신 ' + S.defsAt.slice(5, 10).replace('-', '.') : ''}</span>
+      <button class="btn small" type="button" data-lr="refine" ${fresh ? '' : 'disabled'}>지금 반영</button>${S.defsPrev ? '<button class="btn small" type="button" data-lr="undo">기준 되돌리기</button>' : ''}</div>
+    <label class="sw"><input type="checkbox" data-lr="auto" ${S.autoSort ? 'checked' : ''}> 사진을 올리면 3초 뒤 자동 분류</label>`;
+}
+$('learnBox').addEventListener('click', async e => {
+  const k = e.target.closest('[data-lr]')?.dataset.lr; if (!k) return;
+  if (k === 'ckSave') { const v = $('ckInput').value.trim(); if (!/^sk-ant-[\w-]{20,}$/.test(v)) { toast('키 형식이 아님'); return; } CK.set(v); toast('Claude 키 저장 · 이 브라우저'); renderLearn(); }
+  if (k === 'ckDel') { CK.set(''); toast('Claude 키 지움'); renderLearn(); }
+  if (k === 'refine') { e.target.disabled = true; await refineDefs(true); openElSheet(); }
+  if (k === 'undo' && S.defsPrev) { S.defs = { ...S.defsPrev }; S.defsPrev = null; saveSettings(); openElSheet(); toast('기준 되돌림'); }
+});
+$('learnBox').addEventListener('change', e => { if (e.target.dataset.lr === 'auto') { S.autoSort = e.target.checked; saveSettings(); } });
 function openElSheet() {
+  renderLearn();
   $('elRows').innerHTML = S.elements.map(el => elRowHTML(el, S.defs[el] || '', false)).join('') + elRowHTML(OTHER, OTHER_DEF, true);
   $('elRedo').hidden = !sitePhotos().length;
   $('elSheet').hidden = false;
@@ -2762,10 +2852,10 @@ function searchScore(p, toks) {
 const SRC = { q: '', ids: null };
 function openSearch() {
   if (S.busy) return;
-  $('search').hidden = false; $('sAi').hidden = !ON_ARTIFACT;
+  $('search').hidden = false; $('sAi').hidden = !ON_ARTIFACT && !CK.key();
   const all = [...S.photos.values()].filter(p => !p.demo);
   const noDesc = all.filter(p => !p.aiDesc).length;
-  $('sDesc').hidden = !ON_ARTIFACT || !noDesc; $('sDesc').textContent = `설명 만들기 ${noDesc}`;
+  $('sDesc').hidden = (!ON_ARTIFACT && !CK.key()) || !noDesc; $('sDesc').textContent = `설명 만들기 ${noDesc}`;
   // 자주 나오는 태그
   const cnt = new Map(); for (const p of all) for (const t of p.tags || []) cnt.set(t, (cnt.get(t) || 0) + 1);
   $('sTags').innerHTML = [...cnt].sort((a, b) => b[1] - a[1]).slice(0, 30).map(([t, n]) => `<button type="button" data-stag="${esc(t)}"><b>${esc(t)}</b>${n}</button>`).join('');
@@ -2803,7 +2893,7 @@ $('sAi').addEventListener('click', async () => {
   const b = $('sAi'); b.disabled = true; b.textContent = '찾는 중';
   try {
     const lines = all.map((p, i) => `${i + 1}|${keyOf(p)}|${p.shot?.inside ? '실내' + (p.shot.floor ? floorLabel(p.shot.floor) : '') : ''}|${p.aiDesc || ''}|${(p.tags || []).join(',')}`).join('\n');
-    const out = await sm.s.json(`건축 답사 사진의 설명 목록입니다. 형식: 번호|요소|실내층|설명|태그\n${lines}\n\n찾는 것: "${q}"\n뜻이 맞는 사진 번호를 관련 높은 순으로 최대 40개. 재료·부재·위치 관계가 맞아야 합니다. {"ids":[번호,...]} JSON만 답하세요.`, { modelTier: 'default' });
+    const out = await sm.s.json(`건축 답사 사진의 설명 목록입니다. 형식: 번호|요소|실내층|설명|태그\n${lines}\n\n찾는 것: "${q}"\n뜻이 맞는 사진 번호를 관련 높은 순으로 최대 40개. 재료·부재·위치 관계가 맞아야 합니다. {"ids":[번호,...]} JSON만 답하세요.`, { modelTier: 'default', schema: { type: 'object', additionalProperties: false, required: ['ids'], properties: { ids: { type: 'array', items: { type: 'integer' } } } } });
     const ids = (out?.ids || []).map(n => all[Number(n) - 1]?.id).filter(Boolean);
     runSearch(ids); $('sInfo').textContent = `Claude · ${ids.length}장`;
   } catch (e) { console.warn(e); toast('Claude 찾기 실패 · ' + (e?.code || e.message), 4000); }
@@ -2997,6 +3087,8 @@ addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout((
   if (st?.elements?.length) S.elements = st.elements;
   if (st?.defs) S.defs = { ...DEFAULT_DEFS, ...st.defs };
   if (Array.isArray(st?.lessons)) S.lessons = st.lessons;
+  if (st?.defsPrev) S.defsPrev = st.defsPrev;
+  S.autoSort = !!st?.autoSort;
   for (const p of (await DB.all('photos')) || []) S.photos.set(p.id, p);
   for (const s of (await DB.all('sites')) || []) S.sites.set(s.id, s);
   // 이전 버전(장소별 분류)에서 넘어온 사진은 한 답사로 모은다. 원래 값은 지우지 않는다.
