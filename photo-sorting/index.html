@@ -58,43 +58,42 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 #sky { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #rays { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .fx { position: absolute; inset: 0; pointer-events: none; }
-.star { position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 7px; overflow: hidden; will-change: transform;
-  box-shadow: 0 0 0 1px var(--c, rgba(255,255,255,.5)), 0 6px 18px rgba(0,0,0,.5), 0 0 12px var(--g, rgba(255,255,255,.12)); background: var(--bg-2); transition: box-shadow .5s; }
+.star { position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 6px; overflow: hidden; will-change: transform, opacity; transform-origin: 50% 50%;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.92), 0 4px 14px rgba(0,0,0,.45); background: var(--bg-2); }
 .star img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.star.scan { box-shadow: 0 0 0 2px #fff, 0 0 20px 4px rgba(255,255,255,.55); }
+.star.scan { box-shadow: 0 0 0 2px var(--blue), 0 0 22px 4px rgba(10,132,255,.6); }
 
-.core { position: absolute; transform: translate(-50%, -50%); text-align: center; pointer-events: none; width: 260px; }
-.core .num { font: 600 48px/1 var(--display); letter-spacing: -.03em; }
-.core .label { margin-top: 6px; color: var(--label-2); font-size: 13px; }
-.core .site-name { margin-top: 2px; color: var(--label-3); font-size: 12px; }
+.hud { position: fixed; left: max(24px, env(safe-area-inset-left, 0px)); bottom: calc(22px + env(safe-area-inset-bottom, 0px)); z-index: 12; pointer-events: none; display: flex; align-items: baseline; gap: 8px; }
+.hud .num { font: 700 64px/1 var(--display); letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.hud .label { color: var(--label-2); font-size: 14px; font-weight: 500; }
+.pstatus { position: fixed; left: 50%; top: calc(66px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 12; pointer-events: none; color: var(--label-2); font-size: 13px; font-weight: 500; }
 
 .intro { position: absolute; transform: translate(-50%, 0); width: min(360px, calc(100% - 32px)); text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .intro .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .intro .fine { margin: 0; font-size: 12px; color: var(--label-3); }
 
-/* element planets */
-.node { position: absolute; width: 14px; height: 14px; border-radius: 50%; transform: translate(-50%, -50%) scale(0); background: var(--c);
-  box-shadow: 0 0 0 4px rgba(255,255,255,.08), 0 0 18px 4px var(--g); transition: transform .45s cubic-bezier(.3,1.6,.5,1); }
-.node.on { transform: translate(-50%, -50%) scale(1); }
-.node.pulse { animation: pulse .35s ease-out; }
-@keyframes pulse { 50% { transform: translate(-50%, -50%) scale(1.35); } }
-
-.card { position: absolute; width: 248px; display: flex; flex-direction: column; background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
-  border: .5px solid var(--sep); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.4); opacity: 0; transform: scale(.9); transition: opacity .4s, transform .45s cubic-bezier(.2,1.2,.4,1); overflow: hidden; }
-.card.on { opacity: 1; transform: none; }
-.card-head { padding: 12px 14px 8px; display: flex; flex-direction: column; gap: 2px; }
-.card-title { display: flex; align-items: center; gap: 8px; }
-.card-title .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
-.card-title b { flex: 1; min-width: 0; font: 600 15px var(--display); }
-.card-title .count { font-size: 13px; color: var(--label-2); flex: none; }
-.card-meta { font-size: 12px; color: var(--orange); }
-.thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 0 12px 12px; overflow-y: auto; max-height: 172px; }
-.thumb { position: relative; aspect-ratio: 1; border-radius: 6px; overflow: hidden; border: 0; padding: 0; cursor: pointer; background: var(--bg-2); opacity: 0; transform: translateY(6px); transition: opacity .3s, transform .3s; }
-.card.on .thumb { opacity: 1; transform: none; }
-.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.thumb:hover img { filter: brightness(1.12); }
-.thumb .q { position: absolute; right: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--orange); color: #000; font: 700 10px/14px var(--sans); text-align: center; }
-.thumb .me { position: absolute; left: 3px; bottom: 3px; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.6); }
+/* element bubbles */
+#rays { opacity: 0; transition: opacity .8s; }
+#rays.on { opacity: 1; }
+#rays .ln { stroke: rgba(255,255,255,.22); stroke-width: 1; }
+#rays .ln.sat { stroke: rgba(255,255,255,.12); }
+#rays .satdot { fill: rgba(255,255,255,.55); }
+.bubble { position: absolute; border-radius: 50%; border: 2px solid rgba(255,255,255,.88); background: radial-gradient(circle, rgba(255,255,255,.07), rgba(255,255,255,.02) 70%);
+  box-shadow: 0 0 0 7px rgba(255,255,255,.05), 0 0 46px rgba(255,255,255,.14), inset 0 0 30px rgba(255,255,255,.05); cursor: pointer;
+  opacity: 0; transform: scale(.3); transition: opacity .5s, transform .6s cubic-bezier(.2,1.3,.4,1); }
+.bubble.on { opacity: 1; transform: none; }
+.bubble:hover { border-color: #fff; box-shadow: 0 0 0 7px rgba(255,255,255,.08), 0 0 56px rgba(255,255,255,.22), inset 0 0 30px rgba(255,255,255,.06); }
+.bubble .t { position: absolute; border: 0; padding: 0; border-radius: 3px; overflow: hidden; background: var(--bg-2); box-shadow: 0 0 0 1px rgba(255,255,255,.8); cursor: pointer;
+  opacity: 0; transform: scale(.4); transition: opacity .25s, transform .3s cubic-bezier(.2,1.4,.4,1); }
+.bubble .t.on { opacity: 1; transform: none; }
+.bubble .t img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bubble .t:hover { z-index: 2; transform: scale(1.6); box-shadow: 0 0 0 1.5px #fff, 0 6px 16px rgba(0,0,0,.6); }
+.bubble .t.q::after { content: ""; position: absolute; right: 1px; top: 1px; width: 6px; height: 6px; border-radius: 50%; background: var(--orange); }
+.blabel { position: absolute; transform: translateX(-50%); text-align: center; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 1px; opacity: 0; transition: opacity .5s; }
+.blabel.on { opacity: 1; }
+.blabel b { font: 600 14px var(--display); display: inline-flex; align-items: center; gap: 6px; }
+.blabel b i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.blabel span { font-size: 12px; color: var(--label-2); font-variant-numeric: tabular-nums; }
 
 /* sheets */
 .ask-sheet { position: fixed; z-index: 45; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(540px, calc(100vw - 32px));
@@ -187,6 +186,8 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 .minfo .bld b { color: var(--label); font-weight: 600; }
 
 @media (max-width: 760px) {
+  .hud .num { font-size: 40px; }
+  .hud { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
   .minfo { left: 16px; right: 16px; width: auto; top: auto; bottom: 120px; max-height: 40vh; overflow-y: auto; }
   .minfo img { height: 110px; }
   .bar { position: relative; top: 0; }
@@ -231,7 +232,8 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
   <svg id="rays" aria-hidden="true"></svg>
   <div id="planets"></div>
   <div class="fx" id="fx"></div>
-  <div class="core" id="core" hidden><div class="num" id="coreNum">0</div><div class="label" id="coreLabel"></div><div class="site-name" id="coreSite"></div></div>
+  <div class="hud" id="core" hidden><div class="num" id="coreNum">0</div><div class="label" id="coreLabel"></div></div>
+  <div class="pstatus" id="coreSite" hidden></div>
   <div class="intro" id="intro">
     <div class="row">
       <label class="btn primary" for="fileIn">사진 추가</label>
@@ -334,6 +336,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 
 function toast(msg, ms = 2800) {
   const t = $('toast'); t.textContent = msg; t.hidden = false;
+  const bb = $('bar').getBoundingClientRect().bottom; t.style.top = (Math.max(0, bb) + 12) + 'px';
   clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), ms);
 }
 
@@ -520,160 +523,186 @@ function renderSiteBar() {
   if (cur && document.activeElement !== $('siteName')) $('siteName').value = cur.name || '';
 }
 
-// ─────────── 하늘 (canvas) ───────────
+// ─────────── 배경 (canvas) ───────────
 const sky = $('sky'), ctx = sky.getContext('2d');
-let W = 0, H = 0, DPR = 1, galaxy = { x: 0, y: 0, r: 200 }, spin = 0.05, glow = 0.35;
-const stars = Array.from({ length: 220 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.2 + .2, p: Math.random() * 6.28, s: .5 + Math.random() * 1.5 }));
-const dust = Array.from({ length: 520 }, (_, i) => {
-  const u = Math.pow(Math.random(), .7);
-  return { arm: i % 2, u, off: (Math.random() - .5) * .55 * (1.1 - u), hue: Math.random() < .2 ? 35 : 215 + Math.random() * 20, a: .25 + Math.random() * .55, r: Math.random() * 1.4 + .3 };
-});
+let W = 0, H = 0, DPR = 1, galaxy = { x: 0, y: 0, r: 160 }, spin = 0.25, glow = 0;
+const motes = Array.from({ length: 90 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + .3, p: Math.random() * 6.28, s: .3 + Math.random() }));
 function sizeSky() {
   DPR = Math.min(2, devicePixelRatio || 1);
   W = stage.clientWidth; H = stage.clientHeight;
   sky.width = W * DPR; sky.height = H * DPR;
   raysSvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
 }
-let skyAngle = 0;
+let rot = 0, ringT = 0;
 function drawSky(t, dt) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  const bg = ctx.createRadialGradient(galaxy.x, galaxy.y, 0, galaxy.x, galaxy.y, Math.max(W, H) * .7);
-  bg.addColorStop(0, '#15161B'); bg.addColorStop(1, '#000000');
+  const bg = ctx.createRadialGradient(W / 2, Math.min(H, innerHeight) * .45, 0, W / 2, Math.min(H, innerHeight) * .45, Math.max(W, H) * .8);
+  bg.addColorStop(0, '#202022'); bg.addColorStop(1, '#0B0B0C');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-  for (const s of stars) {
-    ctx.fillStyle = `rgba(255,255,255,${.25 + .3 * Math.sin(t / 1000 * s.s + s.p)})`;
-    ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, 6.283); ctx.fill();
+  for (const m of motes) {
+    ctx.fillStyle = `rgba(255,255,255,${.06 + .08 * Math.sin(t / 1000 * m.s + m.p)})`;
+    ctx.beginPath(); ctx.arc(m.x * W, m.y * H, m.r, 0, 6.283); ctx.fill();
   }
-  skyAngle += spin * dt / 1000;
-  const R = galaxy.r * 1.25;
-  for (const d of dust) {
-    const ang = skyAngle * (1.6 - d.u) + d.arm * Math.PI + d.u * 4.2 + d.off;
-    ctx.fillStyle = `hsla(${d.hue},40%,86%,${d.a * glow})`;
-    ctx.beginPath(); ctx.arc(galaxy.x + Math.cos(ang) * d.u * R, galaxy.y + Math.sin(ang) * d.u * R * .58, d.r, 0, 6.283); ctx.fill();
+  // 구를 감싸는 고리 (구가 보일 때만)
+  ringT += ((glow > 0 ? 1 : 0) - ringT) * Math.min(1, dt / 300);
+  if (ringT > .01) {
+    ctx.save(); ctx.translate(galaxy.x, galaxy.y); ctx.lineWidth = 1;
+    for (let k = 0; k < 2; k++) {
+      ctx.strokeStyle = `rgba(255,255,255,${(.16 - k * .06) * ringT})`;
+      ctx.beginPath(); ctx.ellipse(0, 0, galaxy.r * (1.22 + k * .16), galaxy.r * (.2 + k * .05), -.12, 0, 6.283); ctx.stroke();
+    }
+    ctx.restore();
   }
-  const core = ctx.createRadialGradient(galaxy.x, galaxy.y, 0, galaxy.x, galaxy.y, galaxy.r * .55);
-  core.addColorStop(0, `rgba(255,248,235,${.45 * glow + .08})`); core.addColorStop(.35, `rgba(255,236,210,${.14 * glow})`); core.addColorStop(1, 'rgba(255,236,210,0)');
-  ctx.fillStyle = core; ctx.beginPath(); ctx.ellipse(galaxy.x, galaxy.y, galaxy.r * .55, galaxy.r * .4, 0, 0, 6.283); ctx.fill();
 }
 
-// ─────────── 날아다니는 사진 ───────────
+// ─────────── 사진 타일: 구 → 버블 ───────────
 const items = new Map();
-function makeItem(p, x, y) {
+let sphereN = 0;
+const tileFor = n => n <= 30 ? 46 : n <= 80 ? 38 : 30;
+function makeItem(p, x, y, size) {
   let it = items.get(p.id);
   if (!it) {
     const el = document.createElement('div'); el.className = 'star';
     const img = new Image(); img.alt = ''; img.src = thumbUrl(p); el.appendChild(img);
     fx.appendChild(el);
-    it = { el, x, y, s: 1, mode: 'idle' }; items.set(p.id, it);
+    it = { el, x, y, s: 1, o: 1, z: 0, mode: 'idle', size: size || tileFor(sitePhotos().length) };
+    el.style.width = el.style.height = it.size + 'px';
+    items.set(p.id, it);
   }
   it.x = x; it.y = y; place(it); return it;
 }
-function place(it) { it.el.style.transform = `translate(${it.x - 15}px, ${it.y - 15}px) scale(${it.s})`; }
-function orbitOf(it) { it.u = it.u ?? (.28 + Math.random() * .72); it.a = it.a ?? Math.random() * 6.283; it.w = (0.55 + Math.random() * .25) / Math.sqrt(it.u); }
-function orbitPos(it) { const r = it.u * galaxy.r; return [galaxy.x + Math.cos(it.a) * r, galaxy.y + Math.sin(it.a) * r * .58]; }
-function flyTo(it, x, y, dur, delay = 0, curve = 0) {
-  return new Promise(res => { it.mode = 'fly'; it.from = [it.x, it.y]; it.to = [x, y]; it.t0 = performance.now() + delay; it.dur = reduceMotion ? 1 : dur; it.curve = curve; it.done = res; });
+function place(it) {
+  it.el.style.transform = `translate(${it.x - it.size / 2}px, ${it.y - it.size / 2}px) scale(${it.s})`;
+  it.el.style.opacity = it.o; it.el.style.zIndex = it.z;
 }
-function toOrbit(it, dur, delay = 0) {
-  orbitOf(it);
-  return new Promise(res => { it.mode = 'join'; it.from = [it.x, it.y]; it.t0 = performance.now() + delay; it.dur = reduceMotion ? 1 : dur; it.done = () => { it.mode = 'orbit'; res(); }; });
+// 피보나치 구 위의 자리. 전체를 천천히 돌리고 살짝 기울인다.
+function sphereRadius() { const n = Math.max(1, sphereN); return Math.max(90, Math.min(Math.sqrt(n) * tileFor(n) * .62, Math.min(W, Math.min(H, innerHeight)) * .34)); }
+function spherePos(it) {
+  const n = Math.max(1, sphereN), k = it.k % n;
+  const phi = Math.acos(1 - 2 * (k + .5) / n), th = k * 2.399963 + rot;
+  const x3 = Math.sin(phi) * Math.cos(th), y3 = Math.cos(phi), z3 = Math.sin(phi) * Math.sin(th);
+  const tl = .32, y = y3 * Math.cos(tl) - z3 * Math.sin(tl), z = y3 * Math.sin(tl) + z3 * Math.cos(tl);
+  const R = galaxy.r, persp = 1 / (1 - z * .28), d = (z + 1) / 2;
+  return { x: galaxy.x + x3 * R * persp, y: galaxy.y + y * R * persp, s: (.55 + .5 * d), o: .35 + .65 * d, z: Math.round(d * 1000) };
+}
+let sphereSeq = 0;
+function toSphere(it, dur, delay = 0) {
+  if (it.k == null) it.k = sphereSeq++;
+  sphereN = Math.max(sphereN, sphereSeq);
+  return new Promise(res => { it.mode = 'join'; it.from = [it.x, it.y, it.s, it.o]; it.t0 = performance.now() + delay; it.dur = reduceMotion ? 1 : dur; it.done = () => { it.mode = 'sphere'; res(); }; });
+}
+function flyTo(it, x, y, dur, delay = 0, curve = 0, scale = 1) {
+  return new Promise(res => { it.mode = 'fly'; it.from = [it.x, it.y, it.s, it.o]; it.to = [x, y, scale, 1]; it.t0 = performance.now() + delay; it.dur = reduceMotion ? 1 : dur; it.curve = curve; it.done = res; });
 }
 const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 function stepItems(now, dt) {
+  rot += spin * dt / 1000;
+  if (sphereN) galaxy.r = sphereRadius();
   for (const it of items.values()) {
-    if (it.mode === 'orbit' || it.mode === 'join') it.a += it.w * spin * 6 * dt / 1000;
-    if (it.mode === 'orbit') { [it.x, it.y] = orbitPos(it); }
+    if (it.mode === 'sphere') { const q = spherePos(it); it.x = q.x; it.y = q.y; it.s = q.s; it.o = q.o; it.z = q.z; }
     else if (it.mode === 'join' || it.mode === 'fly') {
       const k = Math.max(0, Math.min(1, (now - it.t0) / it.dur)), e = ease(k);
-      const to = it.mode === 'join' ? orbitPos(it) : it.to;
-      const nx = -(to[1] - it.from[1]), ny = to[0] - it.from[0];
-      const bend = (it.mode === 'join' ? .09 : it.curve) * Math.sin(Math.PI * e);
+      let to;
+      if (it.mode === 'join') { const q = spherePos(it); to = [q.x, q.y, q.s, q.o]; it.z = q.z; } else { to = it.to; it.z = 2000; }
+      const nx = -(to[1] - it.from[1]), ny = to[0] - it.from[0], bend = (it.mode === 'join' ? .08 : it.curve) * Math.sin(Math.PI * e);
       it.x = it.from[0] + (to[0] - it.from[0]) * e + nx * bend;
       it.y = it.from[1] + (to[1] - it.from[1]) * e + ny * bend;
+      it.s = it.from[2] + (to[2] - it.from[2]) * e; it.o = it.from[3] + (to[3] - it.from[3]) * e;
       if (k >= 1) { const d = it.done; it.done = null; if (it.mode === 'fly') it.mode = 'idle'; d?.(); }
     } else continue;
     place(it);
   }
 }
-function clearItems() { for (const it of items.values()) it.el.remove(); items.clear(); }
+function clearItems() { for (const it of items.values()) it.el.remove(); items.clear(); sphereN = 0; sphereSeq = 0; glow = 0; }
 let last = performance.now();
 function frame(now) { const dt = Math.min(64, now - last); last = now; if (!M3.on) { drawSky(now, dt); stepItems(now, dt); } requestAnimationFrame(frame); }
 
-// ─────────── 행성 배치 ───────────
-function layoutFor(n) {
-  const w = stage.clientWidth;
-  const view = Math.max(560, innerHeight - $('bar').offsetHeight);
-  const cardW = Math.min(248, w - 32), cardH = 262, gap = 16;
-  if (w >= 980 && n <= 6) {
-    const perSide = Math.ceil(n / 2);
-    const h = Math.max(view, perSide * (cardH + gap) + 48);
-    const cx = w / 2, cy = h / 2;
-    const side = Array.from({ length: n }, (_, i) => i % 2 === 0 ? 'left' : 'right');
-    const slots = { right: side.filter(s => s === 'right').length, left: side.filter(s => s === 'left').length }, idx = { right: 0, left: 0 };
-    const cards = side.map(sd => {
-      const k = slots[sd], j = idx[sd]++;
-      const top = cy - (k * (cardH + gap) - gap) / 2 + j * (cardH + gap);
-      const left = sd === 'right' ? w - cardW - 28 : 28;
-      return { left, top, node: [sd === 'right' ? left - 26 : left + cardW + 26, top + cardH / 2] };
-    });
-    return { h, cx, cy, r: Math.max(110, Math.min((w - 2 * (cardW + 80)) / 2, cy - 40, 320)), cardW, cards };
-  }
-  const cols = Math.max(1, Math.floor((w - 32 + gap) / (cardW + gap))), rows = Math.ceil(n / cols), topArea = 300;
-  const gridW = cols * cardW + (cols - 1) * gap, x0 = (w - gridW) / 2;
-  const cards = Array.from({ length: n }, (_, i) => {
-    const left = x0 + (i % cols) * (cardW + gap), top = topArea + Math.floor(i / cols) * (cardH + 34 + gap) + 34;
-    return { left, top, node: [left + cardW / 2, top - 16] };
+// ─────────── 버블 배치 ───────────
+// 버블 크기는 사진 수의 제곱근에 비례. 서로 밀어내며 화면 가운데에 모인다.
+function seeded(str) { let h = 2166136261; for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909)) >>> 0) / 4294967296; }
+function layoutBubbles(list) {
+  const w = stage.clientWidth, view = Math.max(520, innerHeight - $('bar').offsetHeight);
+  const small = w < 760, base = small ? 16 : 22;
+  const B = list.map(pl => {
+    const n = photosOf(pl.id).length;
+    const r = Math.max(small ? 44 : 62, Math.min(small ? 120 : 190, Math.sqrt(n) * base + 26));
+    return { id: pl.id, n, r };
   });
-  return { h: Math.max(view, topArea + rows * (cardH + 34 + gap) + 40), cx: w / 2, cy: 150, r: Math.min(w / 2 - 24, 130), cardW, cards };
+  const need = B.reduce((s, b) => s + Math.PI * (b.r + 50) ** 2, 0) * (small ? 1.25 : 2.1);
+  const h = Math.max(view, Math.ceil(need / w));
+  const cx = w / 2, cy = h / 2;
+  B.forEach((b, i) => { const a = i / B.length * 6.283 + .4, d = Math.min(w, h) * .26; b.x = cx + Math.cos(a) * d; b.y = cy + Math.sin(a) * d * .8; });
+  for (let it = 0; it < 260; it++) {
+    for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) {
+      const a = B[i], b = B[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1, min = a.r + b.r + (small ? 64 : 96);
+      if (d < min) { const k = (min - d) / d / 2; a.x -= dx * k; a.y -= dy * k; b.x += dx * k; b.y += dy * k; }
+    }
+    for (const b of B) {
+      b.x += (cx - b.x) * .006; b.y += (cy - b.y) * .006;
+      b.x = Math.max(b.r + 16, Math.min(w - b.r - 16, b.x)); b.y = Math.max(b.r + 20, Math.min(h - b.r - 44, b.y));
+    }
+  }
+  for (const b of B) {
+    const ring = b.r - 8, t = Math.max(8, Math.min(small ? 26 : 34, ring * 1.05 / Math.sqrt(b.n + 2)));
+    const rnd = seeded(b.id), off = rnd() * 6.28;
+    b.t = t;
+    b.slots = Array.from({ length: b.n }, (_, i) => { const rr = Math.max(0, ring - t * .8) * Math.sqrt((i + .5) / b.n), a = i * 2.399963 + off; return [b.r + Math.cos(a) * rr, b.r + Math.sin(a) * rr]; });
+    b.sats = Array.from({ length: 2 + (rnd() * 3 | 0) }, () => { const a = rnd() * 6.283, d = b.r + 26 + rnd() * 60; return [b.x + Math.cos(a) * d, b.y + Math.sin(a) * d]; });
+  }
+  return { h, cx, cy, B };
 }
 function setStageHeight(h) { stage.style.height = h + 'px'; sizeSky(); }
 
-// ─────────── 카드 ───────────
-function cardHTML(pl) {
-  const list = photosOf(pl.id);
-  const asks = list.filter(p => p.ask).length, mine = list.filter(p => p.by === 'user').length, ai = list.filter(p => p.by === 'ai').length;
-  const meta = asks ? `확인 필요 ${asks}` : '';
-  return `<div class="card-head">
-      <div class="card-title"><span class="dot"></span><b>${esc(pl.name)}</b><span class="count">${list.length}장</span></div>
-      <div class="card-meta">${meta}</div>
-    </div>
-    <div class="thumbs">${list.map((p, i) => `<button type="button" class="thumb" data-photo="${p.id}" style="transition-delay:${Math.min(i * 25, 600)}ms" aria-label="${esc(p.name)}${p.ask ? ' (확인 필요)' : ''}"><img alt="" src="${thumbUrl(p)}">${p.ask ? '<span class="q">?</span>' : ''}${p.by === 'user' ? '<span class="me" title="직접 고름"></span>' : ''}</button>`).join('')}</div>`;
-}
+// ─────────── 버블 그리기 ───────────
 let layout = null;
 function renderPlanets(opts = {}) {
   const list = planetList();
   planetsEl.innerHTML = ''; raysSvg.innerHTML = '';
   $('intro').hidden = sitePhotos().length > 0 || S.busy;
   renderSiteBar(); updateButtons();
-  if (!list.length) { layout = null; setStageHeight(Math.max(560, innerHeight - $('bar').offsetHeight)); centerGalaxy(); if (!S.busy) setCore(null); return; }
-  layout = layoutFor(list.length);
+  if (!list.length) { layout = null; setStageHeight(Math.max(520, innerHeight - $('bar').offsetHeight)); centerGalaxy(); if (!S.busy) setCore(null); return; }
+  layout = layoutBubbles(list);
   setStageHeight(layout.h);
-  galaxy = { x: layout.cx, y: layout.cy, r: layout.r };
-  if (!S.busy) setCore(list.filter(p => p.id !== NONE).length, `요소 · ${sitePhotos().length}장`);
-  list.forEach((pl, i) => {
-    const L = layout.cards[i], [c, g] = pl.color;
-    const ray = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    ray.setAttribute('x1', layout.cx); ray.setAttribute('y1', layout.cy); ray.setAttribute('x2', L.node[0]); ray.setAttribute('y2', L.node[1]);
-    ray.setAttribute('stroke', c); ray.setAttribute('stroke-opacity', '.45'); ray.setAttribute('stroke-width', '1.2');
-    const len = Math.hypot(L.node[0] - layout.cx, L.node[1] - layout.cy);
-    ray.style.strokeDasharray = len; ray.style.strokeDashoffset = opts.animate ? len : 0;
-    raysSvg.appendChild(ray);
-    const node = document.createElement('div');
-    node.className = 'node' + (opts.animate ? '' : ' on'); node.style.left = L.node[0] + 'px'; node.style.top = L.node[1] + 'px';
-    node.style.setProperty('--c', c); node.style.setProperty('--g', g); node.dataset.node = pl.id;
-    planetsEl.appendChild(node);
-    const card = document.createElement('section');
-    card.className = 'card' + (opts.animate ? '' : ' on'); card.style.left = L.left + 'px'; card.style.top = L.top + 'px'; card.style.width = layout.cardW + 'px';
-    card.style.setProperty('--c', c); card.style.setProperty('--g', g); card.dataset.card = pl.id;
-    card.style.transformOrigin = `${L.node[0] - L.left}px ${L.node[1] - L.top}px`;
-    card.innerHTML = cardHTML(pl);
-    planetsEl.appendChild(card);
+  if (!S.busy) { const asks = sitePhotos().filter(p => p.ask).length; setCore(asks, asks ? '확인 필요' : '정렬 완료', null); }
+  const svg = [];
+  const B = layout.B;
+  // 버블끼리: 가장 가까운 둘과 잇는다
+  const seen = new Set();
+  B.forEach((a, i) => {
+    B.map((b, j) => [j, Math.hypot(b.x - a.x, b.y - a.y)]).filter(([j]) => j !== i).sort((x, y) => x[1] - y[1]).slice(0, 2).forEach(([j]) => {
+      const key = [i, j].sort().join('-'); if (seen.has(key)) return; seen.add(key);
+      const b = B[j], ang = Math.atan2(b.y - a.y, b.x - a.x);
+      svg.push(`<line class="ln" x1="${a.x + Math.cos(ang) * a.r}" y1="${a.y + Math.sin(ang) * a.r}" x2="${b.x - Math.cos(ang) * b.r}" y2="${b.y - Math.sin(ang) * b.r}"/>`);
+    });
+    for (const [sx, sy] of a.sats) {
+      const ang = Math.atan2(sy - a.y, sx - a.x);
+      svg.push(`<line class="ln sat" x1="${a.x + Math.cos(ang) * a.r}" y1="${a.y + Math.sin(ang) * a.r}" x2="${sx}" y2="${sy}"/><circle class="satdot" cx="${sx}" cy="${sy}" r="2.6"/>`);
+    }
+  });
+  raysSvg.innerHTML = svg.join('');
+  raysSvg.classList.toggle('on', !opts.animate);
+  B.forEach((b, i) => {
+    const pl = list[i], [c] = pl.color, photos = photosOf(pl.id);
+    const el = document.createElement('section');
+    el.className = 'bubble' + (opts.animate ? '' : ' on'); el.dataset.card = pl.id;
+    el.style.cssText = `left:${b.x - b.r}px;top:${b.y - b.r}px;width:${b.r * 2}px;height:${b.r * 2}px;--c:${c}`;
+    el.innerHTML = photos.map((p, k) => `<button type="button" class="t${opts.animate ? '' : ' on'}${p.ask ? ' q' : ''}" data-photo="${p.id}" style="left:${b.slots[k][0] - b.t / 2}px;top:${b.slots[k][1] - b.t / 2}px;width:${b.t}px;height:${b.t}px" aria-label="${esc(p.name)}"><img alt="" src="${thumbUrl(p)}"></button>`).join('');
+    planetsEl.appendChild(el);
+    const lab = document.createElement('div');
+    lab.className = 'blabel' + (opts.animate ? '' : ' on'); lab.dataset.label = pl.id;
+    lab.style.cssText = `left:${b.x}px;top:${b.y + b.r + 10}px;--c:${c}`;
+    lab.innerHTML = `<b><i></i>${esc(pl.name)}</b><span>${photos.length}</span>`;
+    planetsEl.appendChild(lab);
   });
 }
 function centerGalaxy() {
-  const w = stage.clientWidth, h = stage.clientHeight;
-  galaxy = { x: w / 2, y: Math.min(h * .42, 300), r: Math.min(w / 2 - 24, 260) };
-  const intro = $('intro'); intro.style.left = (w / 2) + 'px'; intro.style.top = (galaxy.y + galaxy.r * .62 + 24) + 'px';
+  const w = stage.clientWidth, h = Math.min(stage.clientHeight, innerHeight);
+  galaxy = { x: w / 2, y: h * .42, r: galaxy.r || 160 };
+  const intro = $('intro'); intro.style.left = (w / 2) + 'px'; intro.style.top = (h * .5 - 40) + 'px';
+}
+function sphereStage() {
+  const view = Math.max(520, innerHeight - $('bar').offsetHeight);
+  setStageHeight(view); galaxy.x = stage.clientWidth / 2; galaxy.y = view * .47; glow = 1;
 }
 function updateButtons() {
   const n = sitePhotos().length, real = sitePhotos().some(p => !p.demo);
@@ -685,59 +714,59 @@ function updateButtons() {
   $('siteSel').disabled = S.busy;
   $('mapBtn').hidden = !n; $('mapBtn').disabled = S.busy;
 }
-function setCore(num, label) {
-  const c = $('core'); c.hidden = num == null;
-  c.style.left = galaxy.x + 'px'; c.style.top = galaxy.y + 'px';
-  if (num != null) { $('coreNum').textContent = num; $('coreLabel').textContent = label; $('coreSite').textContent = S.sites.get(S.siteId)?.name || ''; }
+// 왼쪽 아래 큰 숫자 + 위쪽 상태
+function setCore(num, label, status) {
+  if (num !== undefined) $('core').hidden = num == null;
+  if (num != null) { $('coreNum').textContent = typeof num === 'number' ? num.toLocaleString() : num; $('coreLabel').textContent = label || ''; }
+  if (status !== undefined) { $('coreSite').hidden = !status; $('coreSite').textContent = status || ''; $('coreSite').style.top = (Math.max(0, $('bar').getBoundingClientRect().bottom) + 14) + 'px'; }
 }
 
 // ─────────── 연출 ───────────
 async function gatherExisting() {
   const st = stage.getBoundingClientRect(), pending = [];
-  [...planetsEl.querySelectorAll('.thumb')].forEach((b, i) => {
+  sphereStage();
+  const thumbs = [...planetsEl.querySelectorAll('.bubble .t')];
+  sphereN = thumbs.length; sphereSeq = 0;
+  thumbs.forEach((b, i) => {
     const p = S.photos.get(b.dataset.photo); if (!p) return;
-    const r = b.getBoundingClientRect();
-    pending.push(toOrbit(makeItem(p, r.left - st.left + r.width / 2, r.top - st.top + r.height / 2), 900, Math.min(i * 18, 500)));
+    const r = b.getBoundingClientRect(), it = makeItem(p, r.left - st.left + r.width / 2, r.top - st.top + r.height / 2, tileFor(thumbs.length));
+    it.s = r.width / it.size; place(it);
+    pending.push(toSphere(it, 1000, Math.min(i * 12, 500)));
   });
-  planetsEl.querySelectorAll('.card, .node').forEach(el => el.classList.remove('on'));
-  raysSvg.querySelectorAll('line').forEach(l => { l.style.transition = 'stroke-dashoffset .5s'; l.style.strokeDashoffset = l.style.strokeDasharray; });
+  planetsEl.querySelectorAll('.bubble, .blabel').forEach(el => el.classList.remove('on'));
+  raysSvg.classList.remove('on');
   await Promise.all(pending);
   planetsEl.innerHTML = ''; raysSvg.innerHTML = '';
 }
 async function sortShow() {
-  const list = planetList();
+  const list = planetList(), total = sitePhotos().length;
+  let left = total;
+  setCore(left, '남음', '정렬 중');
+  spin = .9; await sleep(900);
   renderPlanets({ animate: true });
-  setCore(sitePhotos().length, '정렬 중');
-  spin = .3; glow = .9;
-  await sleep(700);
-  for (const pl of list) {
-    const [c, g] = pl.color;
-    for (const p of photosOf(pl.id)) { const it = items.get(p.id); if (it) { it.el.classList.remove('scan'); it.el.style.setProperty('--c', c); it.el.style.setProperty('--g', g); } }
-    await sleep(160);
-  }
-  const named = list.filter(p => p.id !== NONE).length;
-  setCore(named || list.length, named ? '요소' : '미분류');
-  spin = .12; glow = .55;
-  await sleep(500);
-  const rays = [...raysSvg.querySelectorAll('line')];
-  rays.forEach((l, i) => { l.style.transition = `stroke-dashoffset .7s cubic-bezier(.3,.8,.3,1) ${i * 120}ms`; l.style.strokeDashoffset = 0; });
-  planetsEl.querySelectorAll('.node').forEach((n, i) => setTimeout(() => n.classList.add('on'), reduceMotion ? 0 : 500 + i * 120));
-  await sleep(700 + rays.length * 120);
-  const flights = [];
-  list.forEach((pl, i) => {
-    const L = layout.cards[i], node = planetsEl.querySelector(`[data-node="${CSS.escape(pl.id)}"]`);
-    photosOf(pl.id).forEach((p, j) => {
-      const it = items.get(p.id) || makeItem(p, galaxy.x, galaxy.y);
-      it.mode = 'idle';
-      flights.push(flyTo(it, L.node[0], L.node[1], 850, i * 140 + j * 55, (Math.random() - .5) * .25).then(() => {
-        it.el.remove(); items.delete(p.id);
-        node?.classList.remove('pulse'); void node?.offsetWidth; node?.classList.add('pulse');
-      }));
-    });
+  // 버블이 하나씩 열린다
+  for (const el of planetsEl.querySelectorAll('.bubble')) { el.classList.add('on'); await sleep(90); }
+  raysSvg.classList.add('on');
+  spin = .5;
+  const st = stage.getBoundingClientRect(), flights = [];
+  // 앞쪽(크게 보이는) 사진부터, 요소를 섞어 가며 빠져나간다
+  const order = sitePhotos().map(p => ({ p, z: items.get(p.id)?.z ?? 0 })).sort((a, b) => b.z - a.z);
+  const gap = Math.max(18, Math.min(70, 2600 / Math.max(1, total)));
+  order.forEach(({ p }, i) => {
+    const t = planetsEl.querySelector(`.bubble .t[data-photo="${p.id}"]`); if (!t) return;
+    const r = t.getBoundingClientRect(), tx = r.left - st.left + r.width / 2, ty = r.top - st.top + r.height / 2;
+    const it = items.get(p.id) || makeItem(p, galaxy.x, galaxy.y);
+    flights.push(sleep(i * gap).then(() => { it.mode = 'idle'; return flyTo(it, tx, ty, 780, 0, (Math.random() - .5) * .18, r.width / it.size); }).then(() => {
+      t.classList.add('on'); it.el.remove(); items.delete(p.id);
+      setCore(--left, left ? '남음' : '정렬 완료');
+    }));
   });
   await Promise.all(flights);
-  for (const c of planetsEl.querySelectorAll('.card')) { c.classList.add('on'); await sleep(110); }
-  spin = .05; glow = .35;
+  for (const l of planetsEl.querySelectorAll('.blabel')) l.classList.add('on');
+  spin = .25; glow = 0; sphereN = 0; sphereSeq = 0;
+  setCore(0, '정렬 완료', '완료');
+  await sleep(900);
+  setCore(undefined, undefined, null);
 }
 async function replay() {
   if (S.busy) return;
@@ -745,6 +774,10 @@ async function replay() {
   try { if (planetsEl.childElementCount) await gatherExisting(); await sortShow(); }
   finally { S.busy = false; clearItems(); renderPlanets(); }
 }
+planetsEl.addEventListener('click', e => {
+  const t = e.target.closest('[data-photo]'); if (t) { openLb(t.dataset.photo); return; }
+  const b = e.target.closest('.bubble'); if (b) { const f = photosOf(b.dataset.card)[0]; if (f) openLb(f.id); }
+});
 
 // ─────────── 사진 올리기 → 읽기 → Claude 판단 → 행성 ───────────
 async function ingest(files, demoList) {
@@ -763,19 +796,20 @@ async function ingest(files, demoList) {
   if (!cur || (!demoList && sitePhotos().length) || (demoList && !cur.demo)) newSite(!!demoList);
   const site = S.sites.get(S.siteId);
   S.busy = true; closeAsk(); updateButtons(); $('intro').hidden = true;
-  if (planetsEl.childElementCount) await gatherExisting(); else { const L = layoutFor(4); setStageHeight(L.h); galaxy = { x: L.cx, y: L.cy, r: L.r }; }
-  spin = .18; glow = .7;
+  if (planetsEl.childElementCount) await gatherExisting(); else { clearItems(); sphereStage(); }
+  spin = .35;
   const total = demoList ? demoList.length : todo.length;
   let done = 0, failed = 0, heic = 0, bigger = 0, saved = 0;
-  setCore(`0/${total}`, '읽는 중');
+  setCore(0, `/ ${total}`, '사진 읽는 중');
   const added = [];
   const enter = p => {
     const w = stage.clientWidth, h = Math.min(stage.clientHeight, innerHeight), a = Math.random() * 6.283;
-    toOrbit(makeItem(p, w / 2 + Math.cos(a) * w * .7, h / 2 + Math.sin(a) * h * .7), 1100);
+    sphereN = Math.max(sphereN, total);
+    toSphere(makeItem(p, w / 2 + Math.cos(a) * w * .75, h / 2 + Math.sin(a) * h * .75, tileFor(total)), 1200);
   };
   try {
     if (demoList) {
-      for (const p of demoList) { p.siteId = site.id; S.photos.set(p.id, p); added.push(p); enter(p); done++; setCore(`${done}/${total}`, '읽는 중'); await sleep(70); }
+      for (const p of demoList) { p.siteId = site.id; S.photos.set(p.id, p); added.push(p); enter(p); done++; setCore(done, `/ ${total}`); await sleep(70); }
     } else {
       const queue = [...todo];
       const worker = async () => {
@@ -787,7 +821,7 @@ async function ingest(files, demoList) {
             if (p.origW > MAX_W) { bigger++; saved += Math.max(0, p.origSize - p.size); }
             S.photos.set(p.id, p); added.push(p); savePhoto(p); enter(p);
           } catch (e) { console.warn('읽기 실패', f.name, e); failed++; }
-          done++; setCore(`${done}/${total}`, heic ? 'HEIC 변환 중' : '읽는 중');
+          done++; setCore(done, `/ ${total}`, heic ? 'HEIC 변환 중' : '사진 읽는 중');
         }
       };
       await Promise.all([worker(), worker()]);
@@ -795,16 +829,16 @@ async function ingest(files, demoList) {
     refreshSite(site); saveSite(site); renderSiteBar();
     await sleep(500);
     // Claude가 사진을 본다: 보고 있는 사진이 빛난다
-    setCore(`0/${added.length}`, '요소 판단 중');
-    spin = .22;
+    setCore(0, `/ ${added.length}`, '요소 판단 중');
+    spin = .45;
     let scanTimer = setInterval(() => {
       for (const it of items.values()) it.el.classList.remove('scan');
       const arr = [...items.values()]; for (let k = 0; k < 3 && arr.length; k++) arr[Math.random() * arr.length | 0].el.classList.add('scan');
     }, 380);
     let res;
     try {
-      res = demoList ? await demoClassify(added, n => setCore(`${n}/${added.length}`, '요소 판단 중'))
-                     : await classify(added, n => setCore(`${n}/${added.length}`, '요소 판단 중'));
+      res = demoList ? await demoClassify(added, n => setCore(n, `/ ${added.length}`))
+                     : await classify(added, n => setCore(n, `/ ${added.length}`));
     } finally { clearInterval(scanTimer); }
     for (const p of added) savePhoto(p);
     await sortShow();
@@ -864,11 +898,11 @@ async function answer(el) {
   p.element = el; p.by = 'user'; p.ask = false; savePhoto(p);
   // 답한 사진이 행성으로 날아간다
   renderPlanets();
-  const node = planetsEl.querySelector(`[data-node="${CSS.escape(el)}"]`);
-  if (node && !reduceMotion) {
-    const it = makeItem(p, r.left - st.left + r.width / 2, r.top - st.top + r.height / 2);
-    it.el.style.setProperty('--c', colorOf(el)[0]); it.el.style.setProperty('--g', colorOf(el)[1]);
-    flyTo(it, parseFloat(node.style.left), parseFloat(node.style.top), 700, 0, .15).then(() => { it.el.remove(); items.delete(p.id); node.classList.remove('pulse'); void node.offsetWidth; node.classList.add('pulse'); });
+  const slot = planetsEl.querySelector(`.bubble .t[data-photo="${p.id}"]`);
+  if (slot && !reduceMotion) {
+    slot.classList.remove('on');
+    const sr = slot.getBoundingClientRect(), it = makeItem(p, r.left - st.left + r.width / 2, r.top - st.top + r.height / 2, 96);
+    flyTo(it, sr.left - st.left + sr.width / 2, sr.top - st.top + sr.height / 2, 750, 0, .15, sr.width / 96).then(() => { slot.classList.add('on'); it.el.remove(); items.delete(p.id); });
   }
   if (nextL.length) { S.askId = nextL[0].id; renderAsk(); updateButtons(); }
   else { closeAsk(); const ctr = S.sites.get(S.siteId)?.center; toast('완료'); if (ctr) setTimeout(() => { if (!M3.on && $('lb').hidden) openMap(); }, 1400); }
@@ -953,7 +987,6 @@ $('clearBtn').addEventListener('click', async () => {
   S.siteId = next?.id || null; saveSettings(); closeAsk(); renderPlanets(); toast('삭제됨');
 });
 $('replayBtn').addEventListener('click', replay);
-planetsEl.addEventListener('click', e => { const t = e.target.closest('[data-photo]'); if (t) openLb(t.dataset.photo); });
 
 // ─────────── 사진 보기 ───────────
 function lbList() { const p = S.photos.get(S.lbId); return p ? photosOf(keyOf(p)) : []; }
