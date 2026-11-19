@@ -153,12 +153,27 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 .chip:hover { background: var(--fill-2); }
 .chip .k { font-size: 11px; color: var(--label-3); margin-right: 5px; font-variant-numeric: tabular-nums; }
 .chip.guess { box-shadow: inset 0 0 0 1.5px rgba(255,159,10,.7); }
+.chip.guess2 { box-shadow: inset 0 0 0 1px rgba(255,159,10,.35); }
 .chip.on { background: var(--blue); color: #fff; font-weight: 600; }
 .chip.on .k { color: rgba(255,255,255,.7); }
 .add-el { display: flex; gap: 6px; }
 .add-el input { flex: 1; min-width: 0; font-size: 13px; background: var(--fill); border: 0; border-radius: 8px; padding: 7px 10px; }
 .hint { margin: 0; font-size: 12px; color: var(--label-3); }
 
+.elsheet-bg { position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.elsheet { width: min(520px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  border: .5px solid var(--sep); border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.elsheet .eh { display: flex; justify-content: space-between; align-items: center; }
+.elsheet h3 { margin: 0; font: 600 17px var(--display); }
+.elrow { display: grid; grid-template-columns: 10px 110px 1fr 28px; gap: 8px; align-items: start; padding: 8px 0; border-top: .5px solid var(--sep); }
+.elrow i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-top: 11px; }
+.elrow input, .elrow textarea { min-width: 0; background: var(--fill); border: 0; border-radius: 8px; padding: 7px 9px; font-size: 13px; color: var(--label); font-family: var(--sans); }
+.elrow textarea { resize: vertical; min-height: 34px; line-height: 1.4; }
+.elrow .del { width: 28px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--label-3); cursor: pointer; font-size: 16px; }
+.elrow .del:hover { color: var(--red); background: var(--fill); }
+.elrow.fixed input { opacity: .7; }
+.elsheet .ef { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+@media (max-width: 520px) { .elrow { grid-template-columns: 10px 1fr 28px; } .elrow textarea { grid-column: 2 / 4; } }
 .toast { position: fixed; left: 50%; top: calc(64px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 60; background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
   border: .5px solid var(--sep); padding: 9px 16px; border-radius: 980px; font-size: 13px; max-width: calc(100vw - 32px); box-shadow: 0 8px 30px rgba(0,0,0,.45); }
 .drop { position: fixed; inset: 0; z-index: 40; background: rgba(10,132,255,.12); box-shadow: inset 0 0 0 3px var(--blue); display: flex; align-items: center; justify-content: center; pointer-events: none; }
@@ -239,6 +254,7 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
   </div>
   <div class="actions">
     <button class="btn ask" id="askBtn" type="button" hidden>확인 0</button>
+    <button class="btn" id="elBtn" type="button">요소</button>
     <button class="btn" id="replayBtn" type="button" disabled>다시 정렬</button>
     <button class="btn" id="mapBtn" type="button" hidden>지도</button>
     <button class="btn" id="zipBtn" type="button" disabled>내보내기</button>
@@ -335,6 +351,15 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
   </div>
 </section>
 
+<div class="elsheet-bg" id="elSheet" hidden>
+  <form class="elsheet" id="elForm" aria-label="요소 기준">
+    <div class="eh"><h3>요소 기준</h3><button class="btn small" type="button" id="elClose">닫기</button></div>
+    <p class="hint">설명은 Claude가 분류할 때 기준으로 씀 · 직접 고른 사진은 참고 예시로 쓰임</p>
+    <div id="elRows"></div>
+    <button class="btn small" type="button" id="elAdd">+ 요소 추가</button>
+    <div class="ef"><button class="btn" type="button" id="elRedo">저장 후 다시 분류</button><button class="btn primary" type="submit">저장</button></div>
+  </form>
+</div>
 <div class="drop" id="drop" hidden><p>놓기</p></div>
 <div class="toast" id="toast" role="status" hidden></div>
 
@@ -346,9 +371,15 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 // ─────────── 설정 ───────────
 const MAX_W = 2000;          // 저장 이미지 가로 최대 px
 const THUMB = 220;           // 애니메이션·목록용
-const AI_SIDE = 768;         // Claude에게 보여 줄 크기
+const AI_SIDE = 1024;        // Claude에게 보여 줄 크기
 const SURE = 0.6;            // 이보다 확신이 낮으면 질문으로
 const DEFAULT_ELEMENTS = ['입구', '창', '계단'];
+const DEFAULT_DEFS = {
+  '입구': '출입구·현관·대문·셔터 입구·캐노피처럼 사람이 드나드는 개구부와 그 주변이 사진의 중심',
+  '창': '창문·창호·창틀·유리면·창이 반복되는 입면이 사진의 중심',
+  '계단': '계단·계단실·경사로·옥외 계단처럼 층을 오르내리는 동선 요소가 사진의 중심'
+};
+const OTHER_DEF = '위 기준 어디에도 맞지 않음 (건물 전경, 간판, 설비, 바닥, 하늘, 사람 등)';
 const OTHER = '기타', NONE = '미분류';
 const PALETTE = [
   ['#0A84FF', 'rgba(10,132,255,.45)'], ['#FF9F0A', 'rgba(255,159,10,.45)'], ['#30D158', 'rgba(48,209,88,.4)'],
@@ -359,7 +390,7 @@ const GREY = ['#8E8E93', 'rgba(142,142,147,.35)'], DIM = ['#48484A', 'rgba(72,72
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ─────────── 상태 ───────────
-const S = { photos: new Map(), sites: new Map(), siteId: null, elements: [...DEFAULT_ELEMENTS], busy: false, lbId: null, askQueue: [], askId: null };
+const S = { photos: new Map(), sites: new Map(), siteId: null, elements: [...DEFAULT_ELEMENTS], defs: { ...DEFAULT_DEFS }, busy: false, lbId: null, askQueue: [], askId: null };
 const $ = id => document.getElementById(id);
 const stage = $('stage'), fx = $('fx'), raysSvg = $('rays'), planetsEl = $('planets');
 const urls = new Map();
@@ -409,7 +440,7 @@ const DB = (() => {
 })();
 const savePhoto = p => (p.demo ? null : DB.put('photos', p.id, p));
 const saveSite = s => (s.demo ? null : DB.put('sites', s.id, s));
-const saveSettings = () => DB.put('settings', 'main', { elements: S.elements, siteId: S.siteId });
+const saveSettings = () => DB.put('settings', 'main', { elements: S.elements, defs: S.defs, siteId: S.siteId });
 
 // ─────────── 사진 읽기: EXIF + 2000px ───────────
 let heicLoading = null;
@@ -481,27 +512,49 @@ function sampler() {
   return samplerP;
 }
 let aiOff = null; // 사용 불가 사유가 생기면 이번 화면에서는 다시 묻지 않는다
+// 판단 방법: 요소마다 기준 설명을 주고, 사용자가 직접 고른 사진을 참고 예시로 함께 보여 준다.
+function refExamples(maxRefs) {
+  const out = [];
+  for (const el of S.elements) {
+    const mine = [...S.photos.values()].filter(p => p.by === 'user' && p.element === el && (p.ai || p.thumb)).sort((a, b) => (b.labeledAt || '').localeCompare(a.labeledAt || ''));
+    if (mine[0]) out.push(mine[0]);
+    if (out.length >= maxRefs) break;
+  }
+  return out;
+}
 async function classify(list, onProgress) {
   const sm = await sampler();
   if (!sm || aiOff) { for (const p of list) markAsk(p); return { used: false, reason: aiOff || 'unavailable' }; }
   const cats = [...S.elements, OTHER];
+  const rules = cats.map((c, i) => `${i + 1}. ${c} — ${c === OTHER ? OTHER_DEF : (S.defs[c] || `${c}이(가) 사진의 중심`)}`).join('\n');
+  const refs = refExamples(Math.max(0, Math.min(3, sm.max - 3)));
+  const per = Math.max(1, Math.min(6, sm.max - refs.length));
+  const batches = []; for (let i = 0; i < list.length; i += per) batches.push(list.slice(i, i + per));
   let done = 0;
-  for (let i = 0; i < list.length; i += sm.max) {
-    const batch = list.slice(i, i + sm.max);
-    const prompt = `건축물 답사에서 찍은 사진 ${batch.length}장입니다. 사진 순서대로 1부터 ${batch.length}까지 번호를 매깁니다.
-각 사진이 주로 보여 주는 건축요소를 다음 중 정확히 하나로 고르세요: ${cats.join(', ')}.
-- 사진의 중심 대상으로 판단합니다. 건물 전경처럼 어느 요소도 중심이 아니면 "${OTHER}".
-- confidence는 0부터 1 사이 숫자로, 확실하지 않으면 낮게 주세요.
-- note는 사진에 보이는 것을 한국어 20자 이내로.
-JSON 배열만 답하세요. 예: [{"n":1,"element":"${cats[0]}","confidence":0.82,"note":"주출입구 캐노피"}]`;
+  async function run(batch) {
+    const refText = refs.length ? `\n앞의 ${refs.length}장은 사용자가 직접 분류한 참고 예시입니다: ${refs.map((p, i) => `${i + 1}번=${p.element}`).join(', ')}. 참고 예시와 비슷한 사진은 같은 요소로 봅니다.\n분류할 사진은 그다음 ${batch.length}장이며, 이 사진들에만 1부터 ${batch.length}까지 번호를 매깁니다.` : `\n분류할 사진 ${batch.length}장에 순서대로 1부터 ${batch.length}까지 번호를 매깁니다.`;
+    const prompt = `건축물 답사에서 찍은 사진을 건축요소별로 분류합니다.
+
+분류 기준:
+${rules}
+
+판단 방법:
+- 촬영자가 무엇을 찍으려 했는지, 즉 화면에서 가장 크고 초점이 맞은 대상을 기준으로 합니다.
+- 여러 요소가 함께 보이면 화면 중심에 있는 것을 고릅니다. 건물 전체가 보이는 전경으로 특정 요소가 중심이 아니면 "${OTHER}".
+- 기준 설명에 맞는지 하나씩 대조하고, 두 요소 사이에서 망설여지면 confidence를 0.5 미만으로 줍니다.${refText}
+
+각 사진마다 {"n": 번호, "element": 기준 중 하나의 이름 그대로, "confidence": 0~1, "second": 두 번째 후보 이름 또는 null, "note": 사진에 보이는 것 한국어 20자 이내}
+JSON 배열만 답하세요.`;
     try {
-      const out = await sm.s.json(prompt, { images: batch.map(p => p.ai || p.thumb), modelTier: 'quick' });
+      const out = await sm.s.json(prompt, { images: [...refs.map(p => p.ai || p.thumb), ...batch.map(p => p.ai || p.thumb)], modelTier: 'default' });
       const arr = Array.isArray(out) ? out : [];
       batch.forEach((p, k) => {
         const r = arr.find(x => Number(x?.n) === k + 1) || arr[k];
         const el = typeof r?.element === 'string' ? r.element.trim() : '';
         const conf = Math.max(0, Math.min(1, Number(r?.confidence) || 0));
         p.aiElement = cats.includes(el) ? el : null; p.aiConf = conf; p.aiNote = typeof r?.note === 'string' ? r.note.slice(0, 40) : null;
+        p.aiSecond = typeof r?.second === 'string' && cats.includes(r.second.trim()) ? r.second.trim() : null;
+        if (p.by === 'user') return;
         if (p.aiElement && conf >= SURE) { p.element = p.aiElement; p.by = 'ai'; p.ask = false; }
         else markAsk(p);
       });
@@ -510,11 +563,14 @@ JSON 배열만 답하세요. 예: [{"n":1,"element":"${cats[0]}","confidence":0.
       for (const p of batch) markAsk(p);
       if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed', 'images_unavailable'].includes(e?.code)) aiOff = e.code;
       if (e?.code === 'rate_limited') aiOff = 'rate_limited';
-      if (aiOff) { for (const p of list.slice(i + sm.max)) markAsk(p); return { used: done > 0, reason: aiOff }; }
     }
     done += batch.length; onProgress?.(done);
   }
-  return { used: true };
+  // 두 묶음씩 동시에
+  const queue = [...batches];
+  await Promise.all([0, 1].map(async () => { while (queue.length && !aiOff) await run(queue.shift()); }));
+  for (const b2 of queue) for (const p of b2) markAsk(p);
+  return aiOff ? { used: done > 0, reason: aiOff } : { used: true };
 }
 function markAsk(p) { if (p.by !== 'user') { p.element = p.element && p.by ? p.element : null; p.ask = true; } }
 
@@ -1009,16 +1065,16 @@ function renderAsk() {
   $('askN').textContent = `${i + 1} / ${L.length}`;
   $('askImg').src = thumbUrl(p); $('askImg').alt = p.name;
   $('askGuess').innerHTML = p.aiElement
-    ? `추정 <b>${esc(p.aiElement)}</b> ${Math.round((p.aiConf || 0) * 100)}%${p.aiNote ? ` · ${esc(p.aiNote)}` : ''}`
+    ? `추정 <b>${esc(p.aiElement)}</b> ${Math.round((p.aiConf || 0) * 100)}%${p.aiSecond ? ` · 다음 ${esc(p.aiSecond)}` : ''}${p.aiNote ? ` · ${esc(p.aiNote)}` : ''}`
     : p.aiNote ? esc(p.aiNote) : '';
   $('askChips').innerHTML = [...S.elements, OTHER].map((el, k) =>
-    `<button type="button" class="chip ${p.aiElement === el ? 'guess' : ''}" data-ans="${esc(el)}">${k < 9 ? `<span class="k">${k + 1}</span>` : ''}${esc(el)}</button>`).join('');
+    `<button type="button" class="chip ${p.aiElement === el ? 'guess' : p.aiSecond === el ? 'guess2' : ''}" data-ans="${esc(el)}">${k < 9 ? `<span class="k">${k + 1}</span>` : ''}${esc(el)}</button>`).join('');
 }
 async function answer(el) {
   const p = S.photos.get(S.askId); if (!p) return;
   const st = stage.getBoundingClientRect(), r = $('askImg').getBoundingClientRect();
   const nextL = askList().filter(x => x.id !== p.id);
-  p.element = el; p.by = 'user'; p.ask = false; savePhoto(p);
+  p.element = el; p.by = 'user'; p.ask = false; p.labeledAt = new Date().toISOString(); savePhoto(p);
   // 답한 사진이 행성으로 날아간다
   renderPlanets();
   const slot = planetsEl.querySelector(`.bubble .t[data-photo="${p.id}"]`);
@@ -1136,6 +1192,62 @@ $('clearBtn').addEventListener('click', async () => {
 });
 $('replayBtn').addEventListener('click', replay);
 
+// ─────────── 요소 기준 편집 ───────────
+function elRowHTML(name, desc, fixed) {
+  return `<div class="elrow${fixed ? ' fixed' : ''}" data-orig="${esc(name)}" style="--c:${colorOf(name)[0]}"><i></i>
+    <input class="en" value="${esc(name)}" maxlength="12" placeholder="이름" ${fixed ? 'readonly' : ''} aria-label="요소 이름">
+    <textarea class="ed" rows="2" maxlength="200" placeholder="판단 기준" ${fixed ? 'readonly' : ''} aria-label="판단 기준">${esc(desc)}</textarea>
+    ${fixed ? '<span></span>' : '<button type="button" class="del" aria-label="삭제">×</button>'}</div>`;
+}
+function openElSheet() {
+  $('elRows').innerHTML = S.elements.map(el => elRowHTML(el, S.defs[el] || '', false)).join('') + elRowHTML(OTHER, OTHER_DEF, true);
+  $('elRedo').hidden = !sitePhotos().length;
+  $('elSheet').hidden = false;
+}
+function saveElSheet() {
+  const rows = [...$('elRows').querySelectorAll('.elrow:not(.fixed)')];
+  const names = [], defs = {}, renames = [];
+  for (const r of rows) {
+    const n = r.querySelector('.en').value.trim().replace(/[,\n]/g, ''), d = r.querySelector('.ed').value.trim(), o = r.dataset.orig;
+    if (!n || n === OTHER || n === NONE || names.includes(n)) continue;
+    names.push(n); if (d) defs[n] = d;
+    if (o && o !== n) renames.push([o, n]);
+  }
+  if (!names.length) { toast('요소가 하나 이상 필요'); return false; }
+  for (const [o, n] of renames) for (const p of S.photos.values()) {
+    let ch = false;
+    if (p.element === o) { p.element = n; ch = true; }
+    if (p.aiElement === o) { p.aiElement = n; ch = true; }
+    if (ch) savePhoto(p);
+  }
+  S.elements = names; S.defs = defs; saveSettings();
+  return true;
+}
+$('elBtn').addEventListener('click', openElSheet);
+$('elClose').addEventListener('click', () => ($('elSheet').hidden = true));
+$('elSheet').addEventListener('click', e => { if (e.target === $('elSheet')) $('elSheet').hidden = true; });
+$('elAdd').addEventListener('click', () => {
+  const fixed = $('elRows').querySelector('.elrow.fixed');
+  fixed.insertAdjacentHTML('beforebegin', elRowHTML('', '', false));
+  fixed.previousElementSibling.dataset.orig = '';
+  fixed.previousElementSibling.querySelector('.en').focus();
+});
+$('elRows').addEventListener('click', e => { const d = e.target.closest('.del'); if (d) d.closest('.elrow').remove(); });
+$('elForm').addEventListener('submit', e => {
+  e.preventDefault(); if (!saveElSheet()) return;
+  $('elSheet').hidden = true; if (!S.busy) renderPlanets(); toast('저장됨');
+});
+// 기준을 바꾼 뒤: 직접 고른 사진은 그대로 두고 나머지를 다시 판단
+$('elRedo').addEventListener('click', async () => {
+  if (S.busy || !saveElSheet()) return;
+  $('elSheet').hidden = true;
+  const L = sitePhotos().filter(p => p.by !== 'user');
+  if (!L.length) { toast('다시 분류할 사진 없음'); renderPlanets(); return; }
+  if (planetsEl.querySelector('.bubble')) { S.busy = true; try { await gatherExisting(); } finally { S.busy = false; } }
+  for (const p of L) { p.pending = true; p.element = null; p.by = null; p.ask = false; savePhoto(p); }
+  renderPlanets(); sortNow();
+});
+
 // ─────────── 사진 보기 ───────────
 function lbList() { const p = S.photos.get(S.lbId); return p ? photosOf(keyOf(p)) : []; }
 function openLb(id) { S.lbId = id; $('lb').hidden = false; renderLb(); $('lbClose').focus(); }
@@ -1161,7 +1273,7 @@ function renderLb() {
 function stepLb(d) { const L = lbList(), i = L.findIndex(x => x.id === S.lbId); const n = L[i + d]; if (n) { S.lbId = n.id; renderLb(); } }
 function setElement(el) {
   const p = S.photos.get(S.lbId); if (!p) return;
-  p.element = el; p.by = 'user'; p.ask = false; savePhoto(p);
+  p.element = el; p.by = 'user'; p.ask = false; p.labeledAt = new Date().toISOString(); savePhoto(p);
   renderLb(); renderPlanets(); if (!$('ask').hidden) { askList().length ? renderAsk() : closeAsk(); }
 }
 $('lbChips').addEventListener('click', e => { const c = e.target.closest('[data-el]'); if (c) setElement(c.dataset.el); });
@@ -1762,6 +1874,7 @@ addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout((
   sizeSky(); centerGalaxy(); requestAnimationFrame(frame);
   const st = await DB.get('settings', 'main');
   if (st?.elements?.length) S.elements = st.elements;
+  if (st?.defs) S.defs = { ...DEFAULT_DEFS, ...st.defs };
   for (const p of (await DB.all('photos')) || []) S.photos.set(p.id, p);
   for (const s of (await DB.all('sites')) || []) S.sites.set(s.id, s);
   // 이전 버전(장소별 분류)에서 넘어온 사진은 한 답사로 모은다. 원래 값은 지우지 않는다.
