@@ -1,202 +1,204 @@
 <title>Photo Sorting</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: one night-sky stage. A site's photos gather as a spiral galaxy, Claude looks at each one, then rays carry them out to one planet per architectural element; each planet opens a card listing its photos. Uncertain photos come back as question cards. Single dark look by design. */
+/* Layout: Apple-style dark UI. Black stage; translucent material bars and sheets; system blue accent; system colors per element. Single dark look by design. */
 :root {
   color-scheme: dark;
-  --space: #070A14;
-  --space-2: #0D1222;
-  --panel: rgba(18, 24, 42, .86);
-  --panel-solid: #121A2E;
-  --line: rgba(160, 180, 255, .16);
-  --ink: #E9ECF7;
-  --ink-2: #A9B1CC;
-  --ink-3: #6E7898;
-  --core: #FFE7B8;
-  --accent: #8FA8FF;
-  --ask: #FFD27A;
-  --display: 'Space Grotesk', 'Noto Sans KR', system-ui, sans-serif;
-  --sans: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
-  --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --bg: #000000;
+  --bg-2: #1C1C1E;
+  --fill: rgba(118, 118, 128, .24);
+  --fill-2: rgba(118, 118, 128, .36);
+  --material: rgba(30, 30, 32, .72);
+  --material-solid: #1C1C1E;
+  --sep: rgba(84, 84, 88, .55);
+  --label: #FFFFFF;
+  --label-2: rgba(235, 235, 245, .62);
+  --label-3: rgba(235, 235, 245, .32);
+  --blue: #0A84FF;
+  --orange: #FF9F0A;
+  --red: #FF453A;
+  --green: #30D158;
+  --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+  --display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+  --blur: saturate(180%) blur(20px);
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { min-height: 100%; }
-body { background: var(--space); color: var(--ink); font: 14px/1.5 var(--sans); overflow-x: hidden; }
-button, input, select { font: inherit; color: inherit; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+body { background: var(--bg); color: var(--label); font: 14px/1.45 var(--sans); overflow-x: hidden; -webkit-font-smoothing: antialiased; letter-spacing: -.01em; }
+button, input, select { font: inherit; color: inherit; letter-spacing: inherit; }
+:focus-visible { outline: 3px solid rgba(10,132,255,.6); outline-offset: 2px; }
+.num, .count { font-variant-numeric: tabular-nums; }
 
-/* top bar */
-body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--space); }
-.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap;
-  padding-block: 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  background: linear-gradient(var(--space) 60%, rgba(7,10,20,0)); }
-.brand { display: flex; align-items: center; gap: 14px; min-width: 0; flex-wrap: wrap; }
-.brand h1 { margin: 0; font: 700 20px/1 var(--display); letter-spacing: -.01em; }
+/* toolbar */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; min-height: 52px;
+  padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); border-bottom: .5px solid var(--sep); }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; flex-wrap: wrap; }
+.brand h1 { margin: 0; font: 600 17px/1 var(--display); letter-spacing: -.02em; }
 .site { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.site select, .site input { background: var(--panel-solid); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; font-size: 13px; min-width: 0; }
-.site input { width: 170px; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.btn { border: 1px solid var(--line); background: rgba(20,27,48,.7); border-radius: 999px; padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; transition: border-color .15s, background .15s; }
-.btn:hover { border-color: rgba(160,180,255,.45); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #0A0F22; font-weight: 700; }
-.btn.primary:hover { background: #A9BCFF; }
-.btn.ask { border-color: rgba(255,210,122,.5); color: var(--ask); }
-.btn.warn { color: #FFB4B4; }
-.btn.small { padding: 4px 10px; font-size: 12px; }
-.btn[disabled] { opacity: .4; cursor: default; }
+.site select, .site input { background: var(--fill); border: 0; border-radius: 8px; padding: 6px 10px; font-size: 13px; min-width: 0; }
+.site input { width: 160px; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.btn { border: 0; background: var(--fill); border-radius: 980px; padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; transition: background .15s, opacity .15s; }
+.btn:hover { background: var(--fill-2); }
+.btn:active { opacity: .7; }
+.btn.primary { background: var(--blue); color: #fff; font-weight: 600; }
+.btn.primary:hover { background: #409CFF; }
+.btn.ask { background: rgba(255,159,10,.18); color: var(--orange); }
+.btn.warn { color: var(--red); }
+.btn.small { padding: 5px 11px; font-size: 12.5px; }
+.btn[disabled] { opacity: .35; cursor: default; }
 
 /* stage */
-.stage { position: relative; width: 100%; min-height: calc(100vh - 64px); }
+.stage { position: relative; width: 100%; min-height: calc(100vh - 52px); }
 #sky { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #rays { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .fx { position: absolute; inset: 0; pointer-events: none; }
-.star { position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 6px; overflow: hidden; will-change: transform;
-  box-shadow: 0 0 0 1.5px var(--c, rgba(255,255,255,.7)), 0 0 14px 2px var(--g, rgba(160,180,255,.35)); background: #1A2240; transition: box-shadow .5s; }
+.star { position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 7px; overflow: hidden; will-change: transform;
+  box-shadow: 0 0 0 1px var(--c, rgba(255,255,255,.5)), 0 6px 18px rgba(0,0,0,.5), 0 0 12px var(--g, rgba(255,255,255,.12)); background: var(--bg-2); transition: box-shadow .5s; }
 .star img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.star.scan { box-shadow: 0 0 0 2px var(--core), 0 0 22px 6px rgba(255,210,140,.7); }
+.star.scan { box-shadow: 0 0 0 2px #fff, 0 0 20px 4px rgba(255,255,255,.55); }
 
-.core { position: absolute; transform: translate(-50%, -50%); text-align: center; pointer-events: none; width: 280px; }
-.core .num { font: 700 44px/1 var(--display); color: var(--core); text-shadow: 0 0 24px rgba(255,210,140,.55); font-variant-numeric: tabular-nums; }
-.core .label { margin-top: 6px; color: var(--ink-2); font-size: 13px; }
-.core .site-name { margin-top: 2px; color: var(--ink-3); font-size: 12px; }
+.core { position: absolute; transform: translate(-50%, -50%); text-align: center; pointer-events: none; width: 260px; }
+.core .num { font: 600 48px/1 var(--display); letter-spacing: -.03em; }
+.core .label { margin-top: 6px; color: var(--label-2); font-size: 13px; }
+.core .site-name { margin-top: 2px; color: var(--label-3); font-size: 12px; }
 
-.intro { position: absolute; transform: translate(-50%, 0); width: min(460px, calc(100% - 32px)); text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center; }
-.intro h2 { margin: 0; font: 700 26px/1.25 var(--display); letter-spacing: -.01em; text-wrap: balance; }
-.intro p { margin: 0; color: var(--ink-2); text-wrap: balance; }
+.intro { position: absolute; transform: translate(-50%, 0); width: min(360px, calc(100% - 32px)); text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .intro .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.intro .fine { font-size: 12px; color: var(--ink-3); }
+.intro .fine { margin: 0; font-size: 12px; color: var(--label-3); }
 
-/* planets */
-.node { position: absolute; width: 18px; height: 18px; border-radius: 50%; transform: translate(-50%, -50%) scale(0); background: var(--c);
-  box-shadow: 0 0 0 4px rgba(255,255,255,.06), 0 0 22px 6px var(--g); transition: transform .45s cubic-bezier(.3,1.6,.5,1); }
+/* element planets */
+.node { position: absolute; width: 14px; height: 14px; border-radius: 50%; transform: translate(-50%, -50%) scale(0); background: var(--c);
+  box-shadow: 0 0 0 4px rgba(255,255,255,.08), 0 0 18px 4px var(--g); transition: transform .45s cubic-bezier(.3,1.6,.5,1); }
 .node.on { transform: translate(-50%, -50%) scale(1); }
 .node.pulse { animation: pulse .35s ease-out; }
 @keyframes pulse { 50% { transform: translate(-50%, -50%) scale(1.35); } }
 
-.card { position: absolute; width: 248px; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); opacity: 0; transform: scale(.85); transition: opacity .4s, transform .45s cubic-bezier(.2,1.2,.4,1); overflow: hidden; }
+.card { position: absolute; width: 248px; display: flex; flex-direction: column; background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  border: .5px solid var(--sep); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.4); opacity: 0; transform: scale(.9); transition: opacity .4s, transform .45s cubic-bezier(.2,1.2,.4,1); overflow: hidden; }
 .card.on { opacity: 1; transform: none; }
-.card::before { content: ""; height: 3px; background: var(--c); display: block; }
-.card-head { padding: 10px 12px 8px; display: flex; flex-direction: column; gap: 2px; }
+.card-head { padding: 12px 14px 8px; display: flex; flex-direction: column; gap: 2px; }
 .card-title { display: flex; align-items: center; gap: 8px; }
-.card-title .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--g); flex: none; }
-.card-title b { flex: 1; min-width: 0; font-size: 15px; }
-.card-title .count { font: 500 12px var(--mono); color: var(--ink-2); flex: none; }
-.card-meta { font-size: 11.5px; color: var(--ink-3); }
-.thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 0 10px 10px; overflow-y: auto; max-height: 172px; }
-.thumb { position: relative; aspect-ratio: 1; border-radius: 5px; overflow: hidden; border: 0; padding: 0; cursor: pointer; background: #1A2240; opacity: 0; transform: translateY(6px); transition: opacity .3s, transform .3s; }
+.card-title .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+.card-title b { flex: 1; min-width: 0; font: 600 15px var(--display); }
+.card-title .count { font-size: 13px; color: var(--label-2); flex: none; }
+.card-meta { font-size: 12px; color: var(--orange); }
+.thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 0 12px 12px; overflow-y: auto; max-height: 172px; }
+.thumb { position: relative; aspect-ratio: 1; border-radius: 6px; overflow: hidden; border: 0; padding: 0; cursor: pointer; background: var(--bg-2); opacity: 0; transform: translateY(6px); transition: opacity .3s, transform .3s; }
 .card.on .thumb { opacity: 1; transform: none; }
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.thumb:hover img { filter: brightness(1.15); }
-.thumb .q { position: absolute; right: 2px; top: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--ask); color: #2A1C00; font: 700 10px/15px var(--sans); text-align: center; }
-.thumb .me { position: absolute; left: 2px; bottom: 2px; width: 7px; height: 7px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(7,10,20,.8); }
+.thumb:hover img { filter: brightness(1.12); }
+.thumb .q { position: absolute; right: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--orange); color: #000; font: 700 10px/14px var(--sans); text-align: center; }
+.thumb .me { position: absolute; left: 3px; bottom: 3px; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.6); }
 
-/* question sheet */
-.ask-sheet { position: fixed; z-index: 45; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(560px, calc(100vw - 32px));
-  background: var(--panel-solid); border: 1px solid rgba(255,210,122,.35); border-radius: 18px; box-shadow: 0 16px 50px rgba(0,0,0,.55);
-  display: grid; grid-template-columns: 168px 1fr; gap: 16px; padding: 14px; animation: rise .35s cubic-bezier(.2,1.2,.4,1); }
+/* sheets */
+.ask-sheet { position: fixed; z-index: 45; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(540px, calc(100vw - 32px));
+  background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); border: .5px solid var(--sep); border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  display: grid; grid-template-columns: 156px 1fr; gap: 16px; padding: 14px; animation: rise .35s cubic-bezier(.2,1.2,.4,1); }
 @keyframes rise { from { transform: translate(-50%, 24px); opacity: 0; } }
-.ask-img { width: 168px; height: 168px; border-radius: 10px; overflow: hidden; background: #1A2240; cursor: zoom-in; border: 0; padding: 0; }
+.ask-img { width: 156px; height: 156px; border-radius: 12px; overflow: hidden; background: var(--bg-2); cursor: zoom-in; border: 0; padding: 0; }
 .ask-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ask-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.ask-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.ask-top .n { font: 500 12px var(--mono); color: var(--ask); }
-.ask-q { margin: 0; font: 700 17px/1.35 var(--sans); }
-.ask-guess { margin: 0; font-size: 12.5px; color: var(--ink-2); }
-.ask-guess b { color: var(--ask); font-weight: 700; }
+.ask-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.ask-top .n { font-size: 12.5px; color: var(--label-2); }
+.ask-q { margin: 0; font: 600 17px/1.3 var(--display); }
+.ask-guess { margin: 0; font-size: 13px; color: var(--label-2); }
+.ask-guess b { color: var(--label); font-weight: 600; }
 .ask-foot { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
 
-/* lightbox */
-.lb { position: fixed; inset: 0; z-index: 50; background: rgba(4,6,12,.86); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+.lb { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.88); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
   display: grid; grid-template-columns: 1fr 300px; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
 .lb-img { display: flex; align-items: center; justify-content: center; padding: 24px; min-width: 0; min-height: 0; position: relative; }
-.lb-img img { max-width: 100%; max-height: calc(100vh - 48px); object-fit: contain; border-radius: 6px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
-.lb-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: rgba(18,24,42,.8); cursor: pointer; font-size: 18px; }
+.lb-img img { max-width: 100%; max-height: calc(100vh - 48px); object-fit: contain; border-radius: 10px; }
+.lb-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--fill); cursor: pointer; font-size: 20px; }
 .lb-nav.prev { left: 16px; } .lb-nav.next { right: 16px; }
-.lb-side { background: var(--panel-solid); border-left: 1px solid var(--line); padding: 20px 18px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; padding-right: max(18px, env(safe-area-inset-right, 0px)); }
-.lb-side h3 { margin: 0; font-size: 15px; word-break: break-all; }
+.lb-side { background: var(--material-solid); border-left: .5px solid var(--sep); padding: 16px 16px 20px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.lb-side h3 { margin: 0; font: 600 15px var(--display); word-break: break-all; }
 .lb-close { align-self: flex-end; }
-.ai-box { background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font-size: 12.5px; color: var(--ink-2); }
-.ai-box b { color: var(--ink); }
-dl.meta { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12.5px; }
-dl.meta dt { color: var(--ink-3); }
-dl.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--ink); word-break: break-all; }
-.field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--ink-3); }
+.ai-box { font-size: 13px; color: var(--label-2); }
+.ai-box b { color: var(--label); font-weight: 600; }
+dl.meta { margin: 0; display: grid; grid-template-columns: auto 1fr; font-size: 13px; background: var(--bg-2); border-radius: 12px; overflow: hidden; }
+dl.meta dt, dl.meta dd { margin: 0; padding: 8px 12px; border-bottom: .5px solid var(--sep); }
+dl.meta dt { color: var(--label-2); }
+dl.meta dd { color: var(--label); text-align: right; word-break: break-all; font-variant-numeric: tabular-nums; }
+dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
+.field { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--label-2); }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 5px 13px; cursor: pointer; font-size: 13.5px; color: var(--ink); }
-.chip .k { font: 500 10.5px var(--mono); color: var(--ink-3); margin-right: 4px; }
-.chip.guess { border-color: rgba(255,210,122,.6); }
-.chip.on { background: var(--accent); border-color: var(--accent); color: #0A0F22; font-weight: 700; }
-.chip.on .k { color: #2A3570; }
+.chip { border: 0; background: var(--fill); border-radius: 980px; padding: 6px 13px; cursor: pointer; font-size: 14px; color: var(--label); }
+.chip:hover { background: var(--fill-2); }
+.chip .k { font-size: 11px; color: var(--label-3); margin-right: 5px; font-variant-numeric: tabular-nums; }
+.chip.guess { box-shadow: inset 0 0 0 1.5px rgba(255,159,10,.7); }
+.chip.on { background: var(--blue); color: #fff; font-weight: 600; }
+.chip.on .k { color: rgba(255,255,255,.7); }
 .add-el { display: flex; gap: 6px; }
-.add-el input { flex: 1; min-width: 0; font-size: 13px; background: var(--space-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; }
-.hint { font-size: 11.5px; color: var(--ink-3); }
+.add-el input { flex: 1; min-width: 0; font-size: 13px; background: var(--fill); border: 0; border-radius: 8px; padding: 7px 10px; }
+.hint { margin: 0; font-size: 12px; color: var(--label-3); }
 
-.toast { position: fixed; left: 50%; top: calc(72px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 60; background: var(--panel-solid); border: 1px solid var(--line);
-  padding: 9px 16px; border-radius: 999px; font-size: 13px; max-width: calc(100vw - 32px); box-shadow: 0 6px 24px rgba(0,0,0,.4); }
-.drop { position: fixed; inset: 0; z-index: 40; border: 2px dashed var(--accent); background: rgba(143,168,255,.08); display: flex; align-items: center; justify-content: center; pointer-events: none; }
-.drop p { font: 700 18px var(--display); background: var(--panel-solid); padding: 12px 22px; border-radius: 999px; border: 1px solid var(--line); }
+.toast { position: fixed; left: 50%; top: calc(64px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 60; background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  border: .5px solid var(--sep); padding: 9px 16px; border-radius: 980px; font-size: 13px; max-width: calc(100vw - 32px); box-shadow: 0 8px 30px rgba(0,0,0,.45); }
+.drop { position: fixed; inset: 0; z-index: 40; background: rgba(10,132,255,.12); box-shadow: inset 0 0 0 3px var(--blue); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.drop p { font: 600 17px var(--display); background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); padding: 12px 22px; border-radius: 980px; }
 
-/* map: globe → 3D buildings → mapping */
-.map { position: fixed; inset: 0; z-index: 35; background: #03050B; padding-top: env(safe-area-inset-top, 0px); }
+/* map */
+.map { position: fixed; inset: 0; z-index: 35; background: #000; padding-top: env(safe-area-inset-top, 0px); }
 .map canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-.map .veil { position: absolute; inset: 0; background: #03050B; opacity: 0; pointer-events: none; transition: opacity .45s; }
+.map .veil { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .45s; }
 .map .veil.on { opacity: 1; }
 .map-top { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); top: calc(12px + env(safe-area-inset-top, 0px));
-  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; pointer-events: none; }
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap; pointer-events: none; }
 .map-top > * { pointer-events: auto; }
-.map-title { font: 700 16px var(--display); margin-right: auto; text-shadow: 0 1px 8px #000; }
-.map-title small { display: block; font: 400 12px var(--mono); color: var(--ink-2); }
+.map-top .btn { background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+.map-title { font: 600 17px var(--display); margin-right: auto; text-shadow: 0 1px 10px rgba(0,0,0,.8); }
+.map-title small { display: block; font: 400 12px var(--sans); color: var(--label-2); font-variant-numeric: tabular-nums; }
 .map-status { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
-.map-status b { display: block; font: 700 22px var(--display); color: var(--core); text-shadow: 0 0 20px rgba(255,210,140,.5); }
-.map-status span { color: var(--ink-2); font-size: 13px; }
-.map-hint { position: absolute; left: 50%; top: calc(64px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); background: rgba(18,26,46,.92); border: 1px solid rgba(255,210,122,.45);
-  color: var(--ask); padding: 7px 14px; border-radius: 999px; font-size: 13px; max-width: calc(100vw - 32px); text-align: center; }
-.strip { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
-  background: linear-gradient(rgba(3,5,11,0), rgba(3,5,11,.92) 30%); display: flex; flex-direction: column; gap: 8px; }
-.strip-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); }
-.strip-head b { color: var(--ink); }
-.strip-list { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
-.sp { position: relative; flex: none; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; border: 2px solid var(--c, transparent); padding: 0; cursor: pointer; background: #1A2240; }
+.map-status b { display: block; font: 600 20px var(--display); }
+.map-status span { color: var(--label-2); font-size: 13px; }
+.map-hint { position: absolute; left: 50%; top: calc(60px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  border: .5px solid var(--sep); padding: 7px 14px; border-radius: 980px; font-size: 13px; max-width: calc(100vw - 32px); text-align: center; }
+.strip { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); border-top: .5px solid var(--sep); display: flex; flex-direction: column; gap: 8px; }
+.strip-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--label-2); }
+.strip-head b { color: var(--label); font-weight: 600; }
+.strip-list { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 2px; }
+.sp { position: relative; flex: none; width: 60px; height: 60px; border-radius: 10px; overflow: hidden; border: 0; box-shadow: inset 0 -3px 0 var(--c, transparent); padding: 0; cursor: pointer; background: var(--bg-2); }
 .sp img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.sp.on { outline: 2px solid #fff; outline-offset: 2px; }
-.sp .st { position: absolute; right: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; font: 700 9px/14px var(--sans); text-align: center; background: rgba(7,10,20,.85); color: var(--ink-3); }
-.sp .st.ok { background: #6FE3B4; color: #04241A; }
-.sp .st.gps { background: rgba(255,255,255,.85); color: #222; }
-.loc-form { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); background: var(--panel-solid); border: 1px solid var(--line);
-  border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 10px; color: var(--ink-2); font-size: 13.5px; }
-.loc-form h3 { margin: 0; color: var(--ink); font-size: 17px; }
+.sp.on { outline: 2px solid var(--blue); outline-offset: 2px; }
+.sp .st { position: absolute; right: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; font: 700 9px/14px var(--sans); text-align: center; background: rgba(0,0,0,.6); color: var(--label-3); }
+.sp .st.ok { background: var(--green); color: #000; }
+.sp .st.gps { background: rgba(255,255,255,.85); color: #000; }
+.loc-form { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(400px, calc(100vw - 32px)); background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  border: .5px solid var(--sep); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 10px; color: var(--label-2); font-size: 13px; }
+.loc-form h3 { margin: 0; color: var(--label); font: 600 17px var(--display); }
 .loc-form p { margin: 0; }
-.loc-form b { color: var(--ink); }
-.loc-form input { font: 500 15px var(--mono); background: var(--space-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; color: var(--ink); }
+.loc-form input { font: 500 15px var(--sans); background: var(--fill); border: 0; border-radius: 10px; padding: 10px 12px; color: var(--label); font-variant-numeric: tabular-nums; }
 .loc-form .row { display: flex; gap: 8px; flex-wrap: wrap; }
-.loc-err { color: #FFB4B4; }
-.minfo { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); width: 270px; background: rgba(18,26,46,.94); border: 1px solid var(--line);
-  border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
-.minfo img { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; cursor: zoom-in; }
-.minfo h4 { margin: 0; font-size: 14px; color: var(--ink); }
+.loc-err { color: var(--red); }
+.minfo { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); top: calc(60px + env(safe-area-inset-top, 0px)); width: 280px; background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  border: .5px solid var(--sep); border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--label-2); box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+.minfo img { width: 100%; height: 150px; object-fit: cover; border-radius: 10px; cursor: zoom-in; }
+.minfo h4 { margin: 0; font: 600 15px var(--display); color: var(--label); }
 .minfo .row { display: flex; gap: 6px; flex-wrap: wrap; }
-.minfo .bld { border-top: 1px solid var(--line); padding-top: 8px; }
-.minfo .bld b { color: var(--ink); }
+.minfo .bld { border-top: .5px solid var(--sep); padding-top: 8px; }
+.minfo .bld b { color: var(--label); font-weight: 600; }
 
 @media (max-width: 760px) {
   .minfo { left: 16px; right: 16px; width: auto; top: auto; bottom: 120px; max-height: 40vh; overflow-y: auto; }
   .minfo img { height: 110px; }
-}
-@media (max-width: 760px) {
-  .bar { position: relative; top: 0; background: var(--space); }
+  .bar { position: relative; top: 0; }
   .btn { padding: 6px 11px; }
-  .site input { width: 130px; }
+  .site input { width: 120px; }
   .ask-sheet { grid-template-columns: 96px 1fr; gap: 12px; }
   .ask-img { width: 96px; height: 96px; }
   .ask-q { font-size: 15px; }
   .lb { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; overflow-y: auto; }
   .lb-img { padding: 12px; }
   .lb-img img { max-height: 52vh; }
-  .lb-side { border-left: 0; border-top: 1px solid var(--line); padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+  .lb-side { border-left: 0; border-top: .5px solid var(--sep); padding-left: max(16px, env(safe-area-inset-left, 0px)); }
 }
 @media (prefers-reduced-motion: reduce) {
   .card, .thumb, .node { transition: none; }
@@ -208,18 +210,18 @@ dl.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--
   <div class="brand">
     <h1>Photo Sorting</h1>
     <div class="site" id="siteBox" hidden>
-      <select id="siteSel" aria-label="답사 고르기"></select>
-      <input id="siteName" aria-label="답사 장소 이름" maxlength="40">
+      <select id="siteSel" aria-label="답사"></select>
+      <input id="siteName" aria-label="답사 이름" maxlength="40">
     </div>
   </div>
   <div class="actions">
-    <button class="btn ask" id="askBtn" type="button" hidden>질문 0</button>
-    <button class="btn" id="replayBtn" type="button" disabled>다시 보기</button>
+    <button class="btn ask" id="askBtn" type="button" hidden>확인 0</button>
+    <button class="btn" id="replayBtn" type="button" disabled>다시 정렬</button>
     <button class="btn" id="mapBtn" type="button" hidden>지도</button>
-    <button class="btn" id="zipBtn" type="button" disabled>ZIP 저장</button>
+    <button class="btn" id="zipBtn" type="button" disabled>내보내기</button>
     <button class="btn" id="newSiteBtn" type="button" hidden>새 답사</button>
-    <button class="btn warn" id="clearBtn" type="button" hidden>이 답사 지우기</button>
-    <label class="btn primary" for="fileIn">사진 올리기</label>
+    <button class="btn warn" id="clearBtn" type="button" hidden>삭제</button>
+    <label class="btn primary" for="fileIn">사진 추가</label>
     <input id="fileIn" type="file" accept="image/*,.heic,.heif" multiple hidden>
   </div>
 </header>
@@ -231,62 +233,60 @@ dl.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--
   <div class="fx" id="fx"></div>
   <div class="core" id="core" hidden><div class="num" id="coreNum">0</div><div class="label" id="coreLabel"></div><div class="site-name" id="coreSite"></div></div>
   <div class="intro" id="intro">
-    <h2>한 장소의 답사 사진을 놓으면, 건축요소별 행성으로 나뉩니다</h2>
-    <p>사진이 은하수로 모이면 Claude가 한 장씩 보고 입구·창·계단으로 나눕니다. 애매한 사진은 질문으로 물어봅니다. 가로 2000px보다 큰 사진은 2000px로 줄여 보관합니다.</p>
     <div class="row">
-      <label class="btn primary" for="fileIn">사진 올리기</label>
-      <button class="btn" id="demoBtn" type="button">예시로 보기</button>
+      <label class="btn primary" for="fileIn">사진 추가</label>
+      <button class="btn" id="demoBtn" type="button">예시</button>
     </div>
-    <p class="fine">사진 파일은 이 브라우저에 저장됩니다. 분류할 때만 작게 줄인 사진을 Claude에게 보여 주며, 처음 한 번 허용을 묻습니다.</p>
+    <p class="fine">한 장소 · JPG, HEIC · 끌어다 놓기 가능</p>
   </div>
 </main>
 
-<section class="ask-sheet" id="ask" hidden aria-live="polite" aria-label="분류 질문">
+<section class="ask-sheet" id="ask" hidden aria-live="polite" aria-label="요소 확인">
   <button class="ask-img" id="askImgBtn" type="button" aria-label="크게 보기"><img id="askImg" alt=""></button>
   <div class="ask-body">
-    <div class="ask-top"><span class="n" id="askN"></span><button class="btn small" id="askClose" type="button">나중에</button></div>
-    <p class="ask-q">이 사진은 어떤 건축요소인가요?</p>
+    <div class="ask-top"><span class="n" id="askN"></span><button class="btn small" id="askClose" type="button">닫기</button></div>
+    <p class="ask-q">요소 선택</p>
     <p class="ask-guess" id="askGuess"></p>
     <div class="chips" id="askChips"></div>
     <div class="ask-foot"><button class="btn small" id="askSkip" type="button">건너뛰기</button></div>
   </div>
 </section>
 
-<div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="사진 보기">
+<div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="사진">
   <div class="lb-img">
     <img id="lbImg" alt="">
-    <button class="lb-nav prev" id="lbPrev" type="button" aria-label="이전 사진">‹</button>
-    <button class="lb-nav next" id="lbNext" type="button" aria-label="다음 사진">›</button>
+    <button class="lb-nav prev" id="lbPrev" type="button" aria-label="이전">‹</button>
+    <button class="lb-nav next" id="lbNext" type="button" aria-label="다음">›</button>
   </div>
   <aside class="lb-side">
-    <button class="btn lb-close" id="lbClose" type="button">닫기 · Esc</button>
+    <button class="btn lb-close" id="lbClose" type="button">닫기</button>
     <h3 id="lbName"></h3>
     <div class="ai-box" id="lbAi" hidden></div>
-    <div class="field">건축요소 <span class="hint">숫자키로도 지정</span>
+    <div class="field">요소
       <div class="chips" id="lbChips"></div>
-      <form class="add-el" id="addElForm"><input id="addElInput" placeholder="요소 추가 (예: 지붕)" maxlength="12"><button class="btn" type="submit">추가</button></form>
+      <form class="add-el" id="addElForm"><input id="addElInput" placeholder="요소 추가" maxlength="12"><button class="btn" type="submit">추가</button></form>
     </div>
     <dl class="meta" id="lbMeta"></dl>
-    <p class="hint">← → 사진 넘기기</p>
+    <p class="hint">← → 이동 · 1–9 요소 · Esc 닫기</p>
   </aside>
 </div>
 
-<section class="map" id="map" hidden aria-label="답사 지도">
+<section class="map" id="map" hidden aria-label="지도">
   <canvas id="gl"></canvas>
   <div class="veil" id="veil"></div>
   <div class="map-top">
     <div class="map-title" id="mapTitle"></div>
-    <button class="btn small" id="gpsAllBtn" type="button" hidden>GPS 위치 모두 쓰기</button>
-    <button class="btn small" id="mapBack" type="button">은하로 돌아가기</button>
+    <button class="btn small" id="gpsAllBtn" type="button" hidden>GPS 적용</button>
+    <button class="btn small" id="mapBack" type="button">닫기</button>
   </div>
   <div class="map-status" id="mapStatus"><b id="mapStatusB"></b><span id="mapStatusS"></span></div>
   <form class="loc-form" id="locForm" hidden>
-    <h3>이 답사의 사진에는 위치 정보가 없어요</h3>
-    <p>아이폰에서 사진 보관함으로 고르면 위치가 빠진 채로 올라갑니다. 고르는 화면 위쪽의 <b>옵션 → 위치</b>를 켜고 다시 올리거나, AirDrop·케이블로 옮긴 원본을 올려 주세요.</p>
-    <p>지금은 답사한 곳의 위치를 직접 넣어도 됩니다. 지도 앱에서 그 자리를 길게 눌러 나온 <b>위도, 경도</b>나 구글 지도 링크를 붙여 넣으세요.</p>
-    <input id="locInput" placeholder="예: 36.3315, 127.4329" autocomplete="off">
+    <h3>위치 없음</h3>
+    <p>위도, 경도 또는 구글 지도 링크</p>
+    <input id="locInput" placeholder="36.3315, 127.4329" autocomplete="off">
     <p class="loc-err" id="locErr" hidden></p>
-    <div class="row"><button class="btn primary" type="submit">이 위치로 내려가기</button><button class="btn" type="button" id="locCancel">취소</button></div>
+    <div class="row"><button class="btn primary" type="submit">이동</button><button class="btn" type="button" id="locCancel">취소</button></div>
+    <p class="hint">아이폰: 사진 선택 화면 → 옵션 → 위치 켜기</p>
   </form>
   <div class="map-hint" id="mapHint" hidden></div>
   <aside class="minfo" id="minfo" hidden></aside>
@@ -296,7 +296,7 @@ dl.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--
   </div>
 </section>
 
-<div class="drop" id="drop" hidden><p>놓으면 은하수로 모입니다</p></div>
+<div class="drop" id="drop" hidden><p>놓기</p></div>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js"></script>
@@ -312,11 +312,11 @@ const SURE = 0.6;            // 이보다 확신이 낮으면 질문으로
 const DEFAULT_ELEMENTS = ['입구', '창', '계단'];
 const OTHER = '기타', NONE = '미분류';
 const PALETTE = [
-  ['#8FA8FF', 'rgba(143,168,255,.55)'], ['#FFB86B', 'rgba(255,184,107,.55)'], ['#6FE3B4', 'rgba(111,227,180,.5)'],
-  ['#E39BFF', 'rgba(227,155,255,.5)'], ['#FF8FA3', 'rgba(255,143,163,.5)'], ['#6FD6F0', 'rgba(111,214,240,.5)'],
-  ['#F2E27A', 'rgba(242,226,122,.45)'], ['#B7A6FF', 'rgba(183,166,255,.5)']
+  ['#0A84FF', 'rgba(10,132,255,.45)'], ['#FF9F0A', 'rgba(255,159,10,.45)'], ['#30D158', 'rgba(48,209,88,.4)'],
+  ['#BF5AF2', 'rgba(191,90,242,.45)'], ['#FF375F', 'rgba(255,55,95,.45)'], ['#64D2FF', 'rgba(100,210,255,.4)'],
+  ['#FFD60A', 'rgba(255,214,10,.4)'], ['#5E5CE6', 'rgba(94,92,230,.45)']
 ];
-const GREY = ['#9AA3BD', 'rgba(154,163,189,.4)'], DIM = ['#5E6784', 'rgba(94,103,132,.35)'];
+const GREY = ['#8E8E93', 'rgba(142,142,147,.35)'], DIM = ['#48484A', 'rgba(72,72,74,.35)'];
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ─────────── 상태 ───────────
@@ -526,7 +526,7 @@ let W = 0, H = 0, DPR = 1, galaxy = { x: 0, y: 0, r: 200 }, spin = 0.05, glow = 
 const stars = Array.from({ length: 220 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.2 + .2, p: Math.random() * 6.28, s: .5 + Math.random() * 1.5 }));
 const dust = Array.from({ length: 520 }, (_, i) => {
   const u = Math.pow(Math.random(), .7);
-  return { arm: i % 2, u, off: (Math.random() - .5) * .55 * (1.1 - u), hue: Math.random() < .25 ? 38 : 222 + Math.random() * 40, a: .25 + Math.random() * .55, r: Math.random() * 1.4 + .3 };
+  return { arm: i % 2, u, off: (Math.random() - .5) * .55 * (1.1 - u), hue: Math.random() < .2 ? 35 : 215 + Math.random() * 20, a: .25 + Math.random() * .55, r: Math.random() * 1.4 + .3 };
 });
 function sizeSky() {
   DPR = Math.min(2, devicePixelRatio || 1);
@@ -538,21 +538,21 @@ let skyAngle = 0;
 function drawSky(t, dt) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const bg = ctx.createRadialGradient(galaxy.x, galaxy.y, 0, galaxy.x, galaxy.y, Math.max(W, H) * .7);
-  bg.addColorStop(0, '#111A36'); bg.addColorStop(1, '#070A14');
+  bg.addColorStop(0, '#15161B'); bg.addColorStop(1, '#000000');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
   for (const s of stars) {
-    ctx.fillStyle = `rgba(220,228,255,${.35 + .35 * Math.sin(t / 1000 * s.s + s.p)})`;
+    ctx.fillStyle = `rgba(255,255,255,${.25 + .3 * Math.sin(t / 1000 * s.s + s.p)})`;
     ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, 6.283); ctx.fill();
   }
   skyAngle += spin * dt / 1000;
   const R = galaxy.r * 1.25;
   for (const d of dust) {
     const ang = skyAngle * (1.6 - d.u) + d.arm * Math.PI + d.u * 4.2 + d.off;
-    ctx.fillStyle = `hsla(${d.hue},90%,78%,${d.a * glow})`;
+    ctx.fillStyle = `hsla(${d.hue},40%,86%,${d.a * glow})`;
     ctx.beginPath(); ctx.arc(galaxy.x + Math.cos(ang) * d.u * R, galaxy.y + Math.sin(ang) * d.u * R * .58, d.r, 0, 6.283); ctx.fill();
   }
   const core = ctx.createRadialGradient(galaxy.x, galaxy.y, 0, galaxy.x, galaxy.y, galaxy.r * .55);
-  core.addColorStop(0, `rgba(255,231,184,${.55 * glow + .1})`); core.addColorStop(.35, `rgba(255,190,140,${.18 * glow})`); core.addColorStop(1, 'rgba(255,190,140,0)');
+  core.addColorStop(0, `rgba(255,248,235,${.45 * glow + .08})`); core.addColorStop(.35, `rgba(255,236,210,${.14 * glow})`); core.addColorStop(1, 'rgba(255,236,210,0)');
   ctx.fillStyle = core; ctx.beginPath(); ctx.ellipse(galaxy.x, galaxy.y, galaxy.r * .55, galaxy.r * .4, 0, 0, 6.283); ctx.fill();
 }
 
@@ -632,7 +632,7 @@ function setStageHeight(h) { stage.style.height = h + 'px'; sizeSky(); }
 function cardHTML(pl) {
   const list = photosOf(pl.id);
   const asks = list.filter(p => p.ask).length, mine = list.filter(p => p.by === 'user').length, ai = list.filter(p => p.by === 'ai').length;
-  const meta = pl.id === NONE ? '아직 분류하지 않은 사진' : [ai ? `Claude ${ai}` : '', mine ? `직접 ${mine}` : '', asks ? `확인 필요 ${asks}` : ''].filter(Boolean).join(' · ');
+  const meta = asks ? `확인 필요 ${asks}` : '';
   return `<div class="card-head">
       <div class="card-title"><span class="dot"></span><b>${esc(pl.name)}</b><span class="count">${list.length}장</span></div>
       <div class="card-meta">${meta}</div>
@@ -649,7 +649,7 @@ function renderPlanets(opts = {}) {
   layout = layoutFor(list.length);
   setStageHeight(layout.h);
   galaxy = { x: layout.cx, y: layout.cy, r: layout.r };
-  if (!S.busy) setCore(list.filter(p => p.id !== NONE).length, `가지 요소 · ${sitePhotos().length}장`);
+  if (!S.busy) setCore(list.filter(p => p.id !== NONE).length, `요소 · ${sitePhotos().length}장`);
   list.forEach((pl, i) => {
     const L = layout.cards[i], [c, g] = pl.color;
     const ray = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -681,7 +681,7 @@ function updateButtons() {
   $('replayBtn').disabled = !n || S.busy; $('zipBtn').disabled = !real || S.busy;
   $('clearBtn').hidden = !n; $('clearBtn').disabled = S.busy; $('fileIn').disabled = S.busy;
   $('newSiteBtn').hidden = !n; $('newSiteBtn').disabled = S.busy;
-  $('askBtn').hidden = !asks || S.busy || !$('ask').hidden; $('askBtn').textContent = `질문 ${asks}`;
+  $('askBtn').hidden = !asks || S.busy || !$('ask').hidden; $('askBtn').textContent = `확인 ${asks}`;
   $('siteSel').disabled = S.busy;
   $('mapBtn').hidden = !n; $('mapBtn').disabled = S.busy;
 }
@@ -707,7 +707,7 @@ async function gatherExisting() {
 async function sortShow() {
   const list = planetList();
   renderPlanets({ animate: true });
-  setCore(sitePhotos().length, '건축요소별로 나누는 중');
+  setCore(sitePhotos().length, '정렬 중');
   spin = .3; glow = .9;
   await sleep(700);
   for (const pl of list) {
@@ -716,7 +716,7 @@ async function sortShow() {
     await sleep(160);
   }
   const named = list.filter(p => p.id !== NONE).length;
-  setCore(named || list.length, named ? '가지 요소로 나눴습니다' : '직접 분류할 사진');
+  setCore(named || list.length, named ? '요소' : '미분류');
   spin = .12; glow = .55;
   await sleep(500);
   const rays = [...raysSvg.querySelectorAll('line')];
@@ -748,15 +748,15 @@ async function replay() {
 
 // ─────────── 사진 올리기 → 읽기 → Claude 판단 → 행성 ───────────
 async function ingest(files, demoList) {
-  if (S.busy) { toast('지금 분류가 끝나면 올려 주세요'); return; }
+  if (S.busy) { toast('정렬 중'); return; }
   let todo = [];
   if (!demoList) {
     files = files.filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
-    if (!files.length) { toast('사진 파일이 없습니다'); return; }
+    if (!files.length) { toast('사진 없음'); return; }
     if ([...S.photos.values()].some(p => p.demo)) dropDemo();
     const seen = new Set([...S.photos.values()].map(p => p.sig));
     todo = files.filter(f => !seen.has(`${f.name}|${f.size}|${f.lastModified}`));
-    if (!todo.length) { toast('이미 올린 사진입니다'); return; }
+    if (!todo.length) { toast('이미 추가된 사진'); return; }
   }
   // 한 번 올리기 = 한 장소의 답사. 지금 답사에 사진이 있으면 새 답사로 시작한다.
   const cur = S.sites.get(S.siteId);
@@ -767,7 +767,7 @@ async function ingest(files, demoList) {
   spin = .18; glow = .7;
   const total = demoList ? demoList.length : todo.length;
   let done = 0, failed = 0, heic = 0, bigger = 0, saved = 0;
-  setCore(`0/${total}`, '사진을 읽는 중');
+  setCore(`0/${total}`, '읽는 중');
   const added = [];
   const enter = p => {
     const w = stage.clientWidth, h = Math.min(stage.clientHeight, innerHeight), a = Math.random() * 6.283;
@@ -775,7 +775,7 @@ async function ingest(files, demoList) {
   };
   try {
     if (demoList) {
-      for (const p of demoList) { p.siteId = site.id; S.photos.set(p.id, p); added.push(p); enter(p); done++; setCore(`${done}/${total}`, '예시 사진을 읽는 중'); await sleep(70); }
+      for (const p of demoList) { p.siteId = site.id; S.photos.set(p.id, p); added.push(p); enter(p); done++; setCore(`${done}/${total}`, '읽는 중'); await sleep(70); }
     } else {
       const queue = [...todo];
       const worker = async () => {
@@ -787,7 +787,7 @@ async function ingest(files, demoList) {
             if (p.origW > MAX_W) { bigger++; saved += Math.max(0, p.origSize - p.size); }
             S.photos.set(p.id, p); added.push(p); savePhoto(p); enter(p);
           } catch (e) { console.warn('읽기 실패', f.name, e); failed++; }
-          done++; setCore(`${done}/${total}`, heic ? 'HEIC를 JPG로 바꾸는 중' : '사진을 읽는 중');
+          done++; setCore(`${done}/${total}`, heic ? 'HEIC 변환 중' : '읽는 중');
         }
       };
       await Promise.all([worker(), worker()]);
@@ -795,7 +795,7 @@ async function ingest(files, demoList) {
     refreshSite(site); saveSite(site); renderSiteBar();
     await sleep(500);
     // Claude가 사진을 본다: 보고 있는 사진이 빛난다
-    setCore(`0/${added.length}`, '건축요소를 살펴보는 중');
+    setCore(`0/${added.length}`, '요소 판단 중');
     spin = .22;
     let scanTimer = setInterval(() => {
       for (const it of items.values()) it.el.classList.remove('scan');
@@ -803,18 +803,18 @@ async function ingest(files, demoList) {
     }, 380);
     let res;
     try {
-      res = demoList ? await demoClassify(added, n => setCore(`${n}/${added.length}`, '건축요소를 살펴보는 중'))
-                     : await classify(added, n => setCore(`${n}/${added.length}`, '건축요소를 살펴보는 중'));
+      res = demoList ? await demoClassify(added, n => setCore(`${n}/${added.length}`, '요소 판단 중'))
+                     : await classify(added, n => setCore(`${n}/${added.length}`, '요소 판단 중'));
     } finally { clearInterval(scanTimer); }
     for (const p of added) savePhoto(p);
     await sortShow();
     S.busy = false; clearItems(); renderPlanets();
     const asks = added.filter(p => p.ask).length;
-    const msg = [`${added.length}장을 정리했습니다`];
-    if (bigger) msg.push(`${bigger}장은 가로 ${MAX_W}px로 줄임 (${(saved / 1048576).toFixed(1)}MB 절약)`);
-    if (!res.used) msg.push(res.reason === 'not_granted' ? 'Claude 사용을 허용하지 않아 직접 분류합니다' : res.reason === 'rate_limited' ? 'Claude 사용량이 많아 나머지는 직접 분류합니다' : '이 화면에서는 Claude가 사진을 볼 수 없어 직접 분류합니다');
-    if (failed) msg.push(`읽지 못한 사진 ${failed}장`);
-    if (!added.some(p => p.gps) && !demoList) msg.push('사진에 위치 정보가 없어요. 지도에서 위치를 직접 넣을 수 있습니다');
+    const msg = [`${added.length}장`];
+    if (bigger) msg.push(`${bigger}장 ${MAX_W}px로 축소 · −${(saved / 1048576).toFixed(1)}MB`);
+    if (!res.used) msg.push(res.reason === 'not_granted' ? 'Claude 미허용 · 직접 선택' : res.reason === 'rate_limited' ? 'Claude 사용량 초과 · 직접 선택' : 'Claude 사용 불가 · 직접 선택');
+    if (failed) msg.push(`실패 ${failed}장`);
+    if (!added.some(p => p.gps) && !demoList) msg.push('위치 정보 없음');
     toast(msg.join(' · '), 6000);
     if (asks) openAsk();
     else if (site.center) setTimeout(() => { if (!S.busy && !M3.on && $('lb').hidden) openMap(); }, 2200);
@@ -849,11 +849,11 @@ function closeAsk() { $('ask').hidden = true; S.askId = null; updateButtons(); }
 function renderAsk() {
   const p = S.photos.get(S.askId); if (!p) return closeAsk();
   const L = askList(), i = L.findIndex(x => x.id === p.id);
-  $('askN').textContent = `질문 ${i + 1} / ${L.length}`;
+  $('askN').textContent = `${i + 1} / ${L.length}`;
   $('askImg').src = thumbUrl(p); $('askImg').alt = p.name;
   $('askGuess').innerHTML = p.aiElement
-    ? `Claude 생각: <b>${esc(p.aiElement)}</b>일 것 같아요 (확신 ${Math.round((p.aiConf || 0) * 100)}%)${p.aiNote ? ` · ${esc(p.aiNote)}` : ''}`
-    : p.aiNote ? `Claude가 본 것: ${esc(p.aiNote)}` : '보기 중에서 골라 주세요.';
+    ? `추정 <b>${esc(p.aiElement)}</b> ${Math.round((p.aiConf || 0) * 100)}%${p.aiNote ? ` · ${esc(p.aiNote)}` : ''}`
+    : p.aiNote ? esc(p.aiNote) : '';
   $('askChips').innerHTML = [...S.elements, OTHER].map((el, k) =>
     `<button type="button" class="chip ${p.aiElement === el ? 'guess' : ''}" data-ans="${esc(el)}">${k < 9 ? `<span class="k">${k + 1}</span>` : ''}${esc(el)}</button>`).join('');
 }
@@ -871,7 +871,7 @@ async function answer(el) {
     flyTo(it, parseFloat(node.style.left), parseFloat(node.style.top), 700, 0, .15).then(() => { it.el.remove(); items.delete(p.id); node.classList.remove('pulse'); void node.offsetWidth; node.classList.add('pulse'); });
   }
   if (nextL.length) { S.askId = nextL[0].id; renderAsk(); updateButtons(); }
-  else { closeAsk(); const ctr = S.sites.get(S.siteId)?.center; toast(ctr ? '모든 질문에 답했습니다. 지구로 내려갑니다' : '모든 질문에 답했습니다. 위쪽 지도 버튼으로 위치를 정할 수 있어요'); if (ctr) setTimeout(() => { if (!M3.on && $('lb').hidden) openMap(); }, 1400); }
+  else { closeAsk(); const ctr = S.sites.get(S.siteId)?.center; toast('완료'); if (ctr) setTimeout(() => { if (!M3.on && $('lb').hidden) openMap(); }, 1400); }
 }
 $('askChips').addEventListener('click', e => { const c = e.target.closest('[data-ans]'); if (c) answer(c.dataset.ans); });
 $('askSkip').addEventListener('click', () => {
@@ -939,18 +939,18 @@ $('siteName').addEventListener('keydown', e => { if (e.key === 'Enter') e.target
 $('newSiteBtn').addEventListener('click', () => {
   if (S.busy) return;
   if ([...S.photos.values()].some(p => p.demo)) dropDemo();
-  S.siteId = null; closeAsk(); renderPlanets(); toast('새 답사입니다. 한 장소의 사진을 올려 주세요');
+  S.siteId = null; closeAsk(); renderPlanets(); toast('새 답사');
 });
 let clearArmed = false;
 $('clearBtn').addEventListener('click', async () => {
   const b = $('clearBtn');
-  if (!clearArmed) { clearArmed = true; b.textContent = '한 번 더 누르면 지움'; setTimeout(() => { clearArmed = false; b.textContent = '이 답사 지우기'; }, 3500); return; }
-  clearArmed = false; b.textContent = '이 답사 지우기';
+  if (!clearArmed) { clearArmed = true; b.textContent = '삭제 확인'; setTimeout(() => { clearArmed = false; b.textContent = '삭제'; }, 3500); return; }
+  clearArmed = false; b.textContent = '삭제';
   const sid = S.siteId;
   for (const [id, p] of S.photos) if (p.siteId === sid) { S.photos.delete(id); DB.del('photos', id); ['t', 'f'].forEach(k => { const u = urls.get(k + id); if (u) { URL.revokeObjectURL(u); urls.delete(k + id); } }); }
   S.sites.delete(sid); DB.del('sites', sid);
   const next = [...S.sites.values()].filter(s => s.count).sort((a, b) => (b.start || '').localeCompare(a.start || ''))[0];
-  S.siteId = next?.id || null; saveSettings(); closeAsk(); renderPlanets(); toast('이 답사의 사진을 지웠습니다');
+  S.siteId = next?.id || null; saveSettings(); closeAsk(); renderPlanets(); toast('삭제됨');
 });
 $('replayBtn').addEventListener('click', replay);
 planetsEl.addEventListener('click', e => { const t = e.target.closest('[data-photo]'); if (t) openLb(t.dataset.photo); });
@@ -963,15 +963,15 @@ function renderLb() {
   const p = S.photos.get(S.lbId); if (!p) return closeLb();
   $('lbImg').src = fullUrl(p); $('lbImg').alt = p.name; $('lbName').textContent = p.name;
   $('lbAi').hidden = !p.aiElement && !p.aiNote;
-  $('lbAi').innerHTML = `Claude 판단: <b>${esc(p.aiElement || '모르겠음')}</b>${p.aiConf != null ? ` · 확신 ${Math.round(p.aiConf * 100)}%` : ''}${p.aiNote ? `<br>${esc(p.aiNote)}` : ''}`;
+  $('lbAi').innerHTML = `추정 <b>${esc(p.aiElement || '—')}</b>${p.aiConf != null ? ` ${Math.round(p.aiConf * 100)}%` : ''}${p.aiNote ? `<br>${esc(p.aiNote)}` : ''}`;
   $('lbChips').innerHTML = [...S.elements, OTHER].map((el, i) => `<button type="button" class="chip ${p.element === el ? 'on' : ''}" data-el="${esc(el)}">${i < 9 ? `<span class="k">${i + 1}</span>` : ''}${esc(el)}</button>`).join('');
   const rows = [
-    ['분류', p.element ? `${p.element} (${p.by === 'user' ? '직접' : 'Claude'})` : '미분류'],
-    ['촬영', p.takenAt.replace('T', ' ') + (p.timeFromExif ? '' : ' (파일 날짜)')],
-    ['위치', p.gps ? `${p.gps[1]}, ${p.gps[0]}` : '없음'],
-    ['방향', p.heading != null ? `${p.heading}°` : '없음'],
-    ['기종', p.camera || '알 수 없음'],
-    ['크기', `${p.w}×${p.h}px · ${(p.size / 1048576).toFixed(2)}MB` + (p.origW && p.origW > p.w ? ` (원본 ${p.origW}px)` : '')]
+    ['요소', p.element ? `${p.element} · ${p.by === 'user' ? '직접' : 'Claude'}` : '미분류'],
+    ['촬영', p.takenAt.replace('T', ' ') + (p.timeFromExif ? '' : ' · 파일')],
+    ['위치', p.gps ? `${p.gps[1]}, ${p.gps[0]}` : '—'],
+    ['방향', p.heading != null ? `${p.heading}°` : '—'],
+    ['기종', p.camera || '—'],
+    ['크기', `${p.w}×${p.h}px · ${(p.size / 1048576).toFixed(2)}MB` + (p.origW && p.origW > p.w ? ` · 원본 ${p.origW}px` : '')]
   ];
   $('lbMeta').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
   const L = lbList(), i = L.findIndex(x => x.id === p.id);
@@ -1036,7 +1036,7 @@ function makeZip(entries) {
 }
 const safe = s => String(s).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim().slice(0, 60) || '이름없음';
 async function exportZip() {
-  const btn = $('zipBtn'); btn.disabled = true; btn.textContent = 'ZIP 만드는 중…';
+  const btn = $('zipBtn'); btn.disabled = true; btn.textContent = '내보내는 중';
   try {
     const site = S.sites.get(S.siteId), root = safe(site?.name || '답사');
     const entries = [], rows = [['답사', '건축요소', '분류 방법', 'Claude 판단', 'Claude 확신', 'Claude 메모', '파일', '원본 파일명', '촬영시각', '위도', '경도', '방향(도)', '기종', '가로', '세로', '촬영위치(지도) 위도', '촬영위치(지도) 경도', '바라본 방향(지도)', '대상 건물 주소', '대상 건물 용도', '대상 건물 층수', '대상 건물 사용승인연도']];
@@ -1059,15 +1059,15 @@ async function exportZip() {
     entries.push({ name: `${root}/사진목록.csv`, data: new TextEncoder().encode(csv) });
     entries.push({ name: `${root}/photo-sorting.json`, data: new TextEncoder().encode(JSON.stringify(meta, null, 1)) });
     await saveFile(`${root}.zip`, makeZip(entries));
-  } catch (e) { console.error(e); toast('ZIP을 만들지 못했습니다: ' + e.message, 5000); }
-  finally { btn.textContent = 'ZIP 저장'; updateButtons(); }
+  } catch (e) { console.error(e); toast('내보내기 실패 · ' + e.message, 5000); }
+  finally { btn.textContent = '내보내기'; updateButtons(); }
 }
 let downloadsCap;
 async function saveFile(name, blob) {
   if (downloadsCap === undefined) downloadsCap = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
   if (downloadsCap) {
-    try { await downloadsCap.save({ filename: name, data: blob }); toast('저장했습니다'); }
-    catch (e) { if (e?.code !== 'declined') toast('저장하지 못했습니다 (' + (e?.code || e?.message) + ')', 5000); }
+    try { await downloadsCap.save({ filename: name, data: blob }); toast('저장됨'); }
+    catch (e) { if (e?.code !== 'declined') toast('저장 실패 · ' + (e?.code || e?.message), 5000); }
     return;
   }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
@@ -1157,7 +1157,7 @@ const M3 = { on: false, gl: null, raf: 0, sel: null, mode: null, center: null, b
 const D2R = Math.PI / 180;
 const toLocal = ([x, y]) => [x - M3.center[0], -(y - M3.center[1])];         // 5179 → 장면(x, z)
 const toWorld = (x, z) => [M3.center[0] + x, M3.center[1] - z];               // 장면 → 5179
-const elColor = p => p.element ? colorOf(p.element)[0] : '#9AA3BD';
+const elColor = p => p.element ? colorOf(p.element)[0] : '#8E8E93';
 
 async function openMap() {
   const site = S.sites.get(S.siteId);
@@ -1168,25 +1168,25 @@ async function openMap() {
   closeAsk(); closeLb();
   M3.on = true; $('map').hidden = false; $('strip').hidden = true; $('minfo').hidden = true; $('mapHint').hidden = true; $('gpsAllBtn').hidden = true;
   $('locForm').hidden = true;
-  $('mapTitle').innerHTML = `${esc(site.name)}<small>${center[1].toFixed(4)}, ${center[0].toFixed(4)}${site.center ? '' : ' · 직접 입력한 위치'}</small>`;
-  status('지구로 내려가는 중', '3D 도구를 불러옵니다');
-  try { await loadThree(); } catch (e) { status('3D 도구를 불러오지 못했습니다', '인터넷 연결을 확인한 뒤 다시 열어 주세요 · ' + e.message); M3.on = false; return; }
-  if (!window.DecompressionStream) { status('이 브라우저에서는 건물 데이터를 풀 수 없습니다', '최신 Chrome·Safari·Edge에서 열어 주세요'); M3.on = false; return; }
+  $('mapTitle').innerHTML = `${esc(site.name)}<small>${center[1].toFixed(4)}, ${center[0].toFixed(4)}${site.center ? '' : ' · 직접 입력'}</small>`;
+  status('불러오는 중', '');
+  try { await loadThree(); } catch (e) { status('3D 불러오기 실패', e.message); M3.on = false; return; }
+  if (!window.DecompressionStream) { status('지원하지 않는 브라우저', '최신 Safari·Chrome 필요'); M3.on = false; return; }
   if (!M3.gl) initGL();
   M3.center = TM.fwd(center[0], center[1]);
   let loadErr = '';
   const bP = loadBuildings(M3.center[0], M3.center[1], 450).catch(e => { console.warn(e); loadErr = e.message; return null; });
   try { await flyGlobe(center); } catch (e) { console.error(e); }
   $('veil').classList.add('on'); await sleep(450);
-  status('건물을 세우는 중', '');
+  status('건물 불러오는 중', '');
   const blds = await bP;
-  try { buildLocal(blds || []); } catch (e) { console.error(e); status('3D 장면을 만들지 못했습니다', e.message); return; }
+  try { buildLocal(blds || []); } catch (e) { console.error(e); status('3D 생성 실패', e.message); return; }
   $('veil').classList.remove('on');
   status(null);
   $('strip').hidden = false; renderStrip();
-  if (!blds) hint(`건물 데이터를 불러오지 못했습니다 (${loadErr}). 바닥 격자 위에 사진만 표시합니다`, 8000);
-  else if (!blds.length) hint('이 지역의 건물 데이터가 아직 없습니다. 바닥 격자 위에 사진만 표시합니다', 6000);
-  else hint(`건물 ${blds.length.toLocaleString()}동 · 아래에서 사진을 고르고 찍은 자리를 클릭하세요`, 5000);
+  if (!blds) hint(`건물 데이터 없음 · ${loadErr}`, 6000);
+  else if (!blds.length) hint('이 지역 건물 데이터 없음', 6000);
+  else hint(`건물 ${blds.length.toLocaleString()}동`, 3000);
 }
 function closeMap() {
   $('locForm').hidden = true;
@@ -1217,8 +1217,8 @@ let worldP = null;
 async function flyGlobe([lon, lat]) {
   const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(40, 1, 0.001, 200);
   M3.gcam = cam; M3.fit();
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(1, 64, 48), new THREE.MeshBasicMaterial({ color: 0x0B1633 })));
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.045, 64, 48), new THREE.MeshBasicMaterial({ color: 0x4A74FF, transparent: true, opacity: .16, side: THREE.BackSide, blending: THREE.AdditiveBlending })));
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(1, 64, 48), new THREE.MeshBasicMaterial({ color: 0x0B0B10 })));
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.045, 64, 48), new THREE.MeshBasicMaterial({ color: 0x0A84FF, transparent: true, opacity: .14, side: THREE.BackSide, blending: THREE.AdditiveBlending })));
   const sp = new Float32Array(1500 * 3); for (let i = 0; i < 1500; i++) { const u = Math.random() * 2 - 1, th = Math.random() * 6.283, rr = Math.sqrt(1 - u * u), v = new THREE.Vector3(rr * Math.cos(th), u, rr * Math.sin(th)).multiplyScalar(40 + Math.random() * 40); sp.set([v.x, v.y, v.z], i * 3); }
   const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
   scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xDCE4FF, size: .08 })));
@@ -1227,14 +1227,14 @@ async function flyGlobe([lon, lat]) {
     const seg = [];
     for (const a of arcs) for (let i = 0; i + 3 < a.length; i += 2) { const p = llVec(a[i], a[i + 1], 1.002), q = llVec(a[i + 2], a[i + 3], 1.002); seg.push(p.x, p.y, p.z, q.x, q.y, q.z); }
     const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(seg), 3));
-    scene.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x8FA8FF, transparent: true, opacity: .85 })));
+    scene.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0xD1D1D6, transparent: true, opacity: .7 })));
   } catch (e) { console.warn('세계 윤곽 없음', e); }
   const pin = llVec(lon, lat, 1), tip = llVec(lon, lat, 1.06);
   const pg = new THREE.BufferGeometry().setFromPoints([pin, tip]);
-  scene.add(new THREE.Line(pg, new THREE.LineBasicMaterial({ color: 0xFFE7B8 })));
-  const dot = new THREE.Mesh(new THREE.SphereGeometry(.008, 16, 12), new THREE.MeshBasicMaterial({ color: 0xFFE7B8 })); dot.position.copy(pin); scene.add(dot);
+  scene.add(new THREE.Line(pg, new THREE.LineBasicMaterial({ color: 0x0A84FF })));
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(.008, 16, 12), new THREE.MeshBasicMaterial({ color: 0x0A84FF })); dot.position.copy(pin); scene.add(dot);
   const dur = reduceMotion ? 1 : 4600, t0 = performance.now(), ez = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  status('지구로 내려가는 중', S.sites.get(S.siteId)?.name || '');
+  status(null);
   await new Promise(res => {
     const step = now => {
       const k = Math.min(1, (now - t0) / dur), e = ez(k);
@@ -1254,19 +1254,19 @@ async function flyGlobe([lon, lat]) {
 
 // 2) 3D 건물: 바깥쪽부터 차례로 솟아오른다
 function buildLocal(blds) {
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x070B16); scene.fog = new THREE.Fog(0x070B16, 650, 1500);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0B0B0D); scene.fog = new THREE.Fog(0x0B0B0D, 650, 1500);
   const cam = new THREE.PerspectiveCamera(45, 1, 1, 5000); M3.cam = cam; M3.scene = scene; M3.fit();
-  scene.add(new THREE.HemisphereLight(0xA9BCFF, 0x141A2C, .95));
+  scene.add(new THREE.HemisphereLight(0xFFFFFF, 0x1C1C1E, .9));
   const sun = new THREE.DirectionalLight(0xFFF1DD, .75); sun.position.set(300, 600, 200); scene.add(sun);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshLambertMaterial({ color: 0x0E1529 }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.MeshLambertMaterial({ color: 0x141416 }));
   ground.rotation.x = -Math.PI / 2; ground.name = 'ground'; scene.add(ground); M3.ground = ground;
-  const grid = new THREE.GridHelper(1000, 40, 0x2A3A6A, 0x18223F); grid.position.y = .05; scene.add(grid);
-  const ring = new THREE.Mesh(new THREE.RingGeometry(448, 452, 96), new THREE.MeshBasicMaterial({ color: 0x2A3A6A, side: THREE.DoubleSide }));
+  const grid = new THREE.GridHelper(1000, 40, 0x2C2C2E, 0x1C1C1E); grid.position.y = .05; scene.add(grid);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(448, 452, 96), new THREE.MeshBasicMaterial({ color: 0x3A3A3C, side: THREE.DoubleSide }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = .06; scene.add(ring);
   // 건물을 한 덩어리로 합친다 (그리는 횟수를 줄이려고). 꼭짓점마다 주인 건물 번호를 기억해 클릭에 쓴다.
   M3.blds = blds;
   const pos = [], nor = [], col = [], del = [], own = [];
-  const lo = new THREE.Color(0x1F2A48), hi = new THREE.Color(0xA9B8E6), c = new THREE.Color();
+  const lo = new THREE.Color(0x3A3A3C), hi = new THREE.Color(0xC7C7CC), c = new THREE.Color();
   blds.forEach((b, i) => {
     b.H = b.h > 0 ? b.h : Math.max(1, b.floors) * 3.3;
     let shape;
@@ -1330,7 +1330,7 @@ function drawShots() {
   const G = M3.shots; G.clear();
   for (const p of sitePhotos()) {
     const xz = shotPos(p); if (!xz) continue;
-    const placed = !!p.shot, on = p.id === M3.sel, color = placed ? elColor(p) : '#7E879F';
+    const placed = !!p.shot, on = p.id === M3.sel, color = placed ? elColor(p) : '#8E8E93';
     const g = new THREE.Group(); g.position.set(xz[0], 0, xz[1]); g.userData.photo = p.id;
     const dot = new THREE.Mesh(new THREE.CylinderGeometry(on ? 3 : 2, on ? 3 : 2, 1, 20), new THREE.MeshBasicMaterial({ color: on ? '#ffffff' : color }));
     dot.position.y = .5; dot.userData.photo = p.id; g.add(dot);
@@ -1348,7 +1348,7 @@ function highlightBuilding(i) {
   M3.hl.clear(); if (i == null || !M3.blds[i]) return;
   const b = M3.blds[i];
   const g = new THREE.ExtrudeGeometry(new THREE.Shape(b.pts.map(p => new THREE.Vector2(p[0], p[1]))), { depth: b.H + .3, bevelEnabled: false }); g.rotateX(-Math.PI / 2);
-  M3.hl.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: 0xFFD27A })));
+  M3.hl.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: 0x0A84FF })));
   g.dispose();
 }
 
@@ -1361,7 +1361,7 @@ function selectPhoto(id, place) {
   M3.mode = place || !p.shot ? 'pos' : null;
   M3.preview.clear(); drawShots(); renderStrip(); renderMinfo();
   highlightBuilding(p.shot?.target?.i ?? null);
-  if (M3.mode === 'pos') hint('이 사진을 찍은 자리를 클릭하세요 · Esc 취소');
+  if (M3.mode === 'pos') hint('촬영 위치 클릭');
   else hint(null);
   const xz = shotPos(p); if (xz && M3.ctl) { M3.ctl.target.set(xz[0], 0, xz[1]); }
 }
@@ -1371,7 +1371,7 @@ function onMove(e) {
   const [x, z] = M3.pending, hdg = (Math.atan2(g[0] - x, -(g[1] - z)) / D2R + 360) % 360;
   M3.pendingH = hdg;
   M3.preview.clear();
-  const f = fanMesh(hdg, '#FFD27A', .45, 40); f.position.x = x; f.position.z = z; M3.preview.add(f);
+  const f = fanMesh(hdg, '#0A84FF', .4, 40); f.position.x = x; f.position.z = z; M3.preview.add(f);
   const t = targetBuilding(x, z, hdg); highlightBuilding(t?.i ?? null);
 }
 function onPick(e) {
@@ -1380,8 +1380,8 @@ function onPick(e) {
     const g = groundAt(e); if (!g) return;
     M3.pending = g; M3.mode = 'dir';
     M3.preview.clear();
-    const d = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 1, 20), new THREE.MeshBasicMaterial({ color: '#FFD27A' })); d.position.set(g[0], .5, g[1]); M3.preview.add(d);
-    hint('이제 사진에서 바라본 쪽을 클릭하세요');
+    const d = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 1, 20), new THREE.MeshBasicMaterial({ color: '#0A84FF' })); d.position.set(g[0], .5, g[1]); M3.preview.add(d);
+    hint('방향 클릭');
     return;
   }
   if (M3.mode === 'dir') {
@@ -1391,7 +1391,7 @@ function onPick(e) {
     p.shot = { x: +X.toFixed(2), y: +Y.toFixed(2), lon: +lon.toFixed(7), lat: +lat.toFixed(7), heading: hdg, by: 'user', at: new Date().toISOString(),
       target: t ? { i: t.i, addr: t.b.addr, use: t.b.use, floors: t.b.floors, base: t.b.base, year: t.b.year, height: t.b.h || null, dist: +t.d.toFixed(1) } : null };
     savePhoto(p); M3.mode = null; M3.preview.clear();
-    hint(t ? `저장했습니다 · 바라본 건물: ${t.b.addr || ''} ${t.b.use || ''}`.trim() : '저장했습니다', 3500);
+    hint(t ? `${t.b.addr || ''} ${t.b.use || ''}`.trim() : '저장됨', 3000);
     const next = sitePhotos().find(q => !q.shot && q.id !== p.id);
     drawShots(); renderStrip(); renderMinfo();
     return;
@@ -1420,8 +1420,8 @@ function targetBuilding(x, z, hdg) {
 }
 function renderStrip() {
   const L = sitePhotos(), done = L.filter(p => p.shot).length, gps = L.filter(p => !p.shot && p.gps).length;
-  $('stripHead').innerHTML = `<b>매핑 ${done} / ${L.length}</b><span>사진을 고르고 지도에서 찍은 자리 → 바라본 쪽을 클릭</span>`;
-  $('gpsAllBtn').hidden = !gps; $('gpsAllBtn').textContent = `GPS 위치 모두 쓰기 (${gps})`;
+  $('stripHead').innerHTML = `<b>매핑 ${done} / ${L.length}</b>`;
+  $('gpsAllBtn').hidden = !gps; $('gpsAllBtn').textContent = `GPS 적용 ${gps}`;
   $('stripList').innerHTML = L.map(p => `<button type="button" class="sp ${p.id === M3.sel ? 'on' : ''}" data-mp="${p.id}" style="--c:${elColor(p)}" title="${esc(p.element || '미분류')} · ${esc(p.name)}"><img alt="" src="${thumbUrl(p)}"><span class="st ${p.shot ? 'ok' : p.gps ? 'gps' : ''}">${p.shot ? '✓' : p.gps ? 'G' : '–'}</span></button>`).join('');
   $('stripList').querySelector('.sp.on')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
 }
@@ -1430,9 +1430,9 @@ function renderMinfo(bi) {
   if (bi != null && M3.mode == null && (!M3.sel || bi !== S.photos.get(M3.sel)?.shot?.target?.i)) {
     const b = M3.blds[bi];
     box.hidden = false;
-    box.innerHTML = `<h4>${esc(b.addr || '주소 없음')}</h4><div>${esc(b.use || '용도 정보 없음')}</div>
-      <div>지상 ${b.floors}층${b.base ? ` · 지하 ${b.base}층` : ''} · 높이 ${b.h ? b.h + 'm' : `약 ${Math.round(b.H)}m (층수로 계산)`}</div>
-      <div>${b.year ? `사용승인 ${b.year}년` : '사용승인연도 없음'}</div><div class="row"><button class="btn small" type="button" data-mi="close">닫기</button></div>`;
+    box.innerHTML = `<h4>${esc(b.addr || '—')}</h4><div>${esc(b.use || '—')}</div>
+      <div>지상 ${b.floors}층${b.base ? ` · 지하 ${b.base}층` : ''} · 높이 ${b.h ? b.h + 'm' : `약 ${Math.round(b.H)}m`}</div>
+      <div>${b.year ? `사용승인 ${b.year}` : ''}</div><div class="row"><button class="btn small" type="button" data-mi="close">닫기</button></div>`;
     return;
   }
   const p = S.photos.get(M3.sel); if (!p) { box.hidden = true; return; }
@@ -1440,11 +1440,11 @@ function renderMinfo(bi) {
   const t = p.shot?.target;
   box.innerHTML = `<img src="${thumbUrl(p)}" alt="${esc(p.name)}" data-mi="big">
     <h4>${esc(p.element || '미분류')} · ${esc(p.name)}</h4>
-    <div>${p.shot ? `찍은 자리 지정됨 · 방향 ${p.shot.heading}°` : p.gps ? 'GPS 위치만 있음 (회색 점)' : '위치 정보 없음'}</div>
-    ${t ? `<div class="bld">바라본 건물 <b>${esc(t.addr || '')}</b><br>${esc(t.use || '')} · 지상 ${t.floors}층${t.year ? ` · ${t.year}년` : ''} · ${t.dist}m 앞</div>` : p.shot ? '<div class="bld">바라본 방향 150m 안에 건물이 없습니다</div>' : ''}
+    <div>${p.shot ? `매핑됨${p.shot.heading != null ? ` · ${p.shot.heading}°` : ''}` : p.gps ? 'GPS만' : '위치 없음'}</div>
+    ${t ? `<div class="bld">대상 <b>${esc(t.addr || '')}</b><br>${esc(t.use || '')} · ${t.floors}층${t.year ? ` · ${t.year}` : ''} · ${t.dist}m</div>` : p.shot ? '<div class="bld">대상 건물 없음</div>' : ''}
     <div class="row">
-      <button class="btn small" type="button" data-mi="place">${p.shot ? '다시 지정' : '찍은 자리 지정'}</button>
-      ${p.gps ? '<button class="btn small" type="button" data-mi="gps">GPS 위치 쓰기</button>' : ''}
+      <button class="btn small" type="button" data-mi="place">${p.shot ? '다시 지정' : '위치 지정'}</button>
+      ${p.gps ? '<button class="btn small" type="button" data-mi="gps">GPS</button>' : ''}
       <button class="btn small" type="button" data-mi="close">닫기</button>
     </div>`;
 }
@@ -1464,10 +1464,10 @@ function useGps(p) {
 }
 $('gpsAllBtn').addEventListener('click', () => {
   let n = 0; for (const p of sitePhotos()) if (!p.shot && p.gps) { useGps(p); savePhoto(p); n++; }
-  drawShots(); renderStrip(); renderMinfo(); hint(`${n}장을 GPS 위치로 놓았습니다. 틀린 사진만 다시 지정하세요`, 4000);
+  drawShots(); renderStrip(); renderMinfo(); hint(`GPS 적용 ${n}장`, 2500);
 });
 $('stripList').addEventListener('click', e => { const b = e.target.closest('[data-mp]'); if (b) selectPhoto(b.dataset.mp); });
-addEventListener('keydown', e => { if (M3.on && e.key === 'Escape' && $('lb').hidden && M3.mode) { M3.mode = null; M3.preview.clear(); highlightBuilding(null); hint('취소했습니다', 1500); } });
+addEventListener('keydown', e => { if (M3.on && e.key === 'Escape' && $('lb').hidden && M3.mode) { M3.mode = null; M3.preview.clear(); highlightBuilding(null); hint('취소', 1200); } });
 
 // 위치가 없는 답사: 위도·경도 또는 지도 링크를 붙여 넣어 위치를 정한다
 function parseLatLon(text) {
@@ -1482,7 +1482,7 @@ function parseLatLon(text) {
 $('locForm').addEventListener('submit', e => {
   e.preventDefault();
   const ll = parseLatLon($('locInput').value);
-  if (!ll) { $('locErr').hidden = false; $('locErr').textContent = '한국 안의 위도·경도를 찾지 못했습니다. "36.3315, 127.4329"처럼 넣어 주세요'; return; }
+  if (!ll) { $('locErr').hidden = false; $('locErr').textContent = '좌표를 찾을 수 없음'; return; }
   const site = S.sites.get(S.siteId); site.manualCenter = [+ll[0].toFixed(6), +ll[1].toFixed(6)]; saveSite(site);
   $('locForm').hidden = true; openMap();
 });
@@ -1506,7 +1506,7 @@ addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout((
   for (const s of S.sites.values()) { refreshSite(s); saveSite(s); }
   S.siteId = S.sites.has(st?.siteId) ? st.siteId : [...S.sites.values()].filter(s => s.count).sort((a, b) => (b.start || '').localeCompare(a.start || ''))[0]?.id || null;
   renderPlanets();
-  if (!window.exifr) toast('촬영 정보 읽기 도구를 불러오지 못했습니다. 시간은 파일 날짜로 대신합니다', 6000);
+  if (!window.exifr) toast('EXIF 읽기 불가 · 파일 날짜 사용', 5000);
 })();
 })();
 </script>
