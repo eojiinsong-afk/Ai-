@@ -1971,6 +1971,7 @@ async function geocode(addr) {
 }
 // 주소창에 ?key=… 를 붙여 열면 이 브라우저에 저장하고 주소에서 지운다
 try { const u = new URL(location.href), k = u.searchParams.get('key'); if (k) { VW.setKey(k); u.searchParams.delete('key'); history.replaceState(null, '', u); } } catch (e) {}
+let pendingLoc = '';
 function openKeyForm() {
   $('map').hidden = false; status(null); ['strip', 'minfo', 'mapHint', 'locForm'].forEach(id => ($(id).hidden = true));
   $('keyForm').hidden = false; $('keyErr').hidden = true; $('keyInput').value = VW.key(); $('keyInput').focus();
@@ -1979,10 +1980,11 @@ $('keyForm').addEventListener('submit', e => {
   e.preventDefault(); const k = $('keyInput').value.trim();
   if (!/^[0-9A-Za-z-]{20,}$/.test(k)) { $('keyErr').hidden = false; $('keyErr').textContent = '인증키 형식이 아님'; return; }
   VW.setKey(k); $('keyForm').hidden = true;
+  if (pendingLoc) { const t = pendingLoc; pendingLoc = ''; $('map').hidden = false; $('locForm').hidden = false; $('locInput').value = t; $('locForm').requestSubmit(); return; }
   if (M3.on) { closeMap(); }
   openMap();
 });
-$('keyCancel').addEventListener('click', () => { $('keyForm').hidden = true; if (!M3.on) $('map').hidden = true; });
+$('keyCancel').addEventListener('click', () => { $('keyForm').hidden = true; if (pendingLoc) { pendingLoc = ''; $('locForm').hidden = false; return; } if (!M3.on) $('map').hidden = true; });
 $('keyBtn').addEventListener('click', openKeyForm);
 
 // 위치가 없는 답사: 위도·경도 또는 지도 링크를 붙여 넣어 위치를 정한다
@@ -1998,6 +2000,8 @@ function parseLatLon(text) {
 $('locForm').addEventListener('submit', async e => {
   e.preventDefault();
   const text = $('locInput').value.trim(); if (!text) return;
+  // 웹에서 인증키가 없으면 키 입력창을 먼저 띄우고, 저장하면 같은 검색을 이어서 한다
+  if (!ON_ARTIFACT && !VW.key() && !parseLatLon(text)) { pendingLoc = text; openKeyForm(); return; }
   $('locErr').hidden = false; $('locErr').textContent = '찾는 중';
   const f = await findPlace(text);
   if (!f) { $('locErr').textContent = placeFail(); return; }
