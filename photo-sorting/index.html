@@ -44,7 +44,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .site { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .site select, .site input { background: var(--fill); border: 0; border-radius: 8px; padding: 6px 10px; font-size: 13px; min-width: 0; }
 .site input { width: 160px; }
-.actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .btn { border: 0; background: var(--fill); border-radius: 980px; padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; transition: background .15s, opacity .15s; }
 .btn:hover { background: var(--fill-2); }
 .btn:active { opacity: .7; }
@@ -53,6 +53,15 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .btn.ask { background: rgba(255,159,10,.18); color: var(--orange); }
 .btn.warn { color: var(--red); }
 .btn.small { padding: 5px 11px; font-size: 12.5px; }
+/* 이 답사에만 해당: 청록 / 프로그램 전체: 회색 */
+.btn.proj { background: rgba(100,210,255,.16); color: #64D2FF; box-shadow: inset 0 0 0 .5px rgba(100,210,255,.35); }
+.btn.proj:hover { background: rgba(100,210,255,.26); }
+.btn.proj.warn { background: rgba(255,69,58,.14); color: var(--red); box-shadow: inset 0 0 0 .5px rgba(255,69,58,.35); }
+.btn.proj.warn:hover { background: rgba(255,69,58,.24); }
+.grp { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.grp-proj:has(> :not([hidden])) + .grp-all { padding-left: 12px; border-left: .5px solid var(--sep); }
+.scgap { flex: 1; }
+@media (max-width: 760px) { .grp-proj:has(> :not([hidden])) + .grp-all { padding-left: 0; border-left: 0; } }
 .btn[disabled] { opacity: .35; cursor: default; }
 
 /* stage */
@@ -380,14 +389,18 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
     </div>
   </div>
   <div class="actions">
-    <button class="btn ask" id="askBtn" type="button" hidden>확인 0</button>
-    <button class="btn" id="elBtn" type="button">요소</button>
-    <button class="btn" id="replayBtn" type="button" disabled>다시 정렬</button>
-    <button class="btn" id="mapBtn" type="button" hidden>지도</button>
-    <button class="btn" id="albumBtn" type="button">앨범</button>
-    <button class="btn" id="reportBtn" type="button">정리</button>
-    <label class="btn" for="fileIn">사진 추가</label>
-    <button class="btn primary" id="sortBtn" type="button" hidden>분류</button>
+    <div class="grp grp-proj" aria-label="이 답사">
+      <button class="btn ask" id="askBtn" type="button" hidden>확인 0</button>
+      <button class="btn proj" id="replayBtn" type="button" disabled>다시 정렬</button>
+      <label class="btn proj" for="fileIn">사진 추가</label>
+      <button class="btn primary" id="sortBtn" type="button" hidden>분류</button>
+    </div>
+    <div class="grp grp-all" aria-label="전체">
+      <button class="btn" id="elBtn" type="button">요소</button>
+      <button class="btn" id="mapBtn" type="button" hidden>지도</button>
+      <button class="btn" id="albumBtn" type="button">앨범</button>
+      <button class="btn" id="reportBtn" type="button">정리</button>
+    </div>
     <input id="fileIn" type="file" accept="image/*,.heic,.heif" multiple hidden>
   </div>
 </header>
@@ -403,7 +416,7 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
     <label>일정<span class="dates"><input id="scFrom" type="date" aria-label="시작일"><i>–</i><input id="scTo" type="date" aria-label="종료일"></span></label>
     <label>주소<input id="scAddr" maxlength="100" placeholder="주소 입력 후 Enter"></label>
     <p class="scloc" id="scLoc"></p>
-    <div class="scact"><button class="btn small" id="siteMapBtn" type="button">매핑</button><button class="btn small" id="newSiteBtn" type="button">새 답사</button><button class="btn small" id="zipBtn" type="button" disabled>ZIP</button><button class="btn small warn" id="clearBtn" type="button">삭제</button></div>
+    <div class="scact"><button class="btn small proj" id="siteMapBtn" type="button">매핑</button><button class="btn small proj" id="zipBtn" type="button" disabled>ZIP</button><button class="btn small proj warn" id="clearBtn" type="button">삭제</button><span class="scgap"></span><button class="btn small" id="newSiteBtn" type="button">새 답사</button></div>
   </section>
   <div class="hud" id="core" hidden><div class="num" id="coreNum">0</div><div class="label" id="coreLabel"></div></div>
   <div class="pstatus" id="coreSite" hidden></div>
