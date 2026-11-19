@@ -49,6 +49,8 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
   background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); border-bottom: .5px solid var(--sep); }
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; flex-wrap: wrap; }
 .brand h1 { margin: 0; font: 600 17px/1 var(--display); letter-spacing: -.02em; }
+.brand h1 button { font: inherit; letter-spacing: inherit; background: none; border: 0; padding: 4px 0; cursor: pointer; color: var(--label); }
+.brand h1 button:hover { opacity: .75; }
 .site { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .site select, .site input { background: var(--fill); border: 0; border-radius: 8px; padding: 6px 10px; font-size: 13px; min-width: 0; }
 .site input { width: 160px; }
@@ -247,6 +249,8 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
   display: flex; gap: 6px; align-items: center; flex-wrap: wrap; pointer-events: none; }
 .map-top > * { pointer-events: auto; }
 .map-top .btn { background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+.homelink { font: 600 17px/1 var(--display); letter-spacing: -.02em; color: var(--label); background: none; border: 0; padding: 4px 14px 4px 0; margin-right: 4px; cursor: pointer; text-shadow: 0 1px 10px rgba(0,0,0,.8); border-right: .5px solid var(--sep, rgba(255,255,255,.18)); }
+.homelink:hover { opacity: .75; }
 .map-title { font: 600 17px var(--display); margin-right: auto; text-shadow: 0 1px 10px rgba(0,0,0,.8); }
 .map-title small { display: block; font: 400 12px var(--sans); color: var(--label-2); font-variant-numeric: tabular-nums; }
 .map-status { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
@@ -306,7 +310,7 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 
 <header class="bar" id="bar">
   <div class="brand">
-    <h1>Photo Sorting</h1>
+    <h1><button type="button" id="homeBtn" aria-label="처음 화면 · 사진 추가">Photo Sorting</button></h1>
     <div class="site" id="siteBox" hidden>
       <select id="siteSel" aria-label="답사"></select>
     </div>
@@ -382,6 +386,7 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
   <canvas id="gl"></canvas>
   <div class="veil" id="veil"></div>
   <div class="map-top">
+    <button type="button" class="homelink" data-home aria-label="처음 화면 · 사진 추가">Photo Sorting</button>
     <div class="map-title" id="mapTitle"></div>
     <button class="btn small" id="gpsAllBtn" type="button" hidden>GPS 적용</button>
     <button class="btn small" id="keyBtn" type="button" hidden>인증키</button>
@@ -412,11 +417,11 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 </section>
 
 <section class="overlay" id="album" hidden aria-label="앨범">
-  <div class="ovtop"><h2>앨범</h2><span class="hint" id="abCount"></span><button class="btn small" id="abLost" type="button" hidden></button><button class="btn small" id="abClose" type="button">닫기</button></div>
+  <div class="ovtop"><button type="button" class="homelink" data-home aria-label="처음 화면 · 사진 추가">Photo Sorting</button><h2>앨범</h2><span class="hint" id="abCount"></span><button class="btn small" id="abLost" type="button" hidden></button><button class="btn small" id="abClose" type="button">닫기</button></div>
   <div class="abbody"><div class="abmap" id="abMap"></div><div class="abpanel" id="abPanel"></div></div>
 </section>
 <section class="overlay" id="report" hidden aria-label="정리">
-  <div class="ovtop"><h2>정리</h2>
+  <div class="ovtop"><button type="button" class="homelink" data-home aria-label="처음 화면 · 사진 추가">Photo Sorting</button><h2>정리</h2>
     <div class="seg" role="radiogroup"><label><input type="radio" name="rpMode" value="element" checked><span>요소별</span></label><label><input type="radio" name="rpMode" value="site"><span>답사별</span></label></div>
     <span class="hint" id="rpInfo"></span><button class="btn small primary" id="rpPdf" type="button" disabled>PDF</button><button class="btn small" id="rpClose" type="button">닫기</button></div>
   <div class="rpbody"><div class="rplist" id="rpList"></div><div class="rppages" id="rpPages"></div></div>
@@ -1241,7 +1246,7 @@ $('scAddr').addEventListener('change', async e => {
   if (s.address) {
     $('scLoc').textContent = '주소 찾는 중';
     const f = await findPlace(s.address);
-    if (f) { s.addrCenter = f.ll; s.addrMatch = f.how; } else toast('주소를 찾지 못함');
+    if (f) { s.addrCenter = f.ll; s.addrMatch = f.how; } else toast(placeFail(), 6000);
     saveSite(s);
   }
   renderSiteCard();
@@ -1583,10 +1588,39 @@ function initGL() {
 // 1) 지구본: 지구가 돌며 한국으로, 다시 답사 지점으로
 function llVec(lon, lat, r = 1) { const a = lat * D2R, o = lon * D2R; return new THREE.Vector3(r * Math.cos(a) * Math.cos(o), r * Math.sin(a), -r * Math.cos(a) * Math.sin(o)); }
 let worldP = null;
+let globeTexP = null;
+function globeTexture() {
+  return (globeTexP = globeTexP || (async () => {
+    const [land, kr] = await Promise.all([fetch('data/land.json').then(r => r.json()), (koreaP = koreaP || fetch('data/korea.json').then(r => r.json()).catch(() => null))]);
+    const W = 4096, H = 2048, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d'), X = lon => (lon + 180) / 360 * W, Y = lat => (90 - lat) / 180 * H;
+    const oc = g.createLinearGradient(0, 0, 0, H);
+    oc.addColorStop(0, '#0A2238'); oc.addColorStop(.3, '#0D3F72'); oc.addColorStop(.5, '#0F5596'); oc.addColorStop(.7, '#0D3F72'); oc.addColorStop(1, '#0A2238');
+    g.fillStyle = oc; g.fillRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(255,255,255,.07)'; g.lineWidth = 1.5;
+    for (let lo = -180; lo <= 180; lo += 15) { g.beginPath(); g.moveTo(X(lo), 0); g.lineTo(X(lo), H); g.stroke(); }
+    for (let la = -75; la <= 75; la += 15) { g.beginPath(); g.moveTo(0, Y(la)); g.lineTo(W, Y(la)); g.stroke(); }
+    const ld = g.createLinearGradient(0, 0, 0, H);
+    [[90, '#EEF1F4'], [68, '#C9CFD6'], [58, '#6E7A62'], [45, '#5F6E4C'], [30, '#8A7A55'], [18, '#7C7350'], [0, '#3F6A38'], [-18, '#6F7A48'], [-32, '#8C7C58'], [-50, '#5F6E4C'], [-62, '#C9CFD6'], [-90, '#EEF1F4']]
+      .forEach(([la, col]) => ld.addColorStop((90 - la) / 180, col));
+    g.fillStyle = ld; g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 1.4; g.lineJoin = 'round';
+    for (const r of land) { g.beginPath(); for (let i = 0; i < r.length; i += 2) (i ? g.lineTo : g.moveTo).call(g, X(r[i]), Y(r[i + 1])); g.closePath(); g.fill(); g.stroke(); }
+    if (kr) {
+      g.fillStyle = 'rgba(100,210,255,.18)'; g.strokeStyle = 'rgba(100,210,255,.9)'; g.lineWidth = 1;
+      for (const f of kr.sido) for (const arr of f.r) { let x = 0, y = 0; g.beginPath(); for (let i = 0; i < arr.length; i += 2) { x += arr[i]; y += arr[i + 1]; (i ? g.lineTo : g.moveTo).call(g, X(x / 1e4), Y(y / 1e4)); } g.closePath(); g.fill(); g.stroke(); }
+    }
+    return new THREE.CanvasTexture(c);
+  })());
+}
 async function flyGlobe([lon, lat]) {
   const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(40, 1, 0.001, 200);
   M3.gcam = cam; M3.fit();
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(1, 64, 48), new THREE.MeshBasicMaterial({ color: 0x0B0B10 })));
+  // 바다는 파랗게, 육지는 위도에 따라 초록·갈색·눈빛으로 칠한 지구 텍스처
+  const tex = await globeTexture().catch(e => { console.warn(e); return null; });
+  if (tex) tex.anisotropy = M3.gl.capabilities.getMaxAnisotropy();
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), tex ? new THREE.MeshLambertMaterial({ map: tex }) : new THREE.MeshBasicMaterial({ color: 0x0E4A86 })));
+  scene.add(new THREE.AmbientLight(0xFFFFFF, .55));
+  const sunL = new THREE.DirectionalLight(0xFFFFFF, .75); sunL.position.set(-.6, .5, 1); cam.add(sunL); scene.add(cam);
   scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.045, 64, 48), new THREE.MeshBasicMaterial({ color: 0x0A84FF, transparent: true, opacity: .14, side: THREE.BackSide, blending: THREE.AdditiveBlending })));
   const sp = new Float32Array(1500 * 3); for (let i = 0; i < 1500; i++) { const u = Math.random() * 2 - 1, th = Math.random() * 6.283, rr = Math.sqrt(1 - u * u), v = new THREE.Vector3(rr * Math.cos(th), u, rr * Math.sin(th)).multiplyScalar(40 + Math.random() * 40); sp.set([v.x, v.y, v.z], i * 3); }
   const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
@@ -1596,7 +1630,15 @@ async function flyGlobe([lon, lat]) {
     const seg = [];
     for (const a of arcs) for (let i = 0; i + 3 < a.length; i += 2) { const p = llVec(a[i], a[i + 1], 1.002), q = llVec(a[i + 2], a[i + 3], 1.002); seg.push(p.x, p.y, p.z, q.x, q.y, q.z); }
     const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(seg), 3));
-    scene.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0xD1D1D6, transparent: true, opacity: .7 })));
+    scene.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0xE5E5EA, transparent: true, opacity: .35 })));
+    // 가까이 갔을 때 또렷하도록 한국 시도 경계는 선으로 따로
+    const kr = await (koreaP = koreaP || fetch('data/korea.json').then(r => r.json()).catch(() => null));
+    if (kr) {
+      const ks = [];
+      for (const f of kr.sido) for (const arr of f.r) { let x = 0, y = 0, prev = null; for (let i = 0; i < arr.length; i += 2) { x += arr[i]; y += arr[i + 1]; const v = llVec(x / 1e4, y / 1e4, 1.0015); if (prev) ks.push(prev.x, prev.y, prev.z, v.x, v.y, v.z); prev = v; } }
+      const kg = new THREE.BufferGeometry(); kg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ks), 3));
+      scene.add(new THREE.LineSegments(kg, new THREE.LineBasicMaterial({ color: 0x64D2FF, transparent: true, opacity: .8 })));
+    }
   } catch (e) { console.warn('세계 윤곽 없음', e); }
   const pin = llVec(lon, lat, 1), tip = llVec(lon, lat, 1.06);
   const pg = new THREE.BufferGeometry().setFromPoints([pin, tip]);
@@ -1908,12 +1950,22 @@ async function vworldBuildings([lon, lat], R) {
   return out;
 }
 // 주소 → 좌표 (브이월드 지오코더: 도로명, 안 되면 지번)
+let placeErr = '';
 async function geocode(addr) {
-  for (const type of ['road', 'parcel']) {
-    const q = new URLSearchParams({ service: 'address', request: 'getcoord', version: '2.0', crs: 'epsg:4326', address: addr, refine: 'true', simple: 'false', format: 'json', type, key: VW.key() });
-    const r = await vwGet('https://api.vworld.kr/req/address?' + q);
-    const pt = r?.response?.status === 'OK' ? r.response.result?.point : null;
-    if (pt && +pt.x && +pt.y) return [+(+pt.x).toFixed(6), +(+pt.y).toFixed(6)];
+  const A = { service: 'address', request: 'getcoord', version: '2.0', crs: 'epsg:4326', address: addr, refine: 'true', simple: 'false', format: 'json' };
+  const Q = { service: 'search', request: 'search', version: '2.0', crs: 'EPSG:4326', size: '1', page: '1', query: addr, format: 'json', errorformat: 'json' };
+  const tries = [['address', { ...A, type: 'road' }], ['address', { ...A, type: 'parcel' }], ['search', { ...Q, type: 'address', category: 'road' }], ['search', { ...Q, type: 'address', category: 'parcel' }], ['search', { ...Q, type: 'place' }]];
+  for (const [ep, prm] of tries) {
+    let r;
+    try { r = await vwGet(`https://api.vworld.kr/req/${ep}?` + new URLSearchParams({ ...prm, key: VW.key() })); } catch (e) { placeErr = '브이월드 연결 실패'; continue; }
+    const st = r?.response?.status;
+    if (st === 'OK') {
+      const pt = ep === 'address' ? r.response.result?.point : r.response.result?.items?.[0]?.point;
+      if (pt && +pt.x && +pt.y) return [+(+pt.x).toFixed(6), +(+pt.y).toFixed(6)];
+    } else if (st === 'ERROR') {
+      placeErr = `브이월드 ${[r.response.error?.code, r.response.error?.text].filter(Boolean).join(' ')}`;
+      if (/KEY|DOMAIN|AUTH|인증|권한/i.test(placeErr)) break;
+    } else if (!placeErr) placeErr = '브이월드 결과 없음';
   }
   return null;
 }
@@ -1948,7 +2000,7 @@ $('locForm').addEventListener('submit', async e => {
   const text = $('locInput').value.trim(); if (!text) return;
   $('locErr').hidden = false; $('locErr').textContent = '찾는 중';
   const f = await findPlace(text);
-  if (!f) { $('locErr').textContent = '찾을 수 없음 · 법정동과 지번까지 넣어 보세요'; return; }
+  if (!f) { $('locErr').textContent = placeFail(); return; }
   const site = S.sites.get(S.siteId);
   if (parseLatLon(text)) site.manualCenter = f.ll; else { site.address = site.address || text; site.addrCenter = f.ll; site.addrMatch = f.how; }
   saveSite(site); $('locErr').hidden = true;
@@ -1956,10 +2008,15 @@ $('locForm').addEventListener('submit', async e => {
 });
 // ─────────── 주소 찾기: 좌표 → 브이월드(웹) → 동·지번 목록(인터넷 없이) ───────────
 async function findPlace(text) {
+  placeErr = '';
   const ll = parseLatLon(text); if (ll) return { ll: ll.map(v => +v.toFixed(6)), how: '좌표' };
   if (!ON_ARTIFACT && VW.key()) { const g = await geocode(text).catch(() => null); if (g) return { ll: g, how: '브이월드' }; }
-  return offlinePlace(text).catch(e => { console.warn(e); return null; });
+  const o = await offlinePlace(text).catch(e => { console.warn(e); return null; });
+  if (o) return o;
+  placeErr = placeErr || (ON_ARTIFACT ? '이 화면은 법정동·지번만 · 도로명·장소명은 웹 버전' : !VW.key() ? '브이월드 인증키 없음' : '');
+  return null;
 }
+const placeFail = () => `찾을 수 없음${placeErr ? ' · ' + placeErr : ''}`;
 let placesP = null;
 async function offlinePlace(text) {
   const places = await (placesP = placesP || fetch('data/places.json').then(r => (r.ok ? r.json() : [])).catch(() => []));
@@ -1975,7 +2032,15 @@ async function offlinePlace(text) {
     for (const t of tokens) if (t !== leaf && parts.some(pp => pp.startsWith(t) || t.startsWith(pp.replace(/(특별자치시|특별자치도|통합특별시|특별시|광역시|도)$/, '')))) sc += 3;
     if (!best || sc > best.sc) best = { pl, sc };
   }
-  if (!best) return null;
+  if (!best) {
+    // 동이 없으면 시군구 중심
+    const sgg = tokens.filter(t => /[시군구]$/.test(t));
+    if (!sgg.length) return null;
+    const hit = places.filter(pl => sgg.every(t => pl[0].split(' ').some(pp => pp === t)));
+    if (!hit.length) return null;
+    const cx = hit.reduce((a, p) => a + p[3], 0) / hit.length, cy = hit.reduce((a, p) => a + p[4], 0) / hit.length;
+    return { ll: TM.inv(cx, cy).map(v => +v.toFixed(6)), how: `${hit[0][0].split(' ').slice(0, -1).join(' ')} (시군구 중심)` };
+  }
   const [name, sido, dn, cx, cy, cells] = best.pl;
   if (jm) try {
     const target = jm[1] + (jm[2] ? '-' + jm[2] : ''), idx = await loadIndex();
@@ -2187,6 +2252,19 @@ $('rpPdf').addEventListener('click', async () => {
   } catch (e) { console.error(e); toast('PDF 실패 · ' + e.message, 5000); }
   finally { btn.disabled = false; btn.textContent = 'PDF'; }
 });
+
+// 로고: 처음 화면(사진 추가)으로
+const goHome = () => {
+  ['album', 'report', 'elSheet'].forEach(id => ($(id).hidden = true));
+  if (!$('lb').hidden) closeLb();
+  closeAsk();
+  if (M3.on || !$('map').hidden) closeMap();
+  if (S.busy) return;
+  if ([...S.photos.values()].some(p => p.demo)) dropDemo();
+  S.siteId = null; saveSettings(); clearItems(); renderPlanets();
+};
+$('homeBtn').addEventListener('click', goHome);
+document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', goHome));
 
 // ─────────── 시작 ───────────
 let resizeT;
