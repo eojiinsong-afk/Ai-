@@ -110,7 +110,25 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
   opacity: 0; transform: scale(.4); transition: opacity .25s, transform .3s cubic-bezier(.2,1.4,.4,1); }
 .bubble .t.on { opacity: 1; transform: none; }
 .bubble .t img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.bubble .t:hover { z-index: 2; transform: scale(1.6); box-shadow: 0 0 0 1.5px #fff, 0 6px 16px rgba(0,0,0,.6); }
+.bubble .t:hover { z-index: 2; transform: scale(1.25); box-shadow: 0 0 0 1.5px #fff, 0 6px 16px rgba(0,0,0,.6); }
+.bubble .t { touch-action: none; user-select: none; -webkit-user-select: none; }
+.bubble .t img { -webkit-user-drag: none; }
+.bubble.drop { border-color: #fff; box-shadow: 0 0 0 10px color-mix(in srgb, var(--c) 35%, transparent), 0 0 70px color-mix(in srgb, var(--c) 60%, transparent); }
+.bubble .t.dragsrc { opacity: .25 !important; }
+.peek { position: fixed; z-index: 44; width: 240px; padding: 6px; border-radius: 14px; background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  box-shadow: 0 12px 40px rgba(0,0,0,.55), 0 0 0 .5px rgba(255,255,255,.15); pointer-events: none; opacity: 0; transform: scale(.94); transition: opacity .15s, transform .15s; }
+.peek.on { opacity: 1; transform: none; }
+.peek img { display: block; width: 100%; max-height: 240px; object-fit: contain; border-radius: 9px; background: #000; }
+.peek div { display: flex; align-items: center; gap: 6px; padding: 6px 4px 1px; font-size: 12px; color: var(--label-2); }
+.peek div b { font-weight: 600; color: var(--label); display: inline-flex; align-items: center; gap: 5px; }
+.peek div b i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.ghost { position: fixed; z-index: 46; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 8px; overflow: hidden; pointer-events: none; box-shadow: 0 0 0 2px #fff, 0 10px 30px rgba(0,0,0,.6); transform: rotate(-4deg); }
+.ghost img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dock { position: fixed; z-index: 45; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 32px);
+  padding: 8px; border-radius: 16px; background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+.dock span { padding: 7px 12px; border-radius: 10px; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.06); }
+.dock span i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.dock span.drop { background: color-mix(in srgb, var(--c) 45%, transparent); color: #fff; }
 .bubble .t.q::after { content: ""; position: absolute; right: 1px; top: 1px; width: 6px; height: 6px; border-radius: 50%; background: var(--orange); }
 .blabel { position: absolute; transform: translateX(-50%); text-align: center; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 1px; opacity: 0; transition: opacity .5s; }
 .blabel.on { opacity: 1; }
@@ -284,6 +302,19 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 .minfo .row { display: flex; gap: 6px; flex-wrap: wrap; }
 .minfo .bld { border-top: .5px solid var(--sep); padding-top: 8px; }
 .minfo .bld b { color: var(--label); font-weight: 600; }
+.minfo.wide { width: 340px; max-height: calc(100vh - 220px); overflow-y: auto; }
+.mfacts { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 2px 0 0; font-size: 13px; }
+.mfacts dt { color: var(--label-2); } .mfacts dd { margin: 0; color: var(--label); }
+.msec { border-top: .5px solid var(--sep); padding-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.msec h6 { margin: 0; font: 600 13px var(--display); color: var(--label); display: flex; gap: 6px; align-items: baseline; }
+.msec h6 span, .mgrp h5 span { color: var(--label-2); font-weight: 400; font-variant-numeric: tabular-nums; }
+.msec p { margin: 0; font-size: 12px; color: var(--label-2); }
+.mgrp + .mgrp { border-top: .5px dashed var(--sep); padding-top: 10px; }
+.mgrp h5 { margin: 0 0 6px; font: 500 12px var(--sans); color: var(--label); display: flex; gap: 6px; align-items: center; }
+.mgrp h5 i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.mgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.mgrid button { padding: 0; border: 0; aspect-ratio: 1; border-radius: 5px; overflow: hidden; cursor: pointer; box-shadow: inset 0 0 0 1.5px var(--c); background: var(--bg-2); }
+.minfo .mgrid img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 0; cursor: pointer; }
 
 @media (max-width: 760px) {
   .sitecard { left: 12px; right: 12px; top: 10px; width: auto; padding: 10px; gap: 6px; }
@@ -291,7 +322,8 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
   .hud .num { font-size: 40px; }
   .hud { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
   .minfo { left: 16px; right: 16px; width: auto; top: auto; bottom: 120px; max-height: 40vh; overflow-y: auto; }
-  .minfo img { height: 110px; }
+  .minfo > img { height: 110px; }
+  .minfo.wide { max-height: 50vh; }
   .bar { position: relative; top: 0; }
   .btn { padding: 6px 11px; }
   .site input { width: 120px; }
@@ -1021,8 +1053,72 @@ async function replay() {
   try { if (planetsEl.childElementCount) await gatherExisting(); await sortShow(); }
   finally { S.busy = false; clearItems(); renderPlanets(); }
 }
+// 마우스를 올리면 크게 보기, 끌어서 다른 요소 버블(또는 아래 목록)에 놓으면 분류 변경
+const peek = document.createElement('div'); peek.className = 'peek'; peek.setAttribute('aria-hidden', 'true'); document.body.appendChild(peek);
+let peekT = 0, peekId = null, drag = null, dragJustEnded = false;
+function showPeek(t) {
+  const p = S.photos.get(t.dataset.photo); if (!p) return;
+  peekId = p.id; const [c] = colorOf(keyOf(p));
+  peek.style.setProperty('--c', c);
+  peek.innerHTML = `<img alt="" src="${fullUrl(p)}"><div><b><i></i>${esc(keyOf(p))}</b>${p.ask ? ' · 확인 필요' : ''}</div>`;
+  const r = t.getBoundingClientRect(), W = 240, H = Math.min(240, W * (p.h / p.w || .75)) + 40;
+  let x = r.right + 12, y = r.top + r.height / 2 - H / 2;
+  if (x + W > innerWidth - 12) x = r.left - W - 12;
+  y = Math.max(12, Math.min(innerHeight - H - 12, y));
+  peek.style.left = x + 'px'; peek.style.top = y + 'px'; peek.classList.add('on');
+}
+function hidePeek() { clearTimeout(peekT); peekId = null; peek.classList.remove('on'); }
+planetsEl.addEventListener('pointerover', e => {
+  if (drag || e.pointerType === 'touch') return;
+  const t = e.target.closest('.bubble .t'); if (!t || t.dataset.photo === peekId) return;
+  clearTimeout(peekT); peekT = setTimeout(() => showPeek(t), 220);
+});
+planetsEl.addEventListener('pointerout', e => { const t = e.target.closest('.bubble .t'); if (t && !t.contains(e.relatedTarget)) hidePeek(); });
+planetsEl.addEventListener('pointerdown', e => {
+  const t = e.target.closest('.bubble .t'); if (!t || S.busy || e.button) return;
+  drag = { t, id: t.dataset.photo, x0: e.clientX, y0: e.clientY, on: false, pid: e.pointerId };
+});
+planetsEl.addEventListener('dragstart', e => e.preventDefault());
+function dropTargetAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const d = el?.closest('.dock [data-to]'); if (d) return { el: d, key: d.dataset.to };
+  const b = el?.closest('.bubble'); if (b) return { el: b, key: b.dataset.card };
+  return null;
+}
+addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.pid) return;
+  if (!drag.on) {
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
+    const p = S.photos.get(drag.id); if (!p) { drag = null; return; }
+    drag.on = true; drag.from = keyOf(p); hidePeek();
+    drag.t.classList.add('dragsrc');
+    drag.ghost = document.createElement('div'); drag.ghost.className = 'ghost'; drag.ghost.innerHTML = `<img alt="" src="${thumbUrl(p)}">`; document.body.appendChild(drag.ghost);
+    drag.dock = document.createElement('div'); drag.dock.className = 'dock';
+    drag.dock.innerHTML = [...S.elements, OTHER].filter(k => k !== drag.from).map(k => `<span data-to="${esc(k)}" style="--c:${colorOf(k)[0]}"><i></i>${esc(k)}</span>`).join('');
+    document.body.appendChild(drag.dock);
+  }
+  drag.ghost.style.left = e.clientX + 'px'; drag.ghost.style.top = e.clientY + 'px';
+  const tgt = dropTargetAt(e.clientX, e.clientY);
+  const el = tgt && tgt.key !== drag.from ? tgt.el : null;
+  if (el !== drag.over) { drag.over?.classList.remove('drop'); el?.classList.add('drop'); drag.over = el; }
+});
+function endDrag(e, cancel) {
+  if (!drag || (e && e.pointerId !== drag.pid)) return;
+  const d = drag; drag = null;
+  if (!d.on) return;
+  dragJustEnded = true; setTimeout(() => (dragJustEnded = false), 0);
+  d.ghost.remove(); d.dock.remove(); d.t.classList.remove('dragsrc'); d.over?.classList.remove('drop');
+  const tgt = !cancel && e && dropTargetAt(e.clientX, e.clientY);
+  if (!tgt || tgt.key === d.from) return;
+  setElementOf(S.photos.get(d.id), tgt.key);
+  toast(`${tgt.key}(으)로 이동`, 1400);
+}
+addEventListener('pointerup', e => endDrag(e));
+addEventListener('pointercancel', e => endDrag(e, true));
+addEventListener('keydown', e => { if (e.key === 'Escape' && drag?.on) endDrag(null, true); });
 planetsEl.addEventListener('click', e => {
-  const t = e.target.closest('[data-photo]'); if (t) { openLb(t.dataset.photo); return; }
+  if (dragJustEnded) return;
+  const t = e.target.closest('[data-photo]'); if (t) { hidePeek(); openLb(t.dataset.photo); return; }
   const b = e.target.closest('.bubble'); if (b) { const f = photosOf(b.dataset.card)[0]; if (f) openLb(f.id); }
 });
 
@@ -1355,6 +1451,11 @@ function renderLb() {
   $('lbPrev').disabled = i <= 0; $('lbNext').disabled = i >= L.length - 1;
 }
 function stepLb(d) { const L = lbList(), i = L.findIndex(x => x.id === S.lbId); const n = L[i + d]; if (n) { S.lbId = n.id; renderLb(); } }
+function setElementOf(p, el) {
+  if (!p) return;
+  p.element = el === NONE ? null : el; p.by = 'user'; p.ask = false; p.labeledAt = new Date().toISOString(); savePhoto(p);
+  renderPlanets(); if (!$('ask').hidden) { askList().length ? renderAsk() : closeAsk(); }
+}
 function setElement(el) {
   const p = S.photos.get(S.lbId); if (!p) return;
   p.element = el; p.by = 'user'; p.ask = false; p.labeledAt = new Date().toISOString(); savePhoto(p);
@@ -1794,7 +1895,10 @@ function onMove(e) {
 function onPick(e) {
   if (!M3.cam) return;
   if (M3.mode === 'pos') {
-    const g = groundAt(e); if (!g) return;
+    // 건물을 누르면 그 바닥 위치(실내), 아니면 땅
+    const rc0 = ray(); rc0.setFromCamera(ndc(e), M3.cam);
+    const hb0 = M3.mesh && rc0.intersectObject(M3.mesh)[0];
+    const g = hb0 ? [hb0.point.x, hb0.point.z] : groundAt(e); if (!g) return;
     M3.pending = g; M3.mode = 'dir';
     M3.preview.clear();
     const d = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 1, 20), new THREE.MeshBasicMaterial({ color: '#0A84FF' })); d.position.set(g[0], .5, g[1]); M3.preview.add(d);
@@ -1804,11 +1908,11 @@ function onPick(e) {
   if (M3.mode === 'dir') {
     const p = S.photos.get(M3.sel); const [x, z] = M3.pending; const hdg = Math.round(M3.pendingH ?? 0);
     const [X, Y] = toWorld(x, z), [lon, lat] = TM.inv(X, Y);
-    const t = targetBuilding(x, z, hdg);
+    const ins = insideOf(x, z), t = ins != null ? { i: ins, b: M3.blds[ins], d: 0 } : targetBuilding(x, z, hdg);
     p.shot = { x: +X.toFixed(2), y: +Y.toFixed(2), lon: +lon.toFixed(7), lat: +lat.toFixed(7), heading: hdg, by: 'user', at: new Date().toISOString(),
-      target: t ? { i: t.i, addr: t.b.addr, use: t.b.use, floors: t.b.floors, base: t.b.base, year: t.b.year, height: t.b.h || null, dist: +t.d.toFixed(1) } : null };
+      inside: ins != null, target: tgtInfo(t) };
     savePhoto(p); M3.mode = null; M3.preview.clear();
-    hint(t ? `${t.b.addr || ''} ${t.b.use || ''}`.trim() : '저장됨', 3000);
+    hint(t ? `${ins != null ? '실내 · ' : ''}${t.b.addr || ''} ${t.b.use || ''}`.trim() : '저장됨', 3000);
     const next = sitePhotos().find(q => !q.shot && q.id !== p.id);
     drawShots(); renderStrip(); renderMinfo();
     return;
@@ -1819,6 +1923,33 @@ function onPick(e) {
   if (hs) { selectPhoto(hs.object.userData.photo); return; }
   const hb = M3.mesh && rc.intersectObject(M3.mesh)[0];
   if (hb) { const i = M3.owner[hb.face.a]; highlightBuilding(i); renderMinfo(i); }
+}
+const tgtInfo = t => t ? { i: t.i, addr: t.b.addr, use: t.b.use, floors: t.b.floors, base: t.b.base, year: t.b.year, height: t.b.h || null, dist: +t.d.toFixed(1) } : null;
+// 점이 들어 있는 건물(실내 사진)
+function insideOf(x, z) {
+  const px = x, py = -z;
+  for (let i = 0; i < M3.blds.length; i++) {
+    const P = M3.blds[i].pts; if (Math.abs(P[0][0] - px) > 300 || Math.abs(P[0][1] - py) > 300) continue;
+    let c = false;
+    for (let k = 0, j = P.length - 1; k < P.length; j = k++) {
+      const [xi, yi] = P[k], [xj, yj] = P[j];
+      if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) c = !c;
+    }
+    if (c) return i;
+  }
+  return null;
+}
+// 이 건물을 찍은 사진: 실내(건물 안에서) / 외관(밖에서 바라봄)
+function photosOfBuilding(bi) {
+  const b = M3.blds[bi], same = t => t && (t.i === bi && (!t.addr || !b.addr || t.addr === b.addr));
+  const L = sitePhotos().filter(p => p.shot && same(p.shot.target));
+  return { inside: L.filter(p => p.shot.inside), outside: L.filter(p => !p.shot.inside) };
+}
+function groupHTML(L) {
+  const by = new Map(); for (const p of L) { const k = keyOf(p); by.has(k) || by.set(k, []); by.get(k).push(p); }
+  const order = [...S.elements, OTHER, NONE, ...[...by.keys()].filter(k => !S.elements.includes(k) && k !== OTHER && k !== NONE)];
+  return order.filter(k => by.get(k)).map(k => `<div class="mgrp" style="--c:${colorOf(k)[0]}"><h5><i></i>${esc(k)}<span>${by.get(k).length}</span></h5>
+    <div class="mgrid">${by.get(k).map(p => `<button type="button" data-mph="${p.id}"><img alt="" src="${thumbUrl(p)}"></button>`).join('')}</div></div>`).join('');
 }
 // 찍은 자리에서 바라본 방향으로 150m 안에서 처음 만나는 건물
 function targetBuilding(x, z, hdg) {
@@ -1845,20 +1976,23 @@ function renderStrip() {
 function renderMinfo(bi) {
   const box = $('minfo');
   if (bi != null && M3.mode == null && (!M3.sel || bi !== S.photos.get(M3.sel)?.shot?.target?.i)) {
-    const b = M3.blds[bi];
-    box.hidden = false;
-    box.innerHTML = `<h4>${esc(b.addr || '—')}</h4><div>${esc(b.use || '—')}</div>
-      <div>지상 ${b.floors}층${b.base ? ` · 지하 ${b.base}층` : ''} · 높이 ${b.h ? b.h + 'm' : `약 ${Math.round(b.H)}m`}</div>
-      <div>${b.year ? `사용승인 ${b.year}` : ''}</div><div class="row"><button class="btn small" type="button" data-mi="close">닫기</button></div>`;
+    const b = M3.blds[bi], ph = photosOfBuilding(bi);
+    box.hidden = false; box.classList.add('wide');
+    box.innerHTML = `<h4>${esc(b.addr || '—')}</h4>
+      <dl class="mfacts"><dt>용도</dt><dd>${esc(b.use || '—')}</dd><dt>규모</dt><dd>지상 ${b.floors}층${b.base ? ` · 지하 ${b.base}층` : ''}</dd>
+      <dt>높이</dt><dd>${b.h ? b.h + 'm' : `약 ${Math.round(b.H)}m`}</dd>${b.year ? `<dt>사용승인</dt><dd>${esc(b.year)}</dd>` : ''}</dl>
+      <section class="msec"><h6>실내<span>${ph.inside.length}</span></h6>${ph.inside.length ? groupHTML(ph.inside) : '<p>사진 고른 뒤 이 건물 안을 클릭</p>'}</section>
+      ${ph.outside.length ? `<section class="msec"><h6>외관<span>${ph.outside.length}</span></h6>${groupHTML(ph.outside)}</section>` : ''}
+      <div class="row"><button class="btn small" type="button" data-mi="close">닫기</button></div>`;
     return;
   }
   const p = S.photos.get(M3.sel); if (!p) { box.hidden = true; return; }
-  box.hidden = false;
+  box.hidden = false; box.classList.remove('wide');
   const t = p.shot?.target;
   box.innerHTML = `<img src="${thumbUrl(p)}" alt="${esc(p.name)}" data-mi="big">
     <h4>${esc(p.element || '미분류')} · ${esc(p.name)}</h4>
     <div>${p.shot ? `매핑됨${p.shot.heading != null ? ` · ${p.shot.heading}°` : ''}` : p.gps ? 'GPS만' : '위치 없음'}</div>
-    ${t ? `<div class="bld">대상 <b>${esc(t.addr || '')}</b><br>${esc(t.use || '')} · ${t.floors}층${t.year ? ` · ${t.year}` : ''} · ${t.dist}m</div>` : p.shot ? '<div class="bld">대상 건물 없음</div>' : ''}
+    ${t ? `<div class="bld">${p.shot.inside ? '실내' : '대상'} <b>${esc(t.addr || '')}</b><br>${esc(t.use || '')} · ${t.floors}층${t.year ? ` · ${t.year}` : ''} · ${t.dist}m</div>` : p.shot ? '<div class="bld">대상 건물 없음</div>' : ''}
     <div class="row">
       <button class="btn small" type="button" data-mi="place">${p.shot ? '다시 지정' : '위치 지정'}</button>
       ${p.gps ? '<button class="btn small" type="button" data-mi="gps">GPS</button>' : ''}
@@ -1866,6 +2000,7 @@ function renderMinfo(bi) {
     </div>`;
 }
 $('minfo').addEventListener('click', e => {
+  const ph = e.target.closest('[data-mph]'); if (ph) { selectPhoto(ph.dataset.mph); return; }
   const k = e.target.closest('[data-mi]')?.dataset.mi; if (!k) return;
   if (k === 'close') { $('minfo').hidden = true; M3.sel = null; M3.mode = null; M3.preview?.clear(); highlightBuilding(null); drawShots(); renderStrip(); hint(null); }
   if (k === 'place') selectPhoto(M3.sel, true);
@@ -1875,9 +2010,9 @@ $('minfo').addEventListener('click', e => {
 function useGps(p) {
   if (!p?.gps) return;
   const [X, Y] = TM.fwd(p.gps[0], p.gps[1]), [x, z] = toLocal([X, Y]);
-  const t = p.heading != null ? targetBuilding(x, z, p.heading) : null;
+  const ins = insideOf(x, z), t = ins != null ? { i: ins, b: M3.blds[ins], d: 0 } : p.heading != null ? targetBuilding(x, z, p.heading) : null;
   p.shot = { x: +X.toFixed(2), y: +Y.toFixed(2), lon: p.gps[0], lat: p.gps[1], heading: p.heading, by: 'gps', at: new Date().toISOString(),
-    target: t ? { i: t.i, addr: t.b.addr, use: t.b.use, floors: t.b.floors, base: t.b.base, year: t.b.year, height: t.b.h || null, dist: +t.d.toFixed(1) } : null };
+    inside: ins != null, target: tgtInfo(t) };
 }
 $('gpsAllBtn').addEventListener('click', () => {
   let n = 0; for (const p of sitePhotos()) if (!p.shot && p.gps) { useGps(p); savePhoto(p); n++; }
