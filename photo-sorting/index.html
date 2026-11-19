@@ -276,7 +276,10 @@ dl.meta dt:nth-last-of-type(1), dl.meta dd:last-child { border-bottom: 0; }
 .sp img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .sp.on { outline: 2px solid var(--blue); outline-offset: 2px; }
 .sp .st { position: absolute; right: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; font: 700 9px/14px var(--sans); text-align: center; background: rgba(0,0,0,.6); color: var(--label-3); }
-.sp .st.ok { background: var(--green); color: #000; }
+.sp .st.ok { background: var(--green); color: #000; width: 18px; height: 18px; line-height: 18px; font-size: 10px; right: 2px; top: 2px; box-shadow: 0 0 0 1.5px rgba(0,0,0,.5); }
+.sp .st.ok::before { content: ""; position: absolute; inset: -6px; }
+.sp .st.ok:hover { background: var(--red); color: #fff; font-size: 0; }
+.sp .st.ok:hover::after { content: "×"; font: 700 14px/18px var(--sans); }
 .sp .st.gps { background: rgba(255,255,255,.85); color: #000; }
 .loc-form { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(400px, calc(100vw - 32px)); background: var(--material); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
   border: .5px solid var(--sep); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 10px; color: var(--label-2); font-size: 13px; }
@@ -2010,7 +2013,7 @@ function renderStrip() {
   const L = sitePhotos(), done = L.filter(p => p.shot).length, gps = L.filter(p => !p.shot && p.gps).length;
   $('stripHead').innerHTML = `<b>매핑 ${done} / ${L.length}</b>`;
   $('gpsAllBtn').hidden = !gps; $('gpsAllBtn').textContent = `GPS 적용 ${gps}`;
-  $('stripList').innerHTML = L.map(p => `<button type="button" class="sp ${p.id === M3.sel ? 'on' : ''}" data-mp="${p.id}" style="--c:${elColor(p)}" title="${esc(p.element || '미분류')} · ${esc(p.name)}"><img alt="" src="${thumbUrl(p)}"><span class="st ${p.shot ? 'ok' : p.gps ? 'gps' : ''}">${p.shot ? '✓' : p.gps ? 'G' : '–'}</span></button>`).join('');
+  $('stripList').innerHTML = L.map(p => `<button type="button" class="sp ${p.id === M3.sel ? 'on' : ''}" data-mp="${p.id}" style="--c:${elColor(p)}" title="${esc(p.element || '미분류')} · ${esc(p.name)}"><img alt="" src="${thumbUrl(p)}"><span class="st ${p.shot ? 'ok' : p.gps ? 'gps' : ''}"${p.shot ? ` data-unmap="${p.id}" title="지정 취소"` : ''}>${p.shot ? '✓' : p.gps ? 'G' : '–'}</span></button>`).join('');
   $('stripList').querySelector('.sp.on')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
 }
 function renderMinfo(bi) {
@@ -2063,7 +2066,18 @@ $('gpsAllBtn').addEventListener('click', () => {
   let n = 0; for (const p of sitePhotos()) if (!p.shot && p.gps) { useGps(p); savePhoto(p); n++; }
   drawShots(); renderStrip(); renderMinfo(); hint(`GPS 적용 ${n}장`, 2500);
 });
-$('stripList').addEventListener('click', e => { const b = e.target.closest('[data-mp]'); if (b) selectPhoto(b.dataset.mp); });
+$('stripList').addEventListener('click', e => {
+  // 초록 체크를 누르면 지정 취소 → 바로 다시 찍은 자리를 고를 수 있다
+  const u = e.target.closest('[data-unmap]');
+  if (u) { const p = S.photos.get(u.dataset.unmap); if (p?.shot) { const prev = p.shot; delete p.shot; savePhoto(p); M3.hlFloor = null; selectPhoto(p.id); hint('지정 취소 · 촬영 위치 클릭', 2500); undoUnmap = { id: p.id, shot: prev }; } return; }
+  const b = e.target.closest('[data-mp]'); if (b) selectPhoto(b.dataset.mp);
+});
+let undoUnmap = null;
+addEventListener('keydown', e => {
+  if (!M3.on || !undoUnmap || !(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
+  const p = S.photos.get(undoUnmap.id); if (p && !p.shot) { p.shot = undoUnmap.shot; savePhoto(p); M3.mode = null; M3.preview.clear(); selectPhoto(p.id); hint('되돌림', 1500); }
+  undoUnmap = null; e.preventDefault();
+});
 addEventListener('keydown', e => { if (M3.on && e.key === 'Escape' && $('lb').hidden && M3.mode) { M3.mode = null; M3.preview.clear(); highlightBuilding(null); hint('취소', 1200); } });
 
 // ─────────── 브이월드 (GitHub Pages 등 일반 웹페이지에서) ───────────
